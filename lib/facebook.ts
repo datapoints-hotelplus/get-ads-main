@@ -155,8 +155,13 @@ export async function fetchCampaignReach(
   accessToken: string,
   since: string,
   until: string,
-): Promise<Map<string, { campaign_id: string; reach: number }>> {
-  const result = new Map<string, { campaign_id: string; reach: number }>();
+): Promise<
+  Map<string, { campaign_id: string; account_id: string; reach: number }>
+> {
+  const result = new Map<
+    string,
+    { campaign_id: string; account_id: string; reach: number }
+  >();
   const timeRange = encodeURIComponent(JSON.stringify({ since, until }));
 
   for (const accountId of accountIds) {
@@ -182,6 +187,7 @@ export async function fetchCampaignReach(
         const existing = result.get(name);
         result.set(name, {
           campaign_id: id || existing?.campaign_id || "",
+          account_id: accountId,
           reach: (existing?.reach ?? 0) + reach,
         });
       }

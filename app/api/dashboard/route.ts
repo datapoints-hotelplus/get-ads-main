@@ -220,7 +220,7 @@ export async function GET(request: NextRequest) {
     const accessToken = process.env.FB_ACCESS_TOKEN ?? "";
     let campaignReachMap = new Map<
       string,
-      { campaign_id: string; reach: number }
+      { campaign_id: string; account_id: string; reach: number }
     >();
     if (accessToken && accountIds.length > 0 && dateFrom && dateTo) {
       const [reachCurrent, reachPrev, campaignReach] = await Promise.all([

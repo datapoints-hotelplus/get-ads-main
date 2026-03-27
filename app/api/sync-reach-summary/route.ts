@@ -107,44 +107,24 @@ export async function POST(req: NextRequest) {
     allowedCampaigns.add(name);
   }
 
+  // Build account_id → account_name map from allpage
+  const accIdToName = new Map<string, string>();
+  for (const a of accounts) {
+    accIdToName.set(a.account_id, a.account_name);
+  }
+
   const campaigns = Array.from(campaignReachMap.entries())
     .filter(
       ([name]) =>
         (!hasCampaignFilter && !hasAdsetFilter) || allowedCampaigns.has(name),
     )
-    .map(([campaign_name, { campaign_id, reach }]) => ({
+    .map(([campaign_name, { campaign_id, account_id, reach }]) => ({
       campaign_id,
       campaign_name,
       reach,
-      account_name: "",
+      account_name: accIdToName.get(account_id) ?? "",
     }))
     .sort((a, b) => b.reach - a.reach);
-
-  // Lookup account_name for each campaign from DB
-  if (campaigns.length > 0) {
-    const campNames = campaigns.map((c) => c.campaign_name);
-    const { data: campAccRows } = await supabase
-      .from("ads_rawdata")
-      .select("campaign_name,account_name")
-      .in("campaign_name", campNames)
-      .limit(5000);
-    const campAccMap = new Map<string, string>();
-    for (const r of (campAccRows ?? []) as {
-      campaign_name: string;
-      account_name: string;
-    }[]) {
-      if (
-        r.campaign_name &&
-        r.account_name &&
-        !campAccMap.has(r.campaign_name)
-      ) {
-        campAccMap.set(r.campaign_name, r.account_name);
-      }
-    }
-    for (const c of campaigns) {
-      c.account_name = campAccMap.get(c.campaign_name) ?? "";
-    }
-  }
 
   // Filtered total = sum of filtered campaigns (when filters active)
   const filteredReach =
