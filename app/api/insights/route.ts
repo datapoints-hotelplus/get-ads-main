@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import axios from "axios";
+import { getSupabase } from "@/lib/supabase";
 
 const FB_GRAPH_API = "https://graph.facebook.com/v25.0";
 
@@ -84,18 +85,20 @@ function parseRow(item: FBItem) {
   };
 }
 
-async function fetchAllPages(
+async function fetchPages(
   accountId: string,
   accessToken: string,
   since: string,
   until: string,
+  fields: string,
+  level: string,
 ): Promise<FBItem[]> {
   const items: FBItem[] = [];
   let url: string | null =
-    `${FB_GRAPH_API}/${accountId}/insights?fields=${RAWDATA_FIELDS}` +
-    `&time_increment=1&time_range=${encodeURIComponent(JSON.stringify({ since, until }))}` +
+    `${FB_GRAPH_API}/${accountId}/insights?fields=${fields}` +
+    `&time_range=${encodeURIComponent(JSON.stringify({ since, until }))}` +
     `&filtering=${encodeURIComponent(JSON.stringify([{ field: "spend", operator: "GREATER_THAN", value: 0 }]))}` +
-    `&level=ad&limit=500&access_token=${accessToken}`;
+    `&level=${level}&limit=500&access_token=${accessToken}`;
 
   while (url) {
     const res: { data: { data?: FBItem[]; paging?: { next?: string } } } = await axios.get(url);
@@ -133,15 +136,41 @@ export async function GET(req: NextRequest) {
   }
 
   const accessToken = process.env.FB_ACCESS_TOKEN;
-  const accountIds  = (process.env.FB_AD_ACCOUNT_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-
   if (!accessToken) return NextResponse.json({ error: "FB_ACCESS_TOKEN not set" }, { status: 500 });
-  if (!accountIds.length) return NextResponse.json({ error: "FB_AD_ACCOUNT_IDS not set" }, { status: 500 });
+
+  // account_name filter: ?account_name=A&account_name=B  or  ?account_name=A,B
+  const accountNames = searchParams
+    .getAll("account_name")
+    .flatMap((v) => v.split(","))
+    .map((v) => v.trim())
+    .filter(Boolean);
+
+  const supabase = getSupabase();
+  let query = supabase.from("allpage").select("account_id");
+  if (accountNames.length > 0) {
+    query = query.in("account_name", accountNames);
+  }
+  const { data: pageRows, error: pageErr } = await query;
+  if (pageErr) return NextResponse.json({ error: `allpage read failed: ${pageErr.message}` }, { status: 500 });
+
+  const accountIds = (pageRows ?? []).map((r: { account_id: string }) => r.account_id).filter(Boolean);
+  if (!accountIds.length) return NextResponse.json({ error: "allpage table is empty — run Get All Page first" }, { status: 400 });
+
+  // ?summary=reach → fetch at account level, return deduplicated reach total
+  const wantSummary = searchParams.get("summary") === "reach";
+
+  if (wantSummary) {
+    let totalReach = 0;
+    for (const accountId of accountIds) {
+      const items = await fetchPages(accountId, accessToken, startDate, endDate, "reach", "account");
+      totalReach += items.reduce((s, item) => s + parseInt(String(item.reach ?? "0"), 10), 0);
+    }
+    return NextResponse.json({ reach: totalReach, startDate, endDate });
+  }
 
   const rows: ReturnType<typeof parseRow>[] = [];
-
   for (const accountId of accountIds) {
-    const items = await fetchAllPages(accountId, accessToken, startDate, endDate);
+    const items = await fetchPages(accountId, accessToken, startDate, endDate, RAWDATA_FIELDS, "ad");
     for (const item of items) {
       rows.push(parseRow(item));
     }

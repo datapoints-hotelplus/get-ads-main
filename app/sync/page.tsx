@@ -46,6 +46,14 @@ export default function SyncPage() {
     accounts: { name: string; id: string; rows: Record<string, number>; error?: string }[];
   };
 
+  type ReachSummaryResult = { reach: number; startDate: string; endDate: string; accounts: { account_name: string; reach: number }[] };
+  const [reachStart, setReachStart] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split("T")[0]);
+  const [reachEnd, setReachEnd] = useState(new Date().toISOString().split("T")[0]);
+  const [reachAccountName, setReachAccountName] = useState("");
+  const [reachSyncing, setReachSyncing] = useState(false);
+  const [reachResult, setReachResult] = useState<ReachSummaryResult | null>(null);
+  const [reachError, setReachError] = useState<string | null>(null);
+
   const [backfilling, setBackfilling] = useState(false);
   const [backfillResult, setBackfillResult] = useState<BackfillResult | null>(null);
   const [backfillError, setBackfillError] = useState<string | null>(null);
@@ -53,6 +61,16 @@ export default function SyncPage() {
   const [dailying, setDailying] = useState(false);
   const [dailyResult, setDailyResult] = useState<DailyResult | null>(null);
   const [dailyError, setDailyError] = useState<string | null>(null);
+
+  type AllPageResult = {
+    success: boolean;
+    count: number;
+    accounts: { account_name: string; account_id: string }[];
+  };
+
+  const [allPaging, setAllPaging] = useState(false);
+  const [allPageResult, setAllPageResult] = useState<AllPageResult | null>(null);
+  const [allPageError, setAllPageError] = useState<string | null>(null);
 
 
   const handleSync = async () => {
@@ -99,6 +117,26 @@ export default function SyncPage() {
     }
   };
 
+  const handleReachSummary = async () => {
+    setReachSyncing(true);
+    setReachError(null);
+    setReachResult(null);
+    try {
+      const response = await fetch("/api/sync-reach-summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ startDate: reachStart, endDate: reachEnd, account_name: reachAccountName || undefined }),
+      });
+      const data = await response.json();
+      if (!response.ok) setReachError(data.error ?? "เกิดข้อผิดพลาด");
+      else setReachResult(data);
+    } catch (err) {
+      setReachError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
+    } finally {
+      setReachSyncing(false);
+    }
+  };
+
 const handleBackfill = async () => {
     setBackfilling(true);
     setBackfillError(null);
@@ -128,6 +166,25 @@ const handleBackfill = async () => {
       setDailyError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
     } finally {
       setDailying(false);
+    }
+  };
+
+  const handleAllPage = async () => {
+    setAllPaging(true);
+    setAllPageError(null);
+    setAllPageResult(null);
+    try {
+      const response = await fetch("/api/sync-allpage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await response.json();
+      if (!response.ok) setAllPageError(data.error ?? "เกิดข้อผิดพลาด");
+      else setAllPageResult(data);
+    } catch (err) {
+      setAllPageError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
+    } finally {
+      setAllPaging(false);
     }
   };
 
@@ -162,6 +219,113 @@ const handleBackfill = async () => {
           <p className="text-gray-600 mb-8">
             Sync Facebook page data to your Google Sheet
           </p>
+
+          {/* Get All Page → allpage table */}
+          <div className="mb-6 p-5 border border-purple-200 rounded-lg bg-purple-50">
+            <h2 className="text-lg font-semibold text-gray-800 mb-1">
+              Get All Page → Supabase &quot;allpage&quot;
+            </h2>
+            <p className="text-sm text-gray-500 mb-4">
+              ดึงข้อมูล rawdata ตาม date range แล้วบันทึกลงตาราง allpage
+            </p>
+
+            <button
+              onClick={handleAllPage}
+              disabled={allPaging}
+              className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white font-bold py-3 px-4 rounded-lg transition"
+            >
+              {allPaging ? "กำลังดึง..." : "Get All Page"}
+            </button>
+            {allPageError && (
+              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                {allPageError}
+              </div>
+            )}
+            {allPageResult && (
+              <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-green-800 font-semibold text-sm mb-2">
+                  บันทึกสำเร็จ {allPageResult.count} accounts
+                </p>
+                <ul className="text-sm text-green-700 space-y-1">
+                  {allPageResult.accounts.map((a) => (
+                    <li key={a.account_id}>
+                      {a.account_name}{" "}
+                      <span className="text-green-500 font-mono text-xs">{a.account_id}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          {/* Campaign Reach Summary */}
+          <div className="mb-6 p-5 border border-rose-200 rounded-lg bg-rose-50">
+            <h2 className="text-lg font-semibold text-gray-800 mb-1">
+              Campaign Reach Summary
+            </h2>
+            <p className="text-sm text-gray-500 mb-4">
+              ดึง Reach รวมระดับ Campaign จาก Facebook (De-duplicated) — ห้าม SUM ใน Looker
+            </p>
+            <div className="mb-3">
+              <label className="block text-xs text-gray-500 mb-1">Account Name (ว่าง = ทุก account)</label>
+              <input
+                type="text"
+                placeholder="เช่น BrandA, BrandB"
+                value={reachAccountName}
+                onChange={(e) => setReachAccountName(e.target.value)}
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="flex gap-3 mb-4">
+              <div className="flex-1">
+                <label className="block text-xs text-gray-500 mb-1">Start Date</label>
+                <input
+                  type="date"
+                  value={reachStart}
+                  onChange={(e) => setReachStart(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="block text-xs text-gray-500 mb-1">End Date</label>
+                <input
+                  type="date"
+                  value={reachEnd}
+                  onChange={(e) => setReachEnd(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+            <button
+              onClick={handleReachSummary}
+              disabled={reachSyncing}
+              className="w-full bg-rose-600 hover:bg-rose-700 disabled:bg-gray-400 text-white font-bold py-3 px-4 rounded-lg transition"
+            >
+              {reachSyncing ? "กำลังดึง..." : "Sync Reach Summary"}
+            </button>
+            {reachError && (
+              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                {reachError}
+              </div>
+            )}
+            {reachResult && (
+              <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-green-800 font-semibold text-sm mb-1">
+                  {reachResult.startDate} → {reachResult.endDate}
+                </p>
+                <p className="text-green-900 text-2xl font-bold mb-2">
+                  Reach: {reachResult.reach.toLocaleString()}
+                </p>
+                <ul className="text-xs text-green-700 space-y-0.5">
+                  {reachResult.accounts.map((a) => (
+                    <li key={a.account_name}>
+                      {a.account_name} — {a.reach.toLocaleString()}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
 
           {/* Backfill */}
           <div className="mb-6 p-5 border border-orange-200 rounded-lg bg-orange-50">
