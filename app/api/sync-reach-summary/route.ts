@@ -112,7 +112,11 @@ export async function POST(req: NextRequest) {
       ([name]) =>
         (!hasCampaignFilter && !hasAdsetFilter) || allowedCampaigns.has(name),
     )
-    .map(([campaign_name, reach]) => ({ campaign_name, reach }))
+    .map(([campaign_name, { campaign_id, reach }]) => ({
+      campaign_id,
+      campaign_name,
+      reach,
+    }))
     .sort((a, b) => b.reach - a.reach);
 
   // Filtered total = sum of filtered campaigns (when filters active)

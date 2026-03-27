@@ -218,7 +218,10 @@ export async function GET(request: NextRequest) {
     const accountIds = filteredPages.map((p) => p.account_id);
 
     const accessToken = process.env.FB_ACCESS_TOKEN ?? "";
-    let campaignReachMap = new Map<string, number>();
+    let campaignReachMap = new Map<
+      string,
+      { campaign_id: string; reach: number }
+    >();
     if (accessToken && accountIds.length > 0 && dateFrom && dateTo) {
       const [reachCurrent, reachPrev, campaignReach] = await Promise.all([
         fetchAccountReach(accountIds, accessToken, dateFrom, dateTo),
@@ -347,7 +350,7 @@ export async function GET(request: NextRequest) {
     const groupRows: GroupRow[] = [...grouped.values()].map((g) => {
       // Use accurate campaign-level reach from FB API if available
       const fbReach = campaignReachMap.get(g.campaign_name);
-      const reach = fbReach !== undefined ? fbReach : g.reach;
+      const reach = fbReach !== undefined ? fbReach.reach : g.reach;
       const frequency =
         reach > 0 ? parseFloat((g.impressions / reach).toFixed(2)) : 0;
       return {

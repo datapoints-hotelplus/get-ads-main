@@ -147,7 +147,7 @@ export async function fetchAccountReach(
 
 /**
  * Fetch reach broken down by campaign for a list of ad account IDs.
- * Makes one API call per account at level=campaign, returns a Map<campaign_name, reach>.
+ * Makes one API call per account at level=campaign, returns a Map<campaign_name, {campaign_id, reach}>.
  * Accurate unique reach per campaign (not summed from daily raw rows).
  */
 export async function fetchCampaignReach(
@@ -155,30 +155,85 @@ export async function fetchCampaignReach(
   accessToken: string,
   since: string,
   until: string,
-): Promise<Map<string, number>> {
-  const result = new Map<string, number>();
+): Promise<Map<string, { campaign_id: string; reach: number }>> {
+  const result = new Map<string, { campaign_id: string; reach: number }>();
   const timeRange = encodeURIComponent(JSON.stringify({ since, until }));
 
   for (const accountId of accountIds) {
     let url: string | null =
-      `${FB_GRAPH_API_V25}/${accountId}/insights?fields=reach,campaign_name` +
+      `${FB_GRAPH_API_V25}/${accountId}/insights?fields=reach,campaign_name,campaign_id` +
       `&time_range=${timeRange}&level=campaign&access_token=${accessToken}`;
 
     while (url) {
       const res: {
         data: {
-          data?: { reach?: string; campaign_name?: string }[];
+          data?: {
+            reach?: string;
+            campaign_name?: string;
+            campaign_id?: string;
+          }[];
           paging?: { next?: string };
         };
       } = await axios.get(url);
       for (const item of res.data.data ?? []) {
         const name = item.campaign_name ?? "";
+        const id = item.campaign_id ?? "";
         const reach = parseInt(String(item.reach ?? "0"), 10);
-        result.set(name, (result.get(name) ?? 0) + reach);
+        const existing = result.get(name);
+        result.set(name, {
+          campaign_id: id || existing?.campaign_id || "",
+          reach: (existing?.reach ?? 0) + reach,
+        });
       }
       url = res.data.paging?.next ?? null;
     }
   }
 
   return result;
+}
+
+/**
+ * Fetch reach broken down by ad for a list of ad account IDs.
+ * Returns a Map<ad_id, { ad_id, ad_name, reach }>.
+ */
+export async function fetchAdReach(
+  accountIds: string[],
+  accessToken: string,
+  since: string,
+  until: string,
+): Promise<{ ad_id: string; ad_name: string; reach: number }[]> {
+  const result = new Map<
+    string,
+    { ad_id: string; ad_name: string; reach: number }
+  >();
+  const timeRange = encodeURIComponent(JSON.stringify({ since, until }));
+
+  for (const accountId of accountIds) {
+    let url: string | null =
+      `${FB_GRAPH_API_V25}/${accountId}/insights?fields=reach,ad_id,ad_name` +
+      `&time_range=${timeRange}&level=ad&access_token=${accessToken}`;
+
+    while (url) {
+      const res: {
+        data: {
+          data?: { reach?: string; ad_id?: string; ad_name?: string }[];
+          paging?: { next?: string };
+        };
+      } = await axios.get(url);
+      for (const item of res.data.data ?? []) {
+        const id = item.ad_id ?? "";
+        const name = item.ad_name ?? "";
+        const reach = parseInt(String(item.reach ?? "0"), 10);
+        const existing = result.get(id);
+        result.set(id, {
+          ad_id: id,
+          ad_name: name,
+          reach: (existing?.reach ?? 0) + reach,
+        });
+      }
+      url = res.data.paging?.next ?? null;
+    }
+  }
+
+  return Array.from(result.values()).sort((a, b) => b.reach - a.reach);
 }
