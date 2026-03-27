@@ -87,9 +87,6 @@ export async function getFacebookPagePosts(
   }
 }
 
-/**
- * Fetch all page data for multiple pages
- */
 export async function getAllFacebookPagesData(
   pageIds: string[],
   accessToken: string,
@@ -112,4 +109,76 @@ export async function getAllFacebookPagesData(
   }
 
   return data;
+}
+
+const FB_GRAPH_API_V25 = "https://graph.facebook.com/v25.0";
+
+/**
+ * Fetch real unique reach for a list of ad account IDs over a date range.
+ * Calls the Facebook Insights API at account level (not summed from raw rows).
+ */
+export async function fetchAccountReach(
+  accountIds: string[],
+  accessToken: string,
+  since: string,
+  until: string,
+): Promise<number> {
+  let total = 0;
+  const timeRange = encodeURIComponent(JSON.stringify({ since, until }));
+
+  for (const accountId of accountIds) {
+    let url: string | null =
+      `${FB_GRAPH_API_V25}/${accountId}/insights?fields=reach` +
+      `&time_range=${timeRange}&level=account&access_token=${accessToken}`;
+
+    while (url) {
+      const res: {
+        data: { data?: { reach?: string }[]; paging?: { next?: string } };
+      } = await axios.get(url);
+      for (const item of res.data.data ?? []) {
+        total += parseInt(String(item.reach ?? "0"), 10);
+      }
+      url = res.data.paging?.next ?? null;
+    }
+  }
+
+  return total;
+}
+
+/**
+ * Fetch reach broken down by campaign for a list of ad account IDs.
+ * Makes one API call per account at level=campaign, returns a Map<campaign_name, reach>.
+ * Accurate unique reach per campaign (not summed from daily raw rows).
+ */
+export async function fetchCampaignReach(
+  accountIds: string[],
+  accessToken: string,
+  since: string,
+  until: string,
+): Promise<Map<string, number>> {
+  const result = new Map<string, number>();
+  const timeRange = encodeURIComponent(JSON.stringify({ since, until }));
+
+  for (const accountId of accountIds) {
+    let url: string | null =
+      `${FB_GRAPH_API_V25}/${accountId}/insights?fields=reach,campaign_name` +
+      `&time_range=${timeRange}&level=campaign&access_token=${accessToken}`;
+
+    while (url) {
+      const res: {
+        data: {
+          data?: { reach?: string; campaign_name?: string }[];
+          paging?: { next?: string };
+        };
+      } = await axios.get(url);
+      for (const item of res.data.data ?? []) {
+        const name = item.campaign_name ?? "";
+        const reach = parseInt(String(item.reach ?? "0"), 10);
+        result.set(name, (result.get(name) ?? 0) + reach);
+      }
+      url = res.data.paging?.next ?? null;
+    }
+  }
+
+  return result;
 }

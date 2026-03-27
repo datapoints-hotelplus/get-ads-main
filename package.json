@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.3",
+    "@tanstack/react-table": "^8.21.3",
     "axios": "^1.13.6",
     "google-auth-library": "^10.6.2",
     "googleapis": "^171.4.0",

@@ -1,81 +1,130 @@
 import { NextRequest, NextResponse } from "next/server";
-import axios from "axios";
 import { getSupabase } from "@/lib/supabase";
-
-const FB_GRAPH_API = "https://graph.facebook.com/v25.0";
-
-type FBItem = Record<string, unknown>;
-
-async function fetchReach(
-  accountId: string,
-  accessToken: string,
-  since: string,
-  until: string,
-  adIds?: string[],
-): Promise<number> {
-  let reach = 0;
-  const level = adIds && adIds.length > 0 ? "ad" : "account";
-  const filtering = adIds && adIds.length > 0
-    ? `&filtering=${encodeURIComponent(JSON.stringify([{ field: "ad.id", operator: "IN", value: adIds }]))}`
-    : "";
-
-  let url: string | null =
-    `${FB_GRAPH_API}/${accountId}/insights?fields=reach` +
-    `&time_range=${encodeURIComponent(JSON.stringify({ since, until }))}` +
-    `&level=${level}${filtering}&access_token=${accessToken}`;
-
-  while (url) {
-    const res: { data: { data?: FBItem[]; paging?: { next?: string } } } = await axios.get(url);
-    for (const item of res.data.data ?? []) {
-      reach += parseInt(String(item.reach ?? "0"), 10);
-    }
-    url = res.data.paging?.next ?? null;
-  }
-  return reach;
-}
+import { fetchAccountReach, fetchCampaignReach } from "@/lib/facebook";
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
-  const { startDate, endDate, account_name, ad_id } = body as {
-    startDate?: string;
-    endDate?: string;
-    account_name?: string | string[];
-    ad_id?: string | string[];
-  };
-
-  const adIds = ad_id
-    ? (Array.isArray(ad_id) ? ad_id : [ad_id]).flatMap((v) => v.split(",")).map((v) => v.trim()).filter(Boolean)
-    : [];
+  const { startDate, endDate, account_name, campaign_name, adset_name } =
+    body as {
+      startDate?: string;
+      endDate?: string;
+      account_name?: string | string[];
+      campaign_name?: string | string[];
+      adset_name?: string | string[];
+    };
 
   if (!startDate || !endDate) {
-    return NextResponse.json({ error: "startDate and endDate are required" }, { status: 400 });
+    return NextResponse.json(
+      { error: "startDate and endDate are required" },
+      { status: 400 },
+    );
   }
 
   const accessToken = process.env.FB_ACCESS_TOKEN;
-  if (!accessToken) return NextResponse.json({ error: "FB_ACCESS_TOKEN not set" }, { status: 500 });
+  if (!accessToken)
+    return NextResponse.json(
+      { error: "FB_ACCESS_TOKEN not set" },
+      { status: 500 },
+    );
 
   const supabase = getSupabase();
-  let query = supabase.from("allpage").select("account_id, account_name");
 
-  const names = account_name
-    ? (Array.isArray(account_name) ? account_name : [account_name]).flatMap((v) => v.split(",")).map((v) => v.trim()).filter(Boolean)
-    : [];
-  if (names.length > 0) query = query.in("account_name", names);
-
-  const { data: pageRows, error: pageErr } = await query;
-  if (pageErr) return NextResponse.json({ error: pageErr.message }, { status: 500 });
-
-  const accounts = (pageRows ?? []) as { account_id: string; account_name: string }[];
-  if (!accounts.length) return NextResponse.json({ error: "ไม่พบ account — ตรวจสอบ account_name หรือรัน Get All Page ก่อน" }, { status: 400 });
-
-  let totalReach = 0;
-  const breakdown: { account_name: string; reach: number }[] = [];
-
-  for (const acc of accounts) {
-    const reach = await fetchReach(acc.account_id, accessToken, startDate, endDate, adIds.length > 0 ? adIds : undefined);
-    totalReach += reach;
-    breakdown.push({ account_name: acc.account_name, reach });
+  // Helper: normalize string | string[] → string[]
+  function toArray(v?: string | string[]): string[] {
+    if (!v) return [];
+    return (Array.isArray(v) ? v : [v])
+      .flatMap((x) => x.split(","))
+      .map((x) => x.trim())
+      .filter(Boolean);
   }
 
-  return NextResponse.json({ reach: totalReach, startDate, endDate, accounts: breakdown });
+  const accountNames = toArray(account_name);
+  const campaignNames = toArray(campaign_name);
+  const adsetNames = toArray(adset_name);
+
+  // Resolve account IDs from allpage
+  let accountQuery = supabase
+    .from("allpage")
+    .select("account_id, account_name");
+  if (accountNames.length > 0)
+    accountQuery = accountQuery.in("account_name", accountNames);
+  const { data: pageRows, error: pageErr } = await accountQuery;
+  if (pageErr)
+    return NextResponse.json({ error: pageErr.message }, { status: 500 });
+
+  const accounts = (pageRows ?? []) as {
+    account_id: string;
+    account_name: string;
+  }[];
+  if (!accounts.length)
+    return NextResponse.json(
+      {
+        error: "ไม่พบ account — ตรวจสอบ account_name หรือรัน Get All Page ก่อน",
+      },
+      { status: 400 },
+    );
+
+  const accountIds = accounts.map((a) => a.account_id);
+
+  // If adset_name filter provided, resolve which campaign_names contain those adsets
+  let adsetCampaignNames: string[] = [];
+  if (adsetNames.length > 0) {
+    let adsetQuery = supabase
+      .from("ads_rawdata")
+      .select("campaign_name")
+      .in("adset_name", adsetNames);
+    if (accountNames.length > 0)
+      adsetQuery = adsetQuery.in("account_name", accountNames);
+    const { data: adsetRows } = await adsetQuery;
+    adsetCampaignNames = [
+      ...new Set(
+        (adsetRows ?? []).map((r) => r.campaign_name as string).filter(Boolean),
+      ),
+    ];
+    if (!adsetCampaignNames.length)
+      return NextResponse.json({
+        date_start: startDate,
+        date_stop: endDate,
+        reach: 0,
+        campaigns: [],
+      });
+  }
+
+  // Fetch reach from Facebook
+  const [totalReach, campaignReachMap] = await Promise.all([
+    fetchAccountReach(accountIds, accessToken, startDate, endDate),
+    fetchCampaignReach(accountIds, accessToken, startDate, endDate),
+  ]);
+
+  // Build campaigns array — apply campaign_name + adset-resolved filters
+  const allowedCampaigns = new Set<string>();
+  const hasCampaignFilter = campaignNames.length > 0;
+  const hasAdsetFilter = adsetCampaignNames.length > 0;
+
+  for (const name of campaignReachMap.keys()) {
+    if (hasCampaignFilter && !campaignNames.includes(name)) continue;
+    if (hasAdsetFilter && !adsetCampaignNames.includes(name)) continue;
+    allowedCampaigns.add(name);
+  }
+
+  const campaigns = Array.from(campaignReachMap.entries())
+    .filter(
+      ([name]) =>
+        (!hasCampaignFilter && !hasAdsetFilter) || allowedCampaigns.has(name),
+    )
+    .map(([campaign_name, reach]) => ({ campaign_name, reach }))
+    .sort((a, b) => b.reach - a.reach);
+
+  // Filtered total = sum of filtered campaigns (when filters active)
+  const filteredReach =
+    hasCampaignFilter || hasAdsetFilter
+      ? campaigns.reduce((s, c) => s + c.reach, 0)
+      : totalReach;
+
+  return NextResponse.json({
+    date_start: startDate,
+    date_stop: endDate,
+    reach: filteredReach,
+    campaigns,
+  });
 }
