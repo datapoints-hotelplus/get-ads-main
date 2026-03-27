@@ -116,8 +116,35 @@ export async function POST(req: NextRequest) {
       campaign_id,
       campaign_name,
       reach,
+      account_name: "",
     }))
     .sort((a, b) => b.reach - a.reach);
+
+  // Lookup account_name for each campaign from DB
+  if (campaigns.length > 0) {
+    const campNames = campaigns.map((c) => c.campaign_name);
+    const { data: campAccRows } = await supabase
+      .from("ads_rawdata")
+      .select("campaign_name,account_name")
+      .in("campaign_name", campNames)
+      .limit(5000);
+    const campAccMap = new Map<string, string>();
+    for (const r of (campAccRows ?? []) as {
+      campaign_name: string;
+      account_name: string;
+    }[]) {
+      if (
+        r.campaign_name &&
+        r.account_name &&
+        !campAccMap.has(r.campaign_name)
+      ) {
+        campAccMap.set(r.campaign_name, r.account_name);
+      }
+    }
+    for (const c of campaigns) {
+      c.account_name = campAccMap.get(c.campaign_name) ?? "";
+    }
+  }
 
   // Filtered total = sum of filtered campaigns (when filters active)
   const filteredReach =
