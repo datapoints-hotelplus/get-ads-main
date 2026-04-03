@@ -1493,8 +1493,8 @@ export default function DashboardPage() {
                   data={[
                     [
                       "Date",
-                      "Cost per Post",
-                      "post_reactions",
+                      "Cost per Engagement",
+                      "Post Engagement",
                     ],
                     ...timeSeries.map((p) => [
                       p.date,
@@ -1520,12 +1520,12 @@ export default function DashboardPage() {
                     },
                     vAxes: {
                       0: {
-                        title: "Cost per Post",
+                        title: "Cost per Engagement",
                         format: "#,###",
                         minValue: 0,
                       },
                       1: {
-                        title: "post_reactions",
+                        title: "Post Engagement",
                         format: "#,###",
                         minValue: 0,
                       },
@@ -1666,29 +1666,27 @@ export default function DashboardPage() {
                 tip={`ใช้ดูว่าโฆษณาได้ผลในพื้นที่ไหนมากที่สุด\n\nจัดอันดับจังหวัดตามจำนวนคลิก\nช่วยวางแผนกลุ่มเป้าหมายตามภูมิภาค`}
               />
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6" data-aos="fade-up">
-                {/* Map */}
+                {/* Bar Chart */}
                 <div className="bg-white border border-gray-200 rounded-lg p-4">
                   <Chart
-                    chartType="GeoChart"
+                    chartType="BarChart"
                     width="100%"
                     height="400px"
-                    mapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}
                     data={[
-                      ["Region", "inline_link_clicks"],
-                      ...geoRegions.map((r) => [
+                      ["Region", "Clicks"],
+                      ...geoRegions.slice(0, 20).map((r) => [
                         r.region,
                         r.inline_link_clicks,
                       ]),
                     ]}
                     options={{
-                      region: "TH",
-                      resolution: "provinces",
-                      colorAxis: {
-                        colors: ["#cfe2f3", "#3b82f6", "#1e40af"],
-                      },
+                      legend: { position: "none" },
+                      colors: ["#3b82f6"],
+                      hAxis: { format: "short", minValue: 0 },
+                      vAxis: { textStyle: { fontSize: 11 } },
+                      chartArea: { left: 120, right: 20, top: 10, bottom: 20 },
+                      bar: { groupWidth: "70%" },
                       backgroundColor: "#ffffff",
-                      datalessRegionColor: "#f0f0f0",
-                      tooltip: { isHtml: true },
                     }}
                   />
                 </div>
