@@ -127,6 +127,12 @@ export default function AdminPage() {
             Highlight Metrics
           </button>
           <button
+            onClick={() => router.push("/admin/docs")}
+            className="text-sm text-gray-600 hover:text-gray-800 font-medium"
+          >
+            📖 วิธีใช้
+          </button>
+          <button
             onClick={handleLogout}
             className="text-sm text-red-600 hover:text-red-800 font-medium"
           >
