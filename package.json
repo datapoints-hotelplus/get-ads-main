@@ -15,6 +15,7 @@
     "aos": "^2.3.4",
     "axios": "^1.13.6",
     "chart.js": "^4.5.1",
+    "chartjs-chart-geo": "^4.3.6",
     "google-auth-library": "^10.6.2",
     "googleapis": "^171.4.0",
     "jose": "^6.2.2",
@@ -23,13 +24,16 @@
     "react": "19.2.4",
     "react-chartjs-2": "^5.3.1",
     "react-dom": "19.2.4",
-    "react-google-charts": "^5.2.1"
+    "react-google-charts": "^5.2.1",
+    "topojson-client": "^3.1.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/topojson-client": "^3.1.5",
+    "@types/topojson-specification": "^1.0.5",
     "eslint": "^9",
     "eslint-config-next": "16.2.0",
     "tailwindcss": "^4",

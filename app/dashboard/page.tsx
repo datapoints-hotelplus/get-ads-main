@@ -12,6 +12,7 @@ import {
 } from "@tanstack/react-table";
 import { Chart } from "react-google-charts";
 import FrequencyGauge from "../FrequencyGauge";
+import ThaiGeoChart from "../ThaiGeoChart";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1666,28 +1667,13 @@ export default function DashboardPage() {
                 tip={`ใช้ดูว่าโฆษณาได้ผลในพื้นที่ไหนมากที่สุด\n\nจัดอันดับจังหวัดตามจำนวนคลิก\nช่วยวางแผนกลุ่มเป้าหมายตามภูมิภาค`}
               />
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6" data-aos="fade-up">
-                {/* Bar Chart */}
+                {/* Map */}
                 <div className="bg-white border border-gray-200 rounded-lg p-4">
-                  <Chart
-                    chartType="BarChart"
-                    width="100%"
-                    height="400px"
-                    data={[
-                      ["Region", "Clicks"],
-                      ...geoRegions.slice(0, 20).map((r) => [
-                        r.region,
-                        r.inline_link_clicks,
-                      ]),
-                    ]}
-                    options={{
-                      legend: { position: "none" },
-                      colors: ["#3b82f6"],
-                      hAxis: { format: "short", minValue: 0 },
-                      vAxis: { textStyle: { fontSize: 11 } },
-                      chartArea: { left: 120, right: 20, top: 10, bottom: 20 },
-                      bar: { groupWidth: "70%" },
-                      backgroundColor: "#ffffff",
-                    }}
+                  <ThaiGeoChart
+                    regions={geoRegions.map((r) => ({
+                      region: r.region,
+                      value: r.inline_link_clicks,
+                    }))}
                   />
                 </div>
 
