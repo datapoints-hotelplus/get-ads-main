@@ -59,7 +59,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-blue-50">
-      <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm border border-gray-100" data-aos="fade-up">
+      <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm border border-gray-100">
         <div className="flex justify-center mb-6">
           <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center shadow-md">
             <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
