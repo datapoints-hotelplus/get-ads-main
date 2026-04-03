@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 type Account = {
   account_name: string;
   account_id: string;
+  is_active: boolean;
 };
 
 export default function AdminPage() {
@@ -19,6 +20,7 @@ export default function AdminPage() {
   const [addLoading, setAddLoading] = useState(false);
 
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
+  const [toggleLoading, setToggleLoading] = useState<string | null>(null);
 
   async function fetchAccounts() {
     const res = await fetch("/api/admin/accounts");
@@ -63,6 +65,24 @@ export default function AdminPage() {
     }
   }
 
+  async function handleToggleActive(account_id: string, current: boolean) {
+    setToggleLoading(account_id);
+    try {
+      await fetch("/api/admin/accounts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account_id, is_active: !current }),
+      });
+      setAccounts((prev) =>
+        prev.map((a) =>
+          a.account_id === account_id ? { ...a, is_active: !current } : a,
+        ),
+      );
+    } finally {
+      setToggleLoading(null);
+    }
+  }
+
   async function handleDelete(account_id: string) {
     setDeleteLoading(account_id);
 
@@ -93,17 +113,31 @@ export default function AdminPage() {
         <h1 className="text-xl font-bold text-gray-900">
           Admin — Manage Accounts
         </h1>
-        <button
-          onClick={handleLogout}
-          className="text-sm text-red-600 hover:text-red-800 font-medium"
-        >
-          Logout
-        </button>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => router.push("/admin/users")}
+            className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+          >
+            Manage Users
+          </button>
+          <button
+            onClick={() => router.push("/admin/highlights")}
+            className="text-sm text-purple-600 hover:text-purple-800 font-medium"
+          >
+            Highlight Metrics
+          </button>
+          <button
+            onClick={handleLogout}
+            className="text-sm text-red-600 hover:text-red-800 font-medium"
+          >
+            Logout
+          </button>
+        </div>
       </div>
 
       <div className="max-w-3xl mx-auto px-4 py-8 space-y-8">
         {/* Add Account Form */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6" data-aos="fade-up">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">
             Add Account
           </h2>
@@ -150,7 +184,7 @@ export default function AdminPage() {
         </div>
 
         {/* Accounts Table */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden" data-aos="fade-up" data-aos-delay="100">
           <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900">
               Accounts
@@ -175,6 +209,7 @@ export default function AdminPage() {
                   <th className="px-6 py-3 font-medium">#</th>
                   <th className="px-6 py-3 font-medium">Account Name</th>
                   <th className="px-6 py-3 font-medium">Account ID</th>
+                  <th className="px-6 py-3 font-medium">Status</th>
                   <th className="px-6 py-3 font-medium text-right">Action</th>
                 </tr>
               </thead>
@@ -187,6 +222,25 @@ export default function AdminPage() {
                     </td>
                     <td className="px-6 py-3 text-gray-500 font-mono">
                       {acc.account_id}
+                    </td>
+                    <td className="px-6 py-3">
+                      <button
+                        onClick={() =>
+                          handleToggleActive(acc.account_id, acc.is_active)
+                        }
+                        disabled={toggleLoading === acc.account_id}
+                        className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium transition-colors disabled:opacity-50 ${
+                          acc.is_active
+                            ? "bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-700"
+                            : "bg-red-100 text-red-700 hover:bg-green-100 hover:text-green-700"
+                        }`}
+                      >
+                        {toggleLoading === acc.account_id
+                          ? "…"
+                          : acc.is_active
+                            ? "Active"
+                            : "Inactive"}
+                      </button>
                     </td>
                     <td className="px-6 py-3 text-right">
                       <button

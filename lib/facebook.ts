@@ -243,3 +243,70 @@ export async function fetchAdReach(
 
   return Array.from(result.values()).sort((a, b) => b.reach - a.reach);
 }
+
+/**
+ * Fetch age/gender breakdown from Facebook Insights API.
+ * Returns array of { age, gender, impressions }.
+ */
+export async function fetchAgeGenderBreakdown(
+  accountIds: string[],
+  accessToken: string,
+  since: string,
+  until: string,
+): Promise<{ age: string; gender: string; impressions: number }[]> {
+  const map = new Map<string, number>();
+  const timeRange = encodeURIComponent(JSON.stringify({ since, until }));
+
+  for (const accountId of accountIds) {
+    let url: string | null =
+      `${FB_GRAPH_API_V25}/${accountId}/insights?fields=impressions` +
+      `&breakdowns=age,gender&time_range=${timeRange}&level=account&access_token=${accessToken}&limit=500`;
+
+    while (url) {
+      const res = await axios.get(url);
+      for (const item of res.data.data ?? []) {
+        const key = `${item.age}|||${item.gender}`;
+        map.set(key, (map.get(key) ?? 0) + parseInt(String(item.impressions ?? "0"), 10));
+      }
+      url = res.data.paging?.next ?? null;
+    }
+  }
+
+  return [...map.entries()].map(([key, impressions]) => {
+    const [age, gender] = key.split("|||");
+    return { age, gender, impressions };
+  });
+}
+
+/**
+ * Fetch device (impression_device) breakdown from Facebook Insights API.
+ * Returns array of { device, impressions }.
+ */
+export async function fetchDeviceBreakdown(
+  accountIds: string[],
+  accessToken: string,
+  since: string,
+  until: string,
+): Promise<{ device: string; impressions: number }[]> {
+  const map = new Map<string, number>();
+  const timeRange = encodeURIComponent(JSON.stringify({ since, until }));
+
+  for (const accountId of accountIds) {
+    let url: string | null =
+      `${FB_GRAPH_API_V25}/${accountId}/insights?fields=impressions` +
+      `&breakdowns=impression_device&time_range=${timeRange}&level=account&access_token=${accessToken}&limit=500`;
+
+    while (url) {
+      const res = await axios.get(url);
+      for (const item of res.data.data ?? []) {
+        const device = item.impression_device ?? "unknown";
+        map.set(device, (map.get(device) ?? 0) + parseInt(String(item.impressions ?? "0"), 10));
+      }
+      url = res.data.paging?.next ?? null;
+    }
+  }
+
+  return [...map.entries()]
+    .map(([device, impressions]) => ({ device, impressions }))
+    .sort((a, b) => b.impressions - a.impressions);
+}

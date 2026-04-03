@@ -63,8 +63,8 @@ function KpiCard({
   highlight?: "green" | "red";
 }) {
   return (
-    <div className="bg-white rounded-xl shadow-sm p-5 flex flex-col gap-1">
-      <p className="text-xs text-gray-500 uppercase tracking-wide">{label}</p>
+    <div className="bg-white rounded-2xl shadow-sm p-5 flex flex-col gap-1 hover:shadow-md transition-shadow border border-gray-100">
+      <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">{label}</p>
       <p
         className={`text-2xl font-bold ${
           highlight === "green"
@@ -111,33 +111,40 @@ export default function SummaryPage() {
   };
 
   return (
-    <main className="min-h-screen bg-gray-50 py-10 px-4">
+    <main className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 py-10 px-4">
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">
-          Ads Summary
-        </h1>
+        <div className="flex items-center gap-3 mb-6" data-aos="fade-down">
+          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center">
+            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Ads Summary
+          </h1>
+        </div>
 
         {/* Input */}
-        <div className="flex gap-3 mb-8">
+        <div className="flex gap-3 mb-8" data-aos="fade-up" data-aos-delay="100">
           <input
             type="text"
             value={accountId}
             onChange={(e) => setAccountId(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleFetch()}
             placeholder="Ad Account ID (เช่น 123456789 หรือ act_123456789)"
-            className="flex-1 border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-1 border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
           />
           <button
             onClick={handleFetch}
             disabled={loading}
-            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white text-sm font-semibold px-6 py-2 rounded-lg transition"
+            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white text-sm font-semibold px-6 py-2.5 rounded-xl transition shadow-sm hover:shadow-md"
           >
             {loading ? "กำลังโหลด..." : "ดูสรุป"}
           </button>
         </div>
 
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
             {error}
           </div>
         )}
@@ -145,7 +152,7 @@ export default function SummaryPage() {
         {data && (
           <>
             {/* Header info */}
-            <div className="mb-6">
+            <div className="mb-6" data-aos="fade-up">
               <p className="text-lg font-semibold text-gray-800">
                 {data.account_name}
               </p>
@@ -156,7 +163,7 @@ export default function SummaryPage() {
             </div>
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-8" data-aos="fade-up" data-aos-delay="100">
               <KpiCard
                 label="Spend"
                 value={`฿${fmt(data.totals.spend)}`}
@@ -200,11 +207,11 @@ export default function SummaryPage() {
             </div>
 
             {/* By Campaign */}
-            <div className="mb-8">
+            <div className="mb-8" data-aos="fade-up" data-aos-delay="200">
               <h2 className="text-lg font-semibold text-gray-800 mb-3">
                 แยกตาม Campaign
               </h2>
-              <div className="overflow-x-auto rounded-lg shadow">
+              <div className="overflow-x-auto rounded-xl shadow">
                 <table className="w-full text-sm text-left bg-white">
                   <thead className="bg-gray-100 text-gray-600 uppercase text-xs">
                     <tr>
@@ -250,11 +257,11 @@ export default function SummaryPage() {
             </div>
 
             {/* By Region */}
-            <div>
+            <div data-aos="fade-up" data-aos-delay="300">
               <h2 className="text-lg font-semibold text-gray-800 mb-3">
                 Top 10 จังหวัด (by Spend)
               </h2>
-              <div className="overflow-x-auto rounded-lg shadow">
+              <div className="overflow-x-auto rounded-xl shadow">
                 <table className="w-full text-sm text-left bg-white">
                   <thead className="bg-gray-100 text-gray-600 uppercase text-xs">
                     <tr>

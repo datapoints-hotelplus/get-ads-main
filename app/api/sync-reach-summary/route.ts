@@ -44,8 +44,9 @@ export async function POST(req: NextRequest) {
 
   // Resolve account IDs from allpage
   let accountQuery = supabase
-    .from("allpage")
-    .select("account_id, account_name");
+    .from("ads_allpage")
+    .select("account_id, account_name")
+    .eq("is_active", true);
   if (accountNames.length > 0)
     accountQuery = accountQuery.in("account_name", accountNames);
   const { data: pageRows, error: pageErr } = await accountQuery;

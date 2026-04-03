@@ -51,19 +51,20 @@ export async function GET(request: NextRequest) {
     const ads = (response.data.data as any[]).map((item) => {
       const spend = parseFloat(item.spend ?? "0");
       const clicks = parseInt(item.inline_link_clicks ?? "0", 10);
+      const clicks_all = parseInt(item.clicks ?? "0", 10);
       const impressions = parseInt(item.impressions ?? "0", 10);
 
       const purchaseAction = (item.actions as any[] | undefined)?.find(
         (a) => a.action_type === "purchase",
       );
-      const purchaseValueAction = (item.action_values as any[] | undefined)?.find(
-        (a) => a.action_type === "purchase",
-      );
+      const purchaseValueAction = (
+        item.action_values as any[] | undefined
+      )?.find((a) => a.action_type === "purchase");
 
       const purchases = parseFloat(purchaseAction?.value ?? "0");
       const revenue = parseFloat(purchaseValueAction?.value ?? "0");
 
-      const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
+      const ctr = impressions > 0 ? (clicks_all / impressions) * 100 : 0;
       const cpc = clicks > 0 ? spend / clicks : 0;
       const costPerPurchase = purchases > 0 ? spend / purchases : 0;
       const roas = spend > 0 ? revenue / spend : 0;

@@ -1,12 +1,14 @@
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
-import { VALID_TOKEN } from "@/lib/adminAuth";
+import { verifySessionToken } from "@/lib/sessionToken";
 import { getSupabase } from "@/lib/supabase";
 
 async function checkAuth(): Promise<boolean> {
   const cookieStore = await cookies();
-  const token = cookieStore.get("admin_session")?.value;
-  return token === VALID_TOKEN;
+  const token = cookieStore.get("session")?.value;
+  if (!token) return false;
+  const session = await verifySessionToken(token);
+  return session?.role === "admin";
 }
 
 export async function GET() {
@@ -16,8 +18,8 @@ export async function GET() {
 
   const supabase = getSupabase();
   const { data, error } = await supabase
-    .from("allpage")
-    .select("account_name, account_id")
+    .from("ads_allpage")
+    .select("account_name, account_id, is_active")
     .order("account_name", { ascending: true });
 
   if (error) {
@@ -53,7 +55,7 @@ export async function POST(req: NextRequest) {
 
   const supabase = getSupabase();
   const { error } = await supabase
-    .from("allpage")
+    .from("ads_allpage")
     .insert({ account_name, account_id });
 
   if (error) {
@@ -80,7 +82,7 @@ export async function DELETE(req: NextRequest) {
 
   const supabase = getSupabase();
   const { error } = await supabase
-    .from("allpage")
+    .from("ads_allpage")
     .delete()
     .eq("account_id", account_id);
 

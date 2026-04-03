@@ -49,6 +49,13 @@ Create a `.env.local` file in the project root:
 # Facebook API
 FB_ACCESS_TOKEN=your_facebook_access_token_here
 
+# Supabase
+SUPABASE_URL=https://xxxxxxxxxxxx.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key_here
+
+# User session signing secret (generate with: openssl rand -hex 32)
+USER_SESSION_SECRET=replace_with_64_char_random_hex_string
+
 # Google Sheets
 GOOGLE_SHEETS_ID=your_google_sheets_id_here
 GOOGLE_CREDENTIALS_JSON={"type":"service_account","project_id":"...","private_key":"...","client_email":"..."}

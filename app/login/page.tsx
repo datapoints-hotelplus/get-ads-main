@@ -1,14 +1,27 @@
 "use client";
 
-import { useState, FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, FormEvent } from "react";
 
-export default function AdminLoginPage() {
-  const router = useRouter();
+export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [checking, setChecking] = useState(true);
+
+  // If already logged in, redirect to dashboard
+  useEffect(() => {
+    fetch("/api/user/auth")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.user) {
+          window.location.href = "/dashboard";
+        } else {
+          setChecking(false);
+        }
+      })
+      .catch(() => setChecking(false));
+  }, []);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -16,14 +29,15 @@ export default function AdminLoginPage() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/admin/auth", {
+      const res = await fetch("/api/user/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
       });
 
       if (res.ok) {
-        router.push("/admin");
+        window.location.href = "/dashboard";
+        return;
       } else {
         const data = await res.json();
         setError(data.error ?? "Login failed");
@@ -35,21 +49,29 @@ export default function AdminLoginPage() {
     }
   }
 
+  if (checking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-blue-50">
+        <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-white to-gray-100">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-blue-50">
       <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm border border-gray-100" data-aos="fade-up">
         <div className="flex justify-center mb-6">
-          <div className="w-14 h-14 bg-gray-900 rounded-2xl flex items-center justify-center shadow-md">
+          <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center shadow-md">
             <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
             </svg>
           </div>
         </div>
         <h1 className="text-2xl font-bold text-gray-900 mb-1 text-center">
-          Admin Panel
+          Ads Dashboard
         </h1>
         <p className="text-sm text-gray-500 text-center mb-8">
-          เข้าสู่ระบบผู้ดูแล
+          เข้าสู่ระบบเพื่อดูข้อมูลโฆษณา
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-5">
@@ -60,10 +82,11 @@ export default function AdminLoginPage() {
             <input
               type="text"
               required
+              autoComplete="username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-shadow"
-              autoComplete="username"
+              placeholder="your_username"
+              className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
             />
           </div>
 
@@ -74,10 +97,11 @@ export default function AdminLoginPage() {
             <input
               type="password"
               required
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-shadow"
-              autoComplete="current-password"
+              placeholder="••••••••"
+              className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
             />
           </div>
 
@@ -93,7 +117,7 @@ export default function AdminLoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-gray-900 hover:bg-gray-800 disabled:opacity-60 text-white font-semibold py-3 rounded-xl transition-colors shadow-sm hover:shadow-md"
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-semibold px-4 py-3 rounded-xl transition-colors shadow-sm hover:shadow-md"
           >
             {loading ? (
               <span className="flex items-center justify-center gap-2">
