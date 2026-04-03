@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -159,27 +159,22 @@ function DatePickerField({
   value: string;
   onChange: (iso: string) => void;
 }) {
+  const inputRef = useRef<HTMLInputElement>(null);
   return (
     <div className="flex flex-col gap-1">
       <label className="text-xs font-medium text-gray-600">{label}</label>
-      <div className="relative border border-gray-300 px-3 py-2 text-sm text-gray-900 bg-white focus-within:ring-2 focus-within:ring-blue-500 w-36 flex items-center justify-between">
+      <div
+        onClick={() => inputRef.current?.showPicker()}
+        className="relative border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white focus-within:ring-2 focus-within:ring-blue-500 w-40 cursor-pointer flex items-center justify-between"
+      >
         <span className={value ? "" : "text-gray-400"}>
           {value ? isoToDisplay(value) : "dd/mm/yyyy"}
         </span>
-        <svg
-          className="w-4 h-4 text-gray-400 pointer-events-none"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-          />
+        <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
         </svg>
         <input
+          ref={inputRef}
           type="date"
           value={value}
           onChange={(e) => onChange(e.target.value)}
