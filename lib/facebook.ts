@@ -263,7 +263,7 @@ export async function fetchAgeGenderBreakdown(
       `&breakdowns=age,gender&time_range=${timeRange}&level=account&access_token=${accessToken}&limit=500`;
 
     while (url) {
-      const res = await axios.get(url);
+      const res: { data: { data?: any[]; paging?: { next?: string } } } = await axios.get(url);
       for (const item of res.data.data ?? []) {
         const key = `${item.age}|||${item.gender}`;
         map.set(key, (map.get(key) ?? 0) + parseInt(String(item.impressions ?? "0"), 10));
@@ -297,7 +297,7 @@ export async function fetchDeviceBreakdown(
       `&breakdowns=impression_device&time_range=${timeRange}&level=account&access_token=${accessToken}&limit=500`;
 
     while (url) {
-      const res = await axios.get(url);
+      const res: { data: { data?: any[]; paging?: { next?: string } } } = await axios.get(url);
       for (const item of res.data.data ?? []) {
         const device = item.impression_device ?? "unknown";
         map.set(device, (map.get(device) ?? 0) + parseInt(String(item.impressions ?? "0"), 10));
