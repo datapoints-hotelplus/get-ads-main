@@ -688,19 +688,24 @@ export default function DashboardPage() {
   }, []);
 
   // ── Load options (cascading) whenever account/campaign changes ──────────────
-  const loadOptions = useCallback(async (acc: string, camp: string) => {
-    setOptLoading(true);
-    const params = new URLSearchParams({ type: "options" });
-    if (acc) params.set("account", acc);
-    if (camp) params.set("campaign", camp);
-    try {
-      const res = await fetch(`/api/dashboard?${params}`);
-      const json = await res.json();
-      if (res.ok) setOptions(json as Options);
-    } finally {
-      setOptLoading(false);
-    }
-  }, []);
+  const loadOptions = useCallback(
+    async (acc: string, camp: string) => {
+      setOptLoading(true);
+      const params = new URLSearchParams({ type: "options" });
+      if (acc) params.set("account", acc);
+      if (camp) params.set("campaign", camp);
+      if (dateFrom) params.set("dateFrom", dateFrom);
+      if (dateTo) params.set("dateTo", dateTo);
+      try {
+        const res = await fetch(`/api/dashboard?${params}`);
+        const json = await res.json();
+        if (res.ok) setOptions(json as Options);
+      } finally {
+        setOptLoading(false);
+      }
+    },
+    [dateFrom, dateTo],
+  );
 
   useEffect(() => {
     loadOptions(account, campaign);

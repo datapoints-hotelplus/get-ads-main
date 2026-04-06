@@ -71,6 +71,8 @@ export async function GET(request: NextRequest) {
       // Return distinct filter values (cascading)
       const account = searchParams.get("account") ?? "";
       const campaign = searchParams.get("campaign") ?? "";
+      const dateFrom = searchParams.get("dateFrom") ?? "";
+      const dateTo = searchParams.get("dateTo") ?? "";
 
       const allowedNames = await getAllowedAccountNames();
 
@@ -91,48 +93,32 @@ export async function GET(request: NextRequest) {
         ...new Set((accountData ?? []).map((r) => r.account_name as string)),
       ].filter(Boolean);
 
-      // Fetch all distinct campaign+adset pairs via RPC (avoids row-limit issue)
-      // Falls back to direct query if RPC not yet created
+      // Fetch campaign+adset pairs with spend filter (only campaigns with spend > 0 in date range)
       let pairsData: { campaign_name: string; adset_name: string }[] = [];
-      const rpcRes = await supabase.rpc("get_campaign_adset_pairs", {
-        p_account: account || null,
-      });
-      if (!rpcRes.error) {
-        pairsData = rpcRes.data ?? [];
-        // For users with restricted accounts, filter pairs to only their allowed accounts
-        if (allowedNames !== null && !account) {
-          // Re-fetch via direct query filtered to allowed account names
-          const fallback = await supabase
-            .from("ads_rawdata")
-            .select("campaign_name,adset_name")
-            .in("account_name", allowedNames)
-            .limit(50000);
-          if (!fallback.error) {
-            pairsData = (fallback.data ?? []) as {
-              campaign_name: string;
-              adset_name: string;
-            }[];
-          }
-        }
-      } else {
-        // Fallback: direct query without ordering (avoids alphabetical bias in limit)
-        let q = supabase
-          .from("ads_rawdata")
-          .select("campaign_name,adset_name")
-          .limit(50000);
-        if (account) q = q.eq("account_name", account);
-        else if (allowedNames !== null) q = q.in("account_name", allowedNames);
-        const fallback = await q;
-        if (fallback.error) throw fallback.error;
-        pairsData = (fallback.data ?? []) as {
-          campaign_name: string;
-          adset_name: string;
-        }[];
-      }
+      let q = supabase
+        .from("ads_rawdata")
+        .select("campaign_name,adset_name,spend");
+      if (account) q = q.eq("account_name", account);
+      else if (allowedNames !== null) q = q.in("account_name", allowedNames);
+      if (dateFrom) q = q.gte("date_start", dateFrom);
+      if (dateTo) q = q.lte("date_start", dateTo);
+
+      const { data: rawPairs, error: pairsErr } = await q.limit(50000);
+      if (pairsErr) throw pairsErr;
+
+      // Filter pairs to only include campaigns/adsets with spend > 0
+      const filteredPairs = (rawPairs ?? []).filter((r) => (r.spend ?? 0) > 0);
+      pairsData = filteredPairs as {
+        campaign_name: string;
+        adset_name: string;
+        spend: number;
+      }[];
 
       const campaigns = [
         ...new Set((pairsData ?? []).map((r) => r.campaign_name as string)),
-      ].filter(Boolean);
+      ]
+        .filter(Boolean)
+        .sort();
 
       // Adsets: if campaign filter active, only show adsets under that campaign
       const adsetSource = campaign
@@ -140,7 +126,9 @@ export async function GET(request: NextRequest) {
         : (pairsData ?? []);
       const adsets = [
         ...new Set(adsetSource.map((r) => r.adset_name as string)),
-      ].filter(Boolean);
+      ]
+        .filter(Boolean)
+        .sort();
 
       return NextResponse.json({ accounts, campaigns, adsets });
     }
