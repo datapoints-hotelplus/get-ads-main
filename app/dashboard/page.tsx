@@ -170,8 +170,18 @@ function DatePickerField({
         <span className={value ? "" : "text-gray-400"}>
           {value ? isoToDisplay(value) : "dd/mm/yyyy"}
         </span>
-        <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        <svg
+          className="w-4 h-4 text-gray-400"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+          />
         </svg>
         <input
           ref={inputRef}
@@ -188,18 +198,18 @@ function DatePickerField({
 // ─── Metric Tooltips ──────────────────────────────────────────────────────────
 
 const METRIC_TIPS: Record<string, string> = {
-  "Impressions": "จำนวนครั้งที่โฆษณาถูกแสดง (รวมซ้ำ)",
+  Impressions: "จำนวนครั้งที่โฆษณาถูกแสดง (รวมซ้ำ)",
   "Link Clicks": "จำนวนคลิกไปยังปลายทาง",
   "Unique Link Clicks": "จำนวนคนที่คลิก (ไม่นับซ้ำ)",
-  "Reach": "จำนวนคนที่เห็นโฆษณา (ไม่นับซ้ำ)",
+  Reach: "จำนวนคนที่เห็นโฆษณา (ไม่นับซ้ำ)",
   "Reach (ทุก Account)": "จำนวนคนที่เห็นโฆษณา (ไม่นับซ้ำ)",
-  "Spend": "ยอดใช้จ่ายโฆษณาทั้งหมด",
-  "CPM": "ต้นทุนต่อการแสดงผล 1,000 ครั้ง (ยิ่งต่ำยิ่งดี)",
-  "Click Rate": "จำนวนแคมเปญที่กำลังรันในช่วงเวลา",
-  "CTR": "อัตราการคลิกต่อการเห็นโฆษณา Click ÷ Impression (%)",
-  "Leads": "จำนวนลูกค้าที่กรอกฟอร์ม",
+  Spend: "ยอดใช้จ่ายโฆษณาทั้งหมด",
+  CPM: "ต้นทุนต่อการแสดงผล 1,000 ครั้ง (ยิ่งต่ำยิ่งดี)",
+  "Campaign Count": "จำนวนแคมเปญที่กำลังรันในช่วงเวลา",
+  CTR: "อัตราการคลิกต่อการเห็นโฆษณา Click ÷ Impression (%)",
+  Leads: "จำนวนลูกค้าที่กรอกฟอร์ม",
   "Cost / Lead": "ต้นทุนต่อ 1 Lead",
-  "Messages": "จำนวนคนที่เริ่มแชท",
+  Messages: "จำนวนคนที่เริ่มแชท",
   "Cost / Message": "ต้นทุนต่อ 1 คนที่ทัก",
   "Post Shares": "จำนวนครั้งที่แชร์โพสต์",
   "Page Likes": "จำนวนคนกดติดตามเพจ",
@@ -210,18 +220,18 @@ const METRIC_TIPS: Record<string, string> = {
 
 // Map MetricCard label → highlight metric_key
 const LABEL_TO_KEY: Record<string, string> = {
-  "Impressions": "impressions",
+  Impressions: "impressions",
   "Link Clicks": "clicks",
   "Unique Link Clicks": "unique_clicks",
-  "Reach": "reach",
+  Reach: "reach",
   "Reach (ทุก Account)": "reach",
-  "Spend": "spend",
-  "CPM": "cpm",
-  "Click Rate": "ctr",
-  "CTR": "ctr",
-  "Leads": "leads",
+  Spend: "spend",
+  CPM: "cpm",
+  "Campaign Count": "campaign_count",
+  CTR: "ctr",
+  Leads: "leads",
   "Cost / Lead": "cost_per_lead",
-  "Messages": "messages",
+  Messages: "messages",
   "Cost / Message": "cost_per_message",
   "Post Shares": "post_shares",
   "Page Likes": "page_likes",
@@ -254,17 +264,25 @@ function MetricCard({
   const tip = METRIC_TIPS[label];
 
   return (
-    <div className={`rounded-xl border px-4 py-4 flex flex-col gap-1 transition-shadow ${
-      highlight
-        ? "bg-blue-50 border-blue-400 shadow-md ring-2 ring-blue-200"
-        : "bg-white border-gray-200 hover:shadow-md"
-    }`}>
+    <div
+      className={`rounded-xl border px-4 py-4 flex flex-col gap-1 transition-shadow ${
+        highlight
+          ? "bg-blue-50 border-blue-400 shadow-md ring-2 ring-blue-200"
+          : "bg-white border-gray-200 hover:shadow-md"
+      }`}
+    >
       <div className="flex items-center gap-1">
-        <p className={`text-xs font-medium truncate ${highlight ? "text-blue-700" : "text-gray-500"}`}>{label}</p>
+        <p
+          className={`text-xs font-medium truncate ${highlight ? "text-blue-700" : "text-gray-500"}`}
+        >
+          {label}
+        </p>
         {highlight && <span className="text-blue-500 text-xs">★</span>}
         {tip && (
           <span className="relative group cursor-help flex-shrink-0">
-            <span className="text-gray-600 hover:text-blue-500 transition-colors text-xs">ⓘ</span>
+            <span className="text-gray-600 hover:text-blue-500 transition-colors text-xs">
+              ⓘ
+            </span>
             <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg whitespace-normal w-48 text-center opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none shadow-lg">
               {tip}
               <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
@@ -300,7 +318,9 @@ function ChartHeader({ title, tip }: { title: string; tip: string }) {
     <div className="flex items-start gap-2 mb-4">
       <h2 className="text-lg font-bold text-gray-900">{title}</h2>
       <span className="relative group cursor-help flex-shrink-0 mt-1">
-        <span className="text-gray-300 hover:text-blue-500 transition-colors text-sm">ⓘ</span>
+        <span className="text-gray-300 hover:text-blue-500 transition-colors text-sm">
+          ⓘ
+        </span>
         <span className="absolute bottom-full left-0 mb-2 px-4 py-3 bg-gray-900 text-white text-xs rounded-xl w-72 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none shadow-xl whitespace-pre-line leading-relaxed">
           {tip}
           <span className="absolute top-full left-4 border-4 border-transparent border-t-gray-900" />
@@ -609,8 +629,12 @@ export default function DashboardPage() {
   const [geoLoading, setGeoLoading] = useState(false);
 
   // Demographics data state
-  const [ageGender, setAgeGender] = useState<{ age: string; gender: string; impressions: number }[]>([]);
-  const [devices, setDevices] = useState<{ device: string; impressions: number }[]>([]);
+  const [ageGender, setAgeGender] = useState<
+    { age: string; gender: string; impressions: number }[]
+  >([]);
+  const [devices, setDevices] = useState<
+    { device: string; impressions: number }[]
+  >([]);
   const [demoLoading, setDemoLoading] = useState(false);
 
   // Highlight metrics config
@@ -688,7 +712,9 @@ export default function DashboardPage() {
       setHighlightMetrics([]);
       return;
     }
-    fetch(`/api/dashboard?type=highlights&campaign=${encodeURIComponent(campaign)}`)
+    fetch(
+      `/api/dashboard?type=highlights&campaign=${encodeURIComponent(campaign)}`,
+    )
       .then((r) => r.json())
       .then((data) => {
         const hl = data.highlights?.[campaign] ?? [];
@@ -790,20 +816,27 @@ export default function DashboardPage() {
     }
   }, [buildFilterParams]);
 
-  // Auto-fetch on mount
+  // Load options on mount
   useEffect(() => {
-    fetchData();
-    fetchGeo();
-    fetchTimeSeries();
-    fetchDemographics();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    loadOptions("", "");
+  }, [loadOptions]);
 
-  // Re-fetch charts when filters change
+  // Auto-fetch data only when dates are provided
   useEffect(() => {
-    fetchGeo();
-    fetchTimeSeries();
-    fetchDemographics();
-  }, [fetchGeo, fetchTimeSeries, fetchDemographics]);
+    if (dateFrom && dateTo) {
+      fetchData();
+      fetchGeo();
+      fetchTimeSeries();
+      fetchDemographics();
+    }
+  }, [
+    dateFrom,
+    dateTo,
+    fetchData,
+    fetchGeo,
+    fetchTimeSeries,
+    fetchDemographics,
+  ]);
 
   // ── Handlers ────────────────────────────────────────────────────────────────
   const handleAccountChange = (val: string) => {
@@ -835,11 +868,23 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                <svg
+                  className="w-4 h-4 text-white"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                  />
                 </svg>
               </div>
-              <span className="text-lg font-bold text-gray-900">Ads Dashboard</span>
+              <span className="text-lg font-bold text-gray-900">
+                Ads Dashboard
+              </span>
             </div>
             <div className="flex items-center gap-3">
               {authLoading ? (
@@ -849,7 +894,9 @@ export default function DashboardPage() {
                   <div className="flex items-center gap-2">
                     <div className="w-7 h-7 bg-blue-100 rounded-full flex items-center justify-center">
                       <span className="text-xs font-bold text-blue-600">
-                        {(currentUser.display_name || currentUser.username).charAt(0).toUpperCase()}
+                        {(currentUser.display_name || currentUser.username)
+                          .charAt(0)
+                          .toUpperCase()}
                       </span>
                     </div>
                     <span className="text-sm text-gray-700 font-medium">
@@ -876,10 +923,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Filter form */}
-          <form
-            onSubmit={handleApply}
-            className="space-y-3"
-          >
+          <form onSubmit={handleApply} className="space-y-3">
             {/* Filter row */}
             <div className="flex flex-wrap items-end gap-3">
               {/* Date From */}
@@ -1045,124 +1089,136 @@ export default function DashboardPage() {
                   return key ? highlightMetrics.includes(key) : false;
                 };
                 return (
-              <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                <MetricCard
-                  label="Impressions"
-                  value={fmtK(totals.impressions)}
-                  delta={changes?.impressions}
-                  highlight={isHL("Impressions")}
-                />
-                <MetricCard
-                  label="Link Clicks"
-                  value={fmtK(totals.clicks)}
-                  delta={changes?.clicks}
-                  highlight={isHL("Link Clicks")}
-                />
-                <MetricCard
-                  label="Unique Link Clicks"
-                  value={fmtK(totals.unique_clicks)}
-                  delta={changes?.unique_clicks}
-                  highlight={isHL("Unique Link Clicks")}
-                />
-                <MetricCard
-                  label={account ? "Reach" : "Reach (ทุก Account)"}
-                  value={fmtK(totals.reach)}
-                  delta={changes?.reach}
-                  highlight={isHL(account ? "Reach" : "Reach (ทุก Account)")}
-                />
-                <MetricCard
-                  label="Spend"
-                  value={`฿${fmtK(totals.spend)}`}
-                  delta={changes?.spend}
-                  invertColor
-                  highlight={isHL("Spend")}
-                />
-                <MetricCard
-                  label="CPM"
-                  value={fmt(totals.cpm, 1)}
-                  delta={changes?.cpm}
-                  invertColor
-                  highlight={isHL("CPM")}
-                />
-                <MetricCard
-                  label="Click Rate"
-                  value={`${fmt((totals.clicks / Math.max(totals.impressions, 1)) * 100, 1)}%`}
-                  sub="Clicks / Impressions"
-                  highlight={isHL("Click Rate")}
-                />
-                <MetricCard
-                  label="CTR"
-                  value={`${fmt(totals.ctr, 2)}%`}
-                  delta={changes?.ctr}
-                  highlight={isHL("CTR")}
-                />
-                <MetricCard
-                  label="Leads"
-                  value={fmtK(totals.leads)}
-                  delta={changes?.leads}
-                  highlight={isHL("Leads")}
-                />
-                <MetricCard
-                  label="Cost / Lead"
-                  value={totals.leads > 0 ? `฿${fmt(totals.cost_per_lead, 1)}` : "—"}
-                  delta={changes?.cost_per_lead}
-                  invertColor
-                  highlight={isHL("Cost / Lead")}
-                />
-                <MetricCard
-                  label="Messages"
-                  value={fmtK(totals.messaging)}
-                  delta={changes?.messaging}
-                  highlight={isHL("Messages")}
-                />
-                <MetricCard
-                  label="Cost / Message"
-                  value={
-                    totals.messaging > 0 ? `฿${fmt(totals.cost_per_message, 1)}` : "—"
-                  }
-                  delta={changes?.cost_per_message}
-                  invertColor
-                  highlight={isHL("Cost / Message")}
-                />
-                <MetricCard
-                  label="Post Shares"
-                  value={fmtK(totals.post_shares)}
-                  delta={changes?.post_shares}
-                  highlight={isHL("Post Shares")}
-                />
-                <MetricCard
-                  label="Page Likes"
-                  value={fmtK(totals.page_likes)}
-                  delta={changes?.page_likes}
-                  highlight={isHL("Page Likes")}
-                />
-                <MetricCard
-                  label="Post Engagement"
-                  value={fmtK(totals.post_engagement)}
-                  delta={changes?.post_engagement}
-                  highlight={isHL("Post Engagement")}
-                />
-                <MetricCard
-                  label="Cost / Engagement"
-                  value={
-                    totals.post_engagement > 0
-                      ? `฿${fmt(totals.cost_per_engagement)}`
-                      : "—"
-                  }
-                  delta={changes?.cost_per_engagement}
-                  invertColor
-                  highlight={isHL("Cost / Engagement")}
-                />
-                <MetricCard
-                  label="Cost / Like"
-                  value={
-                    totals.page_likes > 0 ? `฿${fmt(totals.cost_per_like)}` : "—"
-                  }
-                  delta={changes?.cost_per_like}
-                  invertColor
-                  highlight={isHL("Cost / Like")}
-                />
-              </div>
+                  <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                    <MetricCard
+                      label="Impressions"
+                      value={fmtK(totals.impressions)}
+                      delta={changes?.impressions}
+                      highlight={isHL("Impressions")}
+                    />
+                    <MetricCard
+                      label="Link Clicks"
+                      value={fmtK(totals.clicks)}
+                      delta={changes?.clicks}
+                      highlight={isHL("Link Clicks")}
+                    />
+                    <MetricCard
+                      label="Unique Link Clicks"
+                      value={fmtK(totals.unique_clicks)}
+                      delta={changes?.unique_clicks}
+                      highlight={isHL("Unique Link Clicks")}
+                    />
+                    <MetricCard
+                      label={account ? "Reach" : "Reach (ทุก Account)"}
+                      value={fmtK(totals.reach)}
+                      delta={changes?.reach}
+                      highlight={isHL(
+                        account ? "Reach" : "Reach (ทุก Account)",
+                      )}
+                    />
+                    <MetricCard
+                      label="Spend"
+                      value={`฿${fmtK(totals.spend)}`}
+                      delta={changes?.spend}
+                      invertColor
+                      highlight={isHL("Spend")}
+                    />
+                    <MetricCard
+                      label="CPM"
+                      value={fmt(totals.cpm, 1)}
+                      delta={changes?.cpm}
+                      invertColor
+                      highlight={isHL("CPM")}
+                    />
+                    <MetricCard
+                      label="Campaign Count"
+                      value={String(
+                        new Set(rows.map((r) => r.campaign_name)).size,
+                      )}
+                      sub="จำนวนแคมเปญในช่วงเวลา"
+                      highlight={isHL("Campaign Count")}
+                    />
+                    <MetricCard
+                      label="CTR"
+                      value={`${fmt(totals.ctr, 2)}%`}
+                      delta={changes?.ctr}
+                      highlight={isHL("CTR")}
+                    />
+                    <MetricCard
+                      label="Leads"
+                      value={fmtK(totals.leads)}
+                      delta={changes?.leads}
+                      highlight={isHL("Leads")}
+                    />
+                    <MetricCard
+                      label="Cost / Lead"
+                      value={
+                        totals.leads > 0
+                          ? `฿${fmt(totals.cost_per_lead, 1)}`
+                          : "—"
+                      }
+                      delta={changes?.cost_per_lead}
+                      invertColor
+                      highlight={isHL("Cost / Lead")}
+                    />
+                    <MetricCard
+                      label="Messages"
+                      value={fmtK(totals.messaging)}
+                      delta={changes?.messaging}
+                      highlight={isHL("Messages")}
+                    />
+                    <MetricCard
+                      label="Cost / Message"
+                      value={
+                        totals.messaging > 0
+                          ? `฿${fmt(totals.cost_per_message, 1)}`
+                          : "—"
+                      }
+                      delta={changes?.cost_per_message}
+                      invertColor
+                      highlight={isHL("Cost / Message")}
+                    />
+                    <MetricCard
+                      label="Post Shares"
+                      value={fmtK(totals.post_shares)}
+                      delta={changes?.post_shares}
+                      highlight={isHL("Post Shares")}
+                    />
+                    <MetricCard
+                      label="Page Likes"
+                      value={fmtK(totals.page_likes)}
+                      delta={changes?.page_likes}
+                      highlight={isHL("Page Likes")}
+                    />
+                    <MetricCard
+                      label="Post Engagement"
+                      value={fmtK(totals.post_engagement)}
+                      delta={changes?.post_engagement}
+                      highlight={isHL("Post Engagement")}
+                    />
+                    <MetricCard
+                      label="Cost / Engagement"
+                      value={
+                        totals.post_engagement > 0
+                          ? `฿${fmt(totals.cost_per_engagement)}`
+                          : "—"
+                      }
+                      delta={changes?.cost_per_engagement}
+                      invertColor
+                      highlight={isHL("Cost / Engagement")}
+                    />
+                    <MetricCard
+                      label="Cost / Like"
+                      value={
+                        totals.page_likes > 0
+                          ? `฿${fmt(totals.cost_per_like)}`
+                          : "—"
+                      }
+                      delta={changes?.cost_per_like}
+                      invertColor
+                      highlight={isHL("Cost / Like")}
+                    />
+                  </div>
                 );
               })()}
               {/* Frequency Gauge */}
@@ -1173,9 +1229,13 @@ export default function DashboardPage() {
                       Frequency
                     </p>
                     <span className="relative group cursor-help flex-shrink-0">
-                      <span className="text-gray-300 hover:text-blue-500 transition-colors text-xs">ⓘ</span>
+                      <span className="text-gray-300 hover:text-blue-500 transition-colors text-xs">
+                        ⓘ
+                      </span>
                       <span className="absolute top-full left-1/2 -translate-x-1/2 mb-2 px-4 py-3 bg-gray-900 text-white text-xs rounded-xl w-72 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none shadow-xl whitespace-pre-line leading-relaxed">
-                        {"Frequency ที่ดีตามประเภทธุรกิจ\n\n🏨 โรงแรม (ตัดสินใจเร็ว)\n→ 2.0 – 3.0\n\n🏝️ รีสอร์ท (ต้องเห็นซ้ำ)\n→ 3.0 – 4.5\n\n🏠 ที่พักทั่วไป\n→ 2.5 – 3.5\n\n📌 Baseline แนะนำ: 2.5 – 3.5\n\n💎 พูลวิลล่า / luxury → 3.5+\n🛏️ ห้องพักทั่วไป → ~2.5\n\nของแพง/ตัดสินใจนาน → Frequency สูง\nของถูก/ตัดสินใจไว → Frequency ต่ำพอ"}
+                        {
+                          "Frequency ที่ดีตามประเภทธุรกิจ\n\n🏨 โรงแรม (ตัดสินใจเร็ว)\n→ 2.0 – 3.0\n\n🏝️ รีสอร์ท (ต้องเห็นซ้ำ)\n→ 3.0 – 4.5\n\n🏠 ที่พักทั่วไป\n→ 2.5 – 3.5\n\n📌 Baseline แนะนำ: 2.5 – 3.5\n\n💎 พูลวิลล่า / luxury → 3.5+\n🛏️ ห้องพักทั่วไป → ~2.5\n\nของแพง/ตัดสินใจนาน → Frequency สูง\nของถูก/ตัดสินใจไว → Frequency ต่ำพอ"
+                        }
                         <span className="absolute bottom-full right-4 border-4 border-transparent border-b-gray-900" />
                       </span>
                     </span>
@@ -1219,7 +1279,10 @@ export default function DashboardPage() {
                 title="ต้นทุนต่อการมองเห็น (CPM) เทียบกับ จำนวนการแสดงผล"
                 tip={`ใช้ดูว่าการยิงโฆษณา "คุ้มไหม"\n\n🔵 แท่งน้ำเงิน = คนเห็น (Impressions)\n🔴 เส้นแดง = ต้นทุนต่อ 1,000 คน (CPM)\n\n✅ CPM ลด + Impressions เพิ่ม = ดี\n❌ CPM สูง + Impressions ไม่ขึ้น = เริ่มแพง\n\n⚠️ ควรเลือก Reach campaign เพื่อผลลัพธ์ที่ดีที่สุด`}
               />
-              <div className="bg-white border border-gray-200 rounded-lg p-4" data-aos="fade-up">
+              <div
+                className="bg-white border border-gray-200 rounded-lg p-4"
+                data-aos="fade-up"
+              >
                 <Chart
                   chartType="ComboChart"
                   width="100%"
@@ -1302,7 +1365,10 @@ export default function DashboardPage() {
                   title="จำนวนคลิก เทียบกับ ต้นทุนต่อคลิก"
                   tip={`ใช้ดูว่าคน "สนใจคลิกไหม"\n\n🔵 แท่งน้ำเงิน = จำนวนคลิก\n🔴 เส้นแดง = ราคาต่อคลิก (CPC)\n\n✅ คลิกเยอะ + CPC ถูก = ดี\n❌ คลิกน้อย + CPC แพง = ครีเอทีฟ/กลุ่มเป้าหมายมีปัญหา\n\n⚠️ ควรเลือก Message หรือ Page like campaign เพื่อผลลัพธ์ที่ดีที่สุด`}
                 />
-                <div className="bg-white border border-gray-200 rounded-lg p-4" data-aos="fade-up">
+                <div
+                  className="bg-white border border-gray-200 rounded-lg p-4"
+                  data-aos="fade-up"
+                >
                   <Chart
                     chartType="ComboChart"
                     width="100%"
@@ -1402,7 +1468,10 @@ export default function DashboardPage() {
                 title="จำนวนแชทลูกค้า เทียบกับ ต้นทุนต่อแชท"
                 tip={`ใช้ดูว่าโฆษณาสร้าง "ลูกค้าทัก" จริงไหม\n\n🔵 แท่งน้ำเงิน = จำนวนคนทัก (Messaging)\n🔴 เส้นแดง = ราคาต่อ 1 แชท\n\n✅ ทักเยอะ + cost ต่ำ = ดีมาก\n❌ ทักน้อย + cost สูง = ยิงผิดกลุ่ม/ครีเอทีฟไม่โดน\n\n⚠️ ควรเลือก Message campaign เพื่อผลลัพธ์ที่ดีที่สุด`}
               />
-              <div className="bg-white border border-gray-200 rounded-lg p-4" data-aos="fade-up">
+              <div
+                className="bg-white border border-gray-200 rounded-lg p-4"
+                data-aos="fade-up"
+              >
                 <Chart
                   chartType="ComboChart"
                   width="100%"
@@ -1481,17 +1550,16 @@ export default function DashboardPage() {
                 title="การมีส่วนร่วม เทียบกับ ต้นทุนต่อการมีส่วนร่วม"
                 tip={`ใช้ดูว่าคอนเทนต์ "น่าสนใจไหม"\n\n🔵 แท่งน้ำเงิน = จำนวน engagement\n🔴 เส้นแดง = ราคาต่อ engagement\n\n✅ engagement สูง + cost ต่ำ = คอนเทนต์ดี\n❌ engagement ต่ำ + cost สูง = ต้องปรับคอนเทนต์\n\n⚠️ ควรเลือก Engagement campaign เพื่อผลลัพธ์ที่ดีที่สุด`}
               />
-              <div className="bg-white border border-gray-200 rounded-lg p-4" data-aos="fade-up">
+              <div
+                className="bg-white border border-gray-200 rounded-lg p-4"
+                data-aos="fade-up"
+              >
                 <Chart
                   chartType="ComboChart"
                   width="100%"
                   height="400px"
                   data={[
-                    [
-                      "Date",
-                      "Cost per Engagement",
-                      "Post Engagement",
-                    ],
+                    ["Date", "Cost per Engagement", "Post Engagement"],
                     ...timeSeries.map((p) => [
                       p.date,
                       p.cost_per_engagement,
@@ -1557,9 +1625,12 @@ export default function DashboardPage() {
             <div className="mt-8">
               <ChartHeader
                 title="ภาพรวมแคมเปญ"
-                tip={`ใช้ดูภาพรวมทั้งหมดในช่วงเวลาเดียวกัน\n\n📊 Spend = ใช้เงินเท่าไหร่\n👁️ Impressions / Reach = คนเห็น\n💬 Messaging = คนทัก\n📋 Leads = ลูกค้า\n\nดูว่าเงินที่ใช้ → ได้ผลลัพธ์ไหม\n\n⚠️ สามารถเลือกรวมทุก campaign เพื่อดูภาพรวม`}
+                tip={`ใช้ดูภาพรวมทั้งหมดในช่วงเวลาเดียวกัน\n\n📊 Spend = ใช้เงินเท่าไหร่\n👁️ Impressions = จำนวนการแสดงผล\n👤 Reach (รายวัน) = คนเห็นต่อวัน\n💬 Messaging = คนทัก\n📋 Leads = ลูกค้า\n\nดูว่าเงินที่ใช้ → ได้ผลลัพธ์ไหม\n\nหมายเหตุ: Reach ในกราฟเป็นค่ารายวัน อาจนับซ้ำข้ามวัน\nReach ใน scorecard ด้านบนเป็นค่า deduplicated จาก Facebook\n\n⚠️ สามารถเลือกรวมทุก campaign เพื่อดูภาพรวม`}
               />
-              <div className="bg-white border border-gray-200 rounded-lg p-4" data-aos="fade-up">
+              <div
+                className="bg-white border border-gray-200 rounded-lg p-4"
+                data-aos="fade-up"
+              >
                 <Chart
                   chartType="ComboChart"
                   width="100%"
@@ -1570,7 +1641,7 @@ export default function DashboardPage() {
                       "spend",
                       "messaging_conversations_started",
                       "impressions",
-                      "reach",
+                      "reach (รายวัน)",
                       "leads",
                     ],
                     ...timeSeries.map((p) => [
@@ -1618,12 +1689,12 @@ export default function DashboardPage() {
                     },
                     vAxes: {
                       0: {
-                        title: "impressions | reach | leads",
+                        title: "impressions | reach",
                         format: "short",
                         minValue: 0,
                       },
                       1: {
-                        title: "spend | messaging_conversations...",
+                        title: "spend | messaging | leads",
                         format: "short",
                         minValue: 0,
                       },
@@ -1661,7 +1732,10 @@ export default function DashboardPage() {
                 title="พื้นที่ — จำนวนคลิก"
                 tip={`ใช้ดูว่าโฆษณาได้ผลในพื้นที่ไหนมากที่สุด\n\nจัดอันดับจังหวัดตามจำนวนคลิก\nช่วยวางแผนกลุ่มเป้าหมายตามภูมิภาค`}
               />
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6" data-aos="fade-up">
+              <div
+                className="grid grid-cols-1 lg:grid-cols-2 gap-6"
+                data-aos="fade-up"
+              >
                 {/* Map */}
                 <div className="bg-white border border-gray-200 rounded-lg p-4">
                   <ThaiGeoChart
@@ -1727,7 +1801,10 @@ export default function DashboardPage() {
                 title="กลุ่มเป้าหมาย"
                 tip={`ใช้ดูว่าโฆษณาเข้าถึงกลุ่มไหนมากที่สุด\n\n📊 กราฟแท่ง = แยกตามอายุ + เพศ\n🍩 กราฟวงกลม = แยกตามอุปกรณ์\n\nช่วยปรับ targeting ให้ตรงกลุ่มมากขึ้น`}
               />
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6" data-aos="fade-up">
+              <div
+                className="grid grid-cols-1 lg:grid-cols-3 gap-6"
+                data-aos="fade-up"
+              >
                 {/* Age/Gender Stacked Bar Chart */}
                 {ageGender.length > 0 && (
                   <div className="lg:col-span-2 bg-white border border-gray-200 rounded-xl p-4">
@@ -1736,13 +1813,19 @@ export default function DashboardPage() {
                       width="100%"
                       height="400px"
                       data={(() => {
-                        const ages = [...new Set(ageGender.map((r) => r.age))].sort();
-                        const genders = [...new Set(ageGender.map((r) => r.gender))].sort();
+                        const ages = [
+                          ...new Set(ageGender.map((r) => r.age)),
+                        ].sort();
+                        const genders = [
+                          ...new Set(ageGender.map((r) => r.gender)),
+                        ].sort();
                         const header = ["Age", ...genders];
                         const rows = ages.map((age) => {
                           const row: (string | number)[] = [age];
                           for (const g of genders) {
-                            const match = ageGender.find((r) => r.age === age && r.gender === g);
+                            const match = ageGender.find(
+                              (r) => r.age === age && r.gender === g,
+                            );
                             row.push(match?.impressions ?? 0);
                           }
                           return row;
@@ -1776,8 +1859,17 @@ export default function DashboardPage() {
                       ]}
                       options={{
                         pieHole: 0.45,
-                        colors: ["#a3e635", "#fb923c", "#f472b6", "#86efac", "#60a5fa"],
-                        legend: { position: "right", textStyle: { fontSize: 11 } },
+                        colors: [
+                          "#a3e635",
+                          "#fb923c",
+                          "#f472b6",
+                          "#86efac",
+                          "#60a5fa",
+                        ],
+                        legend: {
+                          position: "right",
+                          textStyle: { fontSize: 11 },
+                        },
                         chartArea: { left: 10, right: 10, top: 20, bottom: 20 },
                         backgroundColor: "#ffffff",
                         pieSliceTextStyle: { fontSize: 11 },

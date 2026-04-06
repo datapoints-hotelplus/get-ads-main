@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
             "reach",
             "impressions",
             "inline_link_clicks",
+            "clicks",
             "actions",
             "action_values",
             "date_start",
@@ -65,7 +66,7 @@ export async function GET(request: NextRequest) {
       const revenue = parseFloat(purchaseValueAction?.value ?? "0");
 
       const ctr = impressions > 0 ? (clicks_all / impressions) * 100 : 0;
-      const cpc = clicks > 0 ? spend / clicks : 0;
+      const cpc = clicks_all > 0 ? spend / clicks_all : 0;
       const costPerPurchase = purchases > 0 ? spend / purchases : 0;
       const roas = spend > 0 ? revenue / spend : 0;
 

@@ -21,6 +21,7 @@ const BASE_FIELDS = [
   "reach",
   "impressions",
   "inline_link_clicks",
+  "clicks",
   "actions",
   "action_values",
   "date_start",
@@ -140,7 +141,7 @@ function toRawdata(item: FBItem) {
       10,
     ),
     cpm: num(item.cpm),
-    cpc: clicks > 0 ? parseFloat((spend / clicks).toFixed(4)) : 0,
+    cpc: clicks_all > 0 ? parseFloat((spend / clicks_all).toFixed(4)) : 0,
     ctr:
       impressions > 0
         ? parseFloat(((clicks / impressions) * 100).toFixed(4))
@@ -198,6 +199,7 @@ function toGeo(item: FBItem) {
     reach: parseInt(String(item.reach ?? "0"), 10),
     impressions: parseInt(String(item.impressions ?? "0"), 10),
     inline_link_clicks: parseInt(String(item.inline_link_clicks ?? "0"), 10),
+    clicks_all: parseInt(String(item.clicks ?? "0"), 10),
     purchases: findAction(item.actions, "purchase"),
     purchase_value: findAction(item.action_values, "purchase"),
   };
@@ -215,6 +217,7 @@ function toDemographic(item: FBItem) {
     reach: parseInt(String(item.reach ?? "0"), 10),
     impressions: parseInt(String(item.impressions ?? "0"), 10),
     inline_link_clicks: parseInt(String(item.inline_link_clicks ?? "0"), 10),
+    clicks_all: parseInt(String(item.clicks ?? "0"), 10),
     purchases: findAction(item.actions, "purchase"),
     purchase_value: findAction(item.action_values, "purchase"),
   };
@@ -231,6 +234,7 @@ function toDevice(item: FBItem) {
     reach: parseInt(String(item.reach ?? "0"), 10),
     impressions: parseInt(String(item.impressions ?? "0"), 10),
     inline_link_clicks: parseInt(String(item.inline_link_clicks ?? "0"), 10),
+    clicks_all: parseInt(String(item.clicks ?? "0"), 10),
     purchases: findAction(item.actions, "purchase"),
     purchase_value: findAction(item.action_values, "purchase"),
   };
@@ -286,19 +290,31 @@ async function deleteAndInsert(
   if (rows.length === 0) return;
 
   const supabase = getSupabase();
-  const adIds = [...new Set(rows.map((r) => r.ad_id as string))];
+  // Group rows by account_name to delete only their own data
+  const accountGroups = new Map<string, string[]>();
+  for (const row of rows) {
+    const account = String(row.account_name ?? "");
+    const adId = String(row.ad_id ?? "");
+    if (!accountGroups.has(account)) accountGroups.set(account, []);
+    accountGroups.get(account)!.push(adId);
+  }
 
   // Delete in chunks (Supabase .in() has a limit ~300 items)
   const DEL_CHUNK = 200;
-  for (let i = 0; i < adIds.length; i += DEL_CHUNK) {
-    const chunk = adIds.slice(i, i + DEL_CHUNK);
-    const { error: delErr } = await supabase
-      .from(table)
-      .delete()
-      .gte("date_start", since)
-      .lte("date_start", until)
-      .in("ad_id", chunk);
-    if (delErr) throw new Error(`Supabase delete ${table}: ${delErr.message}`);
+  for (const [account, adIds] of accountGroups.entries()) {
+    const uniqueAdIds = [...new Set(adIds)];
+    for (let i = 0; i < uniqueAdIds.length; i += DEL_CHUNK) {
+      const chunk = uniqueAdIds.slice(i, i + DEL_CHUNK);
+      const { error: delErr } = await supabase
+        .from(table)
+        .delete()
+        .eq("account_name", account)
+        .gte("date_start", since)
+        .lte("date_start", until)
+        .in("ad_id", chunk);
+      if (delErr)
+        throw new Error(`Supabase delete ${table}: ${delErr.message}`);
+    }
   }
 
   const CHUNK = 1000;

@@ -56,6 +56,7 @@ export async function GET(request: NextRequest) {
             "reach",
             "impressions",
             "inline_link_clicks",
+            "clicks",
             "frequency",
             "actions",
             "action_values",
@@ -76,6 +77,7 @@ export async function GET(request: NextRequest) {
             "reach",
             "impressions",
             "inline_link_clicks",
+            "clicks",
             "actions",
             "action_values",
             "date_start",
@@ -96,6 +98,7 @@ export async function GET(request: NextRequest) {
       (acc, item) => {
         const spend = parseFloat(item.spend ?? "0");
         const clicks = parseInt(item.inline_link_clicks ?? "0", 10);
+        const clicks_all = parseInt(item.clicks ?? "0", 10);
         const impressions = parseInt(item.impressions ?? "0", 10);
         const purchases = extractPurchase(item.actions);
         const revenue = extractPurchase(item.action_values);
@@ -104,19 +107,26 @@ export async function GET(request: NextRequest) {
         acc.reach += parseInt(item.reach ?? "0", 10);
         acc.impressions += impressions;
         acc.clicks += clicks;
+        acc.clicks_all += clicks_all;
         acc.purchases += purchases;
         acc.revenue += revenue;
         return acc;
       },
-      { spend: 0, reach: 0, impressions: 0, clicks: 0, purchases: 0, revenue: 0 },
+      {
+        spend: 0,
+        reach: 0,
+        impressions: 0,
+        clicks: 0,
+        clicks_all: 0,
+        purchases: 0,
+        revenue: 0,
+      },
     );
 
     const roas = totals.spend > 0 ? totals.revenue / totals.spend : 0;
     const ctr =
-      totals.impressions > 0
-        ? (totals.clicks / totals.impressions) * 100
-        : 0;
-    const cpc = totals.clicks > 0 ? totals.spend / totals.clicks : 0;
+      totals.impressions > 0 ? (totals.clicks / totals.impressions) * 100 : 0;
+    const cpc = totals.clicks_all > 0 ? totals.spend / totals.clicks_all : 0;
     const costPerPurchase =
       totals.purchases > 0 ? totals.spend / totals.purchases : 0;
 

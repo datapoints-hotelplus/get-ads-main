@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
-import { fetchAccountReach, fetchCampaignReach, fetchAgeGenderBreakdown, fetchDeviceBreakdown } from "@/lib/facebook";
+import {
+  fetchAccountReach,
+  fetchAgeGenderBreakdown,
+  fetchDeviceBreakdown,
+} from "@/lib/facebook";
 
 // GET /api/dashboard?type=options
 // GET /api/dashboard?type=data&dateFrom=&dateTo=&account=&campaign=&adset=
@@ -178,7 +182,7 @@ export async function GET(request: NextRequest) {
       let q = supabase
         .from("ads_rawdata")
         .select(
-          "date_start,spend,impressions,inline_link_clicks,unique_inline_link_clicks,cpc,messaging_conversations_started,post_engagement,reach,leads",
+          "date_start,spend,impressions,inline_link_clicks,unique_inline_link_clicks,clicks_all,messaging_conversations_started,post_engagement,reach,leads",
         )
         .order("date_start", { ascending: true });
       if (dateFrom) q = q.gte("date_start", dateFrom);
@@ -199,20 +203,21 @@ export async function GET(request: NextRequest) {
           impressions: number;
           inline_link_clicks: number;
           unique_inline_link_clicks: number;
-          cpc_sum: number;
+          clicks_all: number;
           messaging: number;
           post_engagement: number;
           reach: number;
           leads: number;
         }
       >();
+      let totalImpressions = 0;
       for (const r of (tsData ?? []) as {
         date_start: string;
         spend: number;
         impressions: number;
         inline_link_clicks: number;
         unique_inline_link_clicks: number;
-        cpc: number;
+        clicks_all: number;
         messaging_conversations_started: number;
         post_engagement: number;
         reach: number;
@@ -225,7 +230,7 @@ export async function GET(request: NextRequest) {
             impressions: 0,
             inline_link_clicks: 0,
             unique_inline_link_clicks: 0,
-            cpc_sum: 0,
+            clicks_all: 0,
             messaging: 0,
             post_engagement: 0,
             reach: 0,
@@ -236,39 +241,83 @@ export async function GET(request: NextRequest) {
         agg.impressions += r.impressions ?? 0;
         agg.inline_link_clicks += r.inline_link_clicks ?? 0;
         agg.unique_inline_link_clicks += r.unique_inline_link_clicks ?? 0;
-        agg.cpc_sum += r.cpc ?? 0;
+        agg.clicks_all += r.clicks_all ?? 0;
         agg.messaging += r.messaging_conversations_started ?? 0;
         agg.post_engagement += r.post_engagement ?? 0;
         agg.reach += r.reach ?? 0;
         agg.leads += r.leads ?? 0;
+        totalImpressions += r.impressions ?? 0;
+      }
+
+      // Fetch total reach from API and allocate proportionally to each day
+      let totalReachFromAPI = 0;
+      try {
+        let pageQuery = supabase
+          .from("ads_allpage")
+          .select("account_id, account_name");
+        if (account) {
+          pageQuery = pageQuery.eq("account_name", account);
+        } else if (allowedNames !== null) {
+          pageQuery = pageQuery.in("account_name", allowedNames);
+        }
+        const { data: pageData } = await pageQuery;
+        const accountIds = (pageData ?? []).map((r) => r.account_id as string);
+
+        const accessToken = process.env.FB_ACCESS_TOKEN ?? "";
+        if (accessToken && accountIds.length > 0 && dateFrom && dateTo) {
+          totalReachFromAPI = await fetchAccountReach(
+            accountIds,
+            accessToken,
+            dateFrom,
+            dateTo,
+          );
+        }
+      } catch (err) {
+        console.error("fetchAccountReach in timeseries failed:", err);
+        // Continue with reach from database if API fails
       }
 
       const series = [...dayMap.entries()]
         .sort(([a], [b]) => a.localeCompare(b))
-        .map(([date, v]) => ({
-          date,
-          spend: parseFloat(v.spend.toFixed(2)),
-          impressions: v.impressions,
-          cpm:
-            v.impressions > 0
-              ? parseFloat(((v.spend / v.impressions) * 1000).toFixed(2))
-              : 0,
-          inline_link_clicks: v.inline_link_clicks,
-          unique_inline_link_clicks: v.unique_inline_link_clicks,
-          cpc: parseFloat(v.cpc_sum.toFixed(2)),
-          messaging: v.messaging,
-          cost_per_message:
-            v.messaging > 0
-              ? parseFloat((v.spend / v.messaging).toFixed(2))
-              : 0,
-          post_engagement: v.post_engagement,
-          cost_per_engagement:
-            v.post_engagement > 0
-              ? parseFloat((v.spend / v.post_engagement).toFixed(2))
-              : 0,
-          reach: v.reach,
-          leads: v.leads,
-        }));
+        .map(([date, v]) => {
+          // Allocate total reach from API proportionally based on daily impressions
+          const reachShare =
+            totalImpressions > 0
+              ? parseFloat(
+                  (
+                    (v.impressions / totalImpressions) *
+                    totalReachFromAPI
+                  ).toFixed(0),
+                )
+              : 0;
+          return {
+            date,
+            spend: parseFloat(v.spend.toFixed(2)),
+            impressions: v.impressions,
+            cpm:
+              v.impressions > 0
+                ? parseFloat(((v.spend / v.impressions) * 1000).toFixed(2))
+                : 0,
+            inline_link_clicks: v.inline_link_clicks,
+            unique_inline_link_clicks: v.unique_inline_link_clicks,
+            cpc:
+              v.inline_link_clicks > 0
+                ? parseFloat((v.spend / v.inline_link_clicks).toFixed(2))
+                : 0,
+            messaging: v.messaging,
+            cost_per_message:
+              v.messaging > 0
+                ? parseFloat((v.spend / v.messaging).toFixed(2))
+                : 0,
+            post_engagement: v.post_engagement,
+            cost_per_engagement:
+              v.post_engagement > 0
+                ? parseFloat((v.spend / v.post_engagement).toFixed(2))
+                : 0,
+            reach: reachShare,
+            leads: v.leads,
+          };
+        });
 
       return NextResponse.json({ series });
     }
@@ -285,9 +334,12 @@ export async function GET(request: NextRequest) {
       }
 
       // Resolve account IDs
-      let pageQuery = supabase.from("ads_allpage").select("account_id, account_name");
+      let pageQuery = supabase
+        .from("ads_allpage")
+        .select("account_id, account_name");
       if (account) pageQuery = pageQuery.eq("account_name", account);
-      else if (allowedNames !== null) pageQuery = pageQuery.in("account_name", allowedNames);
+      else if (allowedNames !== null)
+        pageQuery = pageQuery.in("account_name", allowedNames);
 
       const { data: pageData } = await pageQuery;
       const accountIds = (pageData ?? []).map((r) => r.account_id as string);
@@ -305,13 +357,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ageGender, devices });
     }
 
-    // ── type === "geo" — region breakdown for GeoChart ──────────────────────
+    // ── type === "geo" — region breakdown for GeoChart (reach from API, rest from DB) ──
     if (type === "geo") {
       const dateFrom = searchParams.get("dateFrom") ?? "";
       const dateTo = searchParams.get("dateTo") ?? "";
       const account = searchParams.get("account") ?? "";
       const campaign = searchParams.get("campaign") ?? "";
       const adset = searchParams.get("adset") ?? "";
+
+      // If no dates provided, return empty regions
+      if (!dateFrom || !dateTo) {
+        return NextResponse.json({ regions: [] });
+      }
 
       const allowedNames = await getAllowedAccountNames();
       if (allowedNames !== null && allowedNames.length === 0) {
@@ -330,11 +387,11 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ regions: [] });
       }
 
-      // Query ads_geo grouped by region
+      // Query ads_geo grouped by region from database
       let geoQuery = supabase
         .from("ads_geo")
         .select(
-          "region,inline_link_clicks,spend,impressions,reach,purchases,purchase_value",
+          "region,inline_link_clicks,spend,impressions,purchases,purchase_value",
         );
       if (dateFrom) geoQuery = geoQuery.gte("date_start", dateFrom);
       if (dateTo) geoQuery = geoQuery.lte("date_start", dateTo);
@@ -343,7 +400,7 @@ export async function GET(request: NextRequest) {
       const { data: geoData, error: geoErr } = await geoQuery.limit(50000);
       if (geoErr) throw geoErr;
 
-      // Aggregate by region in JS
+      // Aggregate by region from database
       const regionMap = new Map<
         string,
         {
@@ -362,7 +419,6 @@ export async function GET(request: NextRequest) {
         inline_link_clicks: number;
         spend: number;
         impressions: number;
-        reach: number;
         purchases: number;
         purchase_value: number;
       }[]) {
@@ -382,14 +438,58 @@ export async function GET(request: NextRequest) {
         agg.inline_link_clicks += r.inline_link_clicks ?? 0;
         agg.spend += r.spend ?? 0;
         agg.impressions += r.impressions ?? 0;
-        agg.reach += r.reach ?? 0;
         agg.purchases += r.purchases ?? 0;
         agg.purchase_value += r.purchase_value ?? 0;
       }
 
-      const regions = [...regionMap.values()].sort(
-        (a, b) => b.inline_link_clicks - a.inline_link_clicks,
-      );
+      // Get total reach from API (for account-level, not per-region)
+      let totalReachForAllocation = 0;
+      try {
+        let pageQuery = supabase
+          .from("ads_allpage")
+          .select("account_id, account_name");
+        if (account) {
+          pageQuery = pageQuery.eq("account_name", account);
+        } else if (allowedNames !== null) {
+          pageQuery = pageQuery.in("account_name", allowedNames);
+        }
+        const { data: pageData } = await pageQuery;
+        const accountIds = (pageData ?? []).map((r) => r.account_id as string);
+
+        const accessToken = process.env.FB_ACCESS_TOKEN ?? "";
+        if (accessToken && accountIds.length > 0) {
+          totalReachForAllocation = await fetchAccountReach(
+            accountIds,
+            accessToken,
+            dateFrom,
+            dateTo,
+          );
+        }
+      } catch (err) {
+        console.error("fetchAccountReach in geo failed:", err);
+        // Continue with database reach if API fails
+      }
+
+      // Allocate total reach proportionally to each region based on impressions
+      let totalRegionImpressions = 0;
+      for (const [_, data] of regionMap.entries()) {
+        totalRegionImpressions += data.impressions ?? 0;
+      }
+
+      for (const [region, data] of regionMap.entries()) {
+        // If we got reach from API, allocate proportionally; otherwise use database reach
+        if (totalReachForAllocation > 0 && totalRegionImpressions > 0) {
+          data.reach = parseFloat(
+            (
+              (data.impressions / totalRegionImpressions) *
+              totalReachForAllocation
+            ).toFixed(0),
+          );
+        }
+        // else keep reach as 0 (from database, which also defaults to 0)
+      }
+
+      const regions = [...regionMap.values()].sort((a, b) => b.spend - a.spend);
 
       return NextResponse.json({ regions });
     }
@@ -544,7 +644,7 @@ export async function GET(request: NextRequest) {
       );
       const roas = t.spend > 0 ? t.revenue / t.spend : 0;
       const ctr = t.impressions > 0 ? (t.clicks_all / t.impressions) * 100 : 0;
-      const cpc = t.clicks > 0 ? t.spend / t.clicks : 0;
+      const cpc = t.inline_link_clicks > 0 ? t.spend / t.inline_link_clicks : 0;
       const cpm = t.impressions > 0 ? (t.spend / t.impressions) * 1000 : 0;
       const frequency = t.reach > 0 ? t.impressions / t.reach : 0;
       const cost_per_purchase = t.purchases > 0 ? t.spend / t.purchases : 0;
@@ -583,21 +683,17 @@ export async function GET(request: NextRequest) {
     const accountIds = filteredPages.map((p) => p.account_id);
 
     const accessToken = process.env.FB_ACCESS_TOKEN ?? "";
-    let campaignReachMap = new Map<
-      string,
-      { campaign_id: string; account_id: string; reach: number }
-    >();
     if (accessToken && accountIds.length > 0 && dateFrom && dateTo) {
-      const [reachCurrent, reachPrev, campaignReach] = await Promise.all([
+      const [reachCurrent, reachPrev] = await Promise.all([
         fetchAccountReach(accountIds, accessToken, dateFrom, dateTo),
         prevFrom
           ? fetchAccountReach(accountIds, accessToken, prevFrom, prevTo)
           : Promise.resolve(0),
-        fetchCampaignReach(accountIds, accessToken, dateFrom, dateTo),
       ]);
+      // Use API reach for totals only (account-level unique reach)
+      // Campaign breakdown will use database reach to avoid overlap issues
       totals.reach = reachCurrent;
       prevTotals.reach = reachPrev;
-      campaignReachMap = campaignReach;
       // Recompute frequency with updated reach
       totals.frequency =
         reachCurrent > 0
@@ -735,20 +831,30 @@ export async function GET(request: NextRequest) {
     }
 
     const groupRows: GroupRow[] = [...grouped.values()].map((g) => {
-      // Use accurate campaign-level reach from FB API if available
-      const fbReach = campaignReachMap.get(g.campaign_name);
-      const reach = fbReach !== undefined ? fbReach.reach : g.reach;
+      // Allocate total reach to campaigns proportionally based on their impressions
+      // This ensures campaign reach sums up to match the top card reach
+      const reachShare =
+        totals.impressions > 0
+          ? parseFloat(
+              ((g.impressions / totals.impressions) * totals.reach).toFixed(0),
+            )
+          : 0;
       const frequency =
-        reach > 0 ? parseFloat((g.impressions / reach).toFixed(2)) : 0;
+        reachShare > 0
+          ? parseFloat((g.impressions / reachShare).toFixed(2))
+          : 0;
       return {
         ...g,
-        reach,
+        reach: reachShare,
         roas: g.spend > 0 ? parseFloat((g.revenue / g.spend).toFixed(2)) : 0,
         ctr:
           g.impressions > 0
             ? parseFloat(((g.clicks_all / g.impressions) * 100).toFixed(2))
             : 0,
-        cpc: g.clicks > 0 ? parseFloat((g.spend / g.clicks).toFixed(2)) : 0,
+        cpc:
+          g.inline_link_clicks > 0
+            ? parseFloat((g.spend / g.inline_link_clicks).toFixed(2))
+            : 0,
         cost_per_purchase:
           g.purchases > 0 ? parseFloat((g.spend / g.purchases).toFixed(2)) : 0,
         frequency,

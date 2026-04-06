@@ -263,10 +263,14 @@ export async function fetchAgeGenderBreakdown(
       `&breakdowns=age,gender&time_range=${timeRange}&level=account&access_token=${accessToken}&limit=500`;
 
     while (url) {
-      const res: { data: { data?: any[]; paging?: { next?: string } } } = await axios.get(url);
+      const res: { data: { data?: any[]; paging?: { next?: string } } } =
+        await axios.get(url);
       for (const item of res.data.data ?? []) {
         const key = `${item.age}|||${item.gender}`;
-        map.set(key, (map.get(key) ?? 0) + parseInt(String(item.impressions ?? "0"), 10));
+        map.set(
+          key,
+          (map.get(key) ?? 0) + parseInt(String(item.impressions ?? "0"), 10),
+        );
       }
       url = res.data.paging?.next ?? null;
     }
@@ -297,10 +301,15 @@ export async function fetchDeviceBreakdown(
       `&breakdowns=impression_device&time_range=${timeRange}&level=account&access_token=${accessToken}&limit=500`;
 
     while (url) {
-      const res: { data: { data?: any[]; paging?: { next?: string } } } = await axios.get(url);
+      const res: { data: { data?: any[]; paging?: { next?: string } } } =
+        await axios.get(url);
       for (const item of res.data.data ?? []) {
         const device = item.impression_device ?? "unknown";
-        map.set(device, (map.get(device) ?? 0) + parseInt(String(item.impressions ?? "0"), 10));
+        map.set(
+          device,
+          (map.get(device) ?? 0) +
+            parseInt(String(item.impressions ?? "0"), 10),
+        );
       }
       url = res.data.paging?.next ?? null;
     }
@@ -309,4 +318,93 @@ export async function fetchDeviceBreakdown(
   return [...map.entries()]
     .map(([device, impressions]) => ({ device, impressions }))
     .sort((a, b) => b.impressions - a.impressions);
+}
+
+/**
+ * Fetch region breakdown with reach data from Facebook Insights API.
+ * Returns array of { region, spend, impressions, reach, inline_link_clicks, purchases, purchase_value }.
+ */
+export async function fetchRegionData(
+  accountIds: string[],
+  accessToken: string,
+  since: string,
+  until: string,
+): Promise<
+  {
+    region: string;
+    spend: number;
+    impressions: number;
+    reach: number;
+    inline_link_clicks: number;
+    purchases: number;
+    purchase_value: number;
+  }[]
+> {
+  const map = new Map<
+    string,
+    {
+      spend: number;
+      impressions: number;
+      reach: number;
+      inline_link_clicks: number;
+      purchases: number;
+      purchase_value: number;
+    }
+  >();
+  const timeRange = encodeURIComponent(JSON.stringify({ since, until }));
+
+  for (const accountId of accountIds) {
+    let url: string | null =
+      `${FB_GRAPH_API_V25}/${accountId}/insights?fields=spend,impressions,reach,inline_link_clicks,actions,action_values` +
+      `&breakdowns=region&time_range=${timeRange}&level=account&access_token=${accessToken}&limit=500`;
+
+    while (url) {
+      const res: { data: { data?: any[]; paging?: { next?: string } } } =
+        await axios.get(url);
+      for (const item of res.data.data ?? []) {
+        const region = item.region ?? "Unknown";
+        const purchases = (() => {
+          if (!Array.isArray(item.actions)) return 0;
+          const action = item.actions.find(
+            (a: any) => a.action_type === "purchase",
+          );
+          return action ? parseInt(String(action.value ?? "0"), 10) : 0;
+        })();
+        const purchase_value = (() => {
+          if (!Array.isArray(item.action_values)) return 0;
+          const action = item.action_values.find(
+            (a: any) => a.action_type === "purchase",
+          );
+          return action ? parseFloat(String(action.value ?? "0")) : 0;
+        })();
+
+        const existing = map.get(region) ?? {
+          spend: 0,
+          impressions: 0,
+          reach: 0,
+          inline_link_clicks: 0,
+          purchases: 0,
+          purchase_value: 0,
+        };
+        map.set(region, {
+          spend: existing.spend + parseFloat(String(item.spend ?? "0")),
+          impressions:
+            existing.impressions +
+            parseInt(String(item.impressions ?? "0"), 10),
+          reach: existing.reach + parseInt(String(item.reach ?? "0"), 10),
+          inline_link_clicks:
+            existing.inline_link_clicks +
+            parseInt(String(item.inline_link_clicks ?? "0"), 10),
+          purchases: existing.purchases + purchases,
+          purchase_value: existing.purchase_value + purchase_value,
+        });
+      }
+      url = res.data.paging?.next ?? null;
+    }
+  }
+
+  return [...map.entries()].map(([region, data]) => ({
+    region,
+    ...data,
+  }));
 }
