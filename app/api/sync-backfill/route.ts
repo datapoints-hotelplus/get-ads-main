@@ -100,7 +100,7 @@ function toRawdata(item: FBItem) {
   const purchases = findAction(item.actions, "purchase");
   const purchase_value = findAction(item.action_values, "purchase");
   const clicks = parseInt(String(item.inline_link_clicks ?? "0"), 10);
-  const clicks_all = parseInt(String(item.clicks ?? "0"), 10);
+  const clicks_all = clicks;
   const impressions = parseInt(String(item.impressions ?? "0"), 10);
   const video_p25 = findVideoAction(
     item.video_p25_watched_actions,
@@ -214,7 +214,7 @@ function toGeo(item: FBItem) {
     reach: parseInt(String(item.reach ?? "0"), 10),
     impressions: parseInt(String(item.impressions ?? "0"), 10),
     inline_link_clicks: parseInt(String(item.inline_link_clicks ?? "0"), 10),
-    clicks_all: parseInt(String(item.clicks ?? "0"), 10),
+    clicks_all: parseInt(String(item.inline_link_clicks ?? "0"), 10),
     purchases,
     purchase_value: findAction(item.action_values, "purchase"),
   };
@@ -234,7 +234,7 @@ function toDemographic(item: FBItem) {
     reach: parseInt(String(item.reach ?? "0"), 10),
     impressions: parseInt(String(item.impressions ?? "0"), 10),
     inline_link_clicks: parseInt(String(item.inline_link_clicks ?? "0"), 10),
-    clicks_all: parseInt(String(item.clicks ?? "0"), 10),
+    clicks_all: parseInt(String(item.inline_link_clicks ?? "0"), 10),
     purchases,
     purchase_value: findAction(item.action_values, "purchase"),
   };
@@ -253,7 +253,7 @@ function toDevice(item: FBItem) {
     reach: parseInt(String(item.reach ?? "0"), 10),
     impressions: parseInt(String(item.impressions ?? "0"), 10),
     inline_link_clicks: parseInt(String(item.inline_link_clicks ?? "0"), 10),
-    clicks_all: parseInt(String(item.clicks ?? "0"), 10),
+    clicks_all: parseInt(String(item.inline_link_clicks ?? "0"), 10),
     purchases,
     purchase_value: findAction(item.action_values, "purchase"),
   };

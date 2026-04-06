@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
     const ads = (response.data.data as any[]).map((item) => {
       const spend = parseFloat(item.spend ?? "0");
       const clicks = parseInt(item.inline_link_clicks ?? "0", 10);
-      const clicks_all = parseInt(item.clicks ?? "0", 10);
+      const clicks_all = parseInt(item.inline_link_clicks ?? "0", 10);
       const impressions = parseInt(item.impressions ?? "0", 10);
 
       const purchaseAction = (item.actions as any[] | undefined)?.find(

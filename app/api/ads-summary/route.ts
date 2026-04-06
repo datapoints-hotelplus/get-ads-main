@@ -98,7 +98,7 @@ export async function GET(request: NextRequest) {
       (acc, item) => {
         const spend = parseFloat(item.spend ?? "0");
         const clicks = parseInt(item.inline_link_clicks ?? "0", 10);
-        const clicks_all = parseInt(item.clicks ?? "0", 10);
+        const clicks_all = clicks;
         const impressions = parseInt(item.impressions ?? "0", 10);
         const purchases = extractPurchase(item.actions);
         const revenue = extractPurchase(item.action_values);

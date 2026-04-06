@@ -94,7 +94,7 @@ function toRawdata(item: FBItem) {
   const purchases = findAction(item.actions, "purchase");
   const purchase_value = findAction(item.action_values, "purchase");
   const clicks = parseInt(String(item.inline_link_clicks ?? "0"), 10);
-  const clicks_all = parseInt(String(item.clicks ?? "0"), 10);
+  const clicks_all = clicks;
   const impressions = parseInt(String(item.impressions ?? "0"), 10);
   const video_p25 = findVideoAction(
     item.video_p25_watched_actions,
@@ -189,6 +189,7 @@ function toRawdata(item: FBItem) {
 }
 
 function toGeo(item: FBItem) {
+  const clicks = parseInt(String(item.inline_link_clicks ?? "0"), 10);
   return {
     date_start: String(item.date_start ?? ""),
     date_stop: String(item.date_stop ?? ""),
@@ -198,14 +199,15 @@ function toGeo(item: FBItem) {
     spend: num(item.spend),
     reach: parseInt(String(item.reach ?? "0"), 10),
     impressions: parseInt(String(item.impressions ?? "0"), 10),
-    inline_link_clicks: parseInt(String(item.inline_link_clicks ?? "0"), 10),
-    clicks_all: parseInt(String(item.clicks ?? "0"), 10),
+    inline_link_clicks: clicks,
+    clicks_all: clicks,
     purchases: findAction(item.actions, "purchase"),
     purchase_value: findAction(item.action_values, "purchase"),
   };
 }
 
 function toDemographic(item: FBItem) {
+  const clicks = parseInt(String(item.inline_link_clicks ?? "0"), 10);
   return {
     date_start: String(item.date_start ?? ""),
     date_stop: String(item.date_stop ?? ""),
@@ -216,25 +218,26 @@ function toDemographic(item: FBItem) {
     spend: num(item.spend),
     reach: parseInt(String(item.reach ?? "0"), 10),
     impressions: parseInt(String(item.impressions ?? "0"), 10),
-    inline_link_clicks: parseInt(String(item.inline_link_clicks ?? "0"), 10),
-    clicks_all: parseInt(String(item.clicks ?? "0"), 10),
+    inline_link_clicks: clicks,
+    clicks_all: clicks,
     purchases: findAction(item.actions, "purchase"),
     purchase_value: findAction(item.action_values, "purchase"),
   };
 }
 
 function toDevice(item: FBItem) {
+  const clicks = parseInt(String(item.inline_link_clicks ?? "0"), 10);
   return {
     date_start: String(item.date_start ?? ""),
     date_stop: String(item.date_stop ?? ""),
     ad_id: String(item.ad_id ?? ""),
     ad_name: String(item.ad_name ?? ""),
-    impression_device: String(item.impression_device ?? ""),
+    device: String(item.device_platform ?? ""),
     spend: num(item.spend),
     reach: parseInt(String(item.reach ?? "0"), 10),
     impressions: parseInt(String(item.impressions ?? "0"), 10),
-    inline_link_clicks: parseInt(String(item.inline_link_clicks ?? "0"), 10),
-    clicks_all: parseInt(String(item.clicks ?? "0"), 10),
+    inline_link_clicks: clicks,
+    clicks_all: clicks,
     purchases: findAction(item.actions, "purchase"),
     purchase_value: findAction(item.action_values, "purchase"),
   };

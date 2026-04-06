@@ -644,7 +644,7 @@ export async function GET(request: NextRequest) {
       );
       const roas = t.spend > 0 ? t.revenue / t.spend : 0;
       const ctr = t.impressions > 0 ? (t.clicks_all / t.impressions) * 100 : 0;
-      const cpc = t.inline_link_clicks > 0 ? t.spend / t.inline_link_clicks : 0;
+      const cpc = t.clicks > 0 ? t.spend / t.clicks : 0;
       const cpm = t.impressions > 0 ? (t.spend / t.impressions) * 1000 : 0;
       const frequency = t.reach > 0 ? t.impressions / t.reach : 0;
       const cost_per_purchase = t.purchases > 0 ? t.spend / t.purchases : 0;
@@ -851,10 +851,7 @@ export async function GET(request: NextRequest) {
           g.impressions > 0
             ? parseFloat(((g.clicks_all / g.impressions) * 100).toFixed(2))
             : 0,
-        cpc:
-          g.inline_link_clicks > 0
-            ? parseFloat((g.spend / g.inline_link_clicks).toFixed(2))
-            : 0,
+        cpc: g.clicks > 0 ? parseFloat((g.spend / g.clicks).toFixed(2)) : 0,
         cost_per_purchase:
           g.purchases > 0 ? parseFloat((g.spend / g.purchases).toFixed(2)) : 0,
         frequency,
