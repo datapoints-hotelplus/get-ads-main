@@ -1277,7 +1277,7 @@ export default function DashboardPage() {
             <div className="mt-8">
               <ChartHeader
                 title="ต้นทุนต่อการมองเห็น (CPM) เทียบกับ จำนวนการแสดงผล"
-                tip={`ใช้ดูว่าการยิงโฆษณา "คุ้มไหม"\n\n🔵 แท่งน้ำเงิน = คนเห็น (Impressions)\n🔴 เส้นแดง = ต้นทุนต่อ 1,000 คน (CPM)\n\n✅ CPM ลด + Impressions เพิ่ม = ดี\n❌ CPM สูง + Impressions ไม่ขึ้น = เริ่มแพง\n\n⚠️ ควรเลือก Reach campaign เพื่อผลลัพธ์ที่ดีที่สุด`}
+                tip={`ใช้ดูว่าการยิงโฆษณา "คุ้มไหม"\n\n🔵 แท่งน้ำเงิน = คนเห็น (Impressions)\n🔴 เส้นสีแดง = ต้นทุนต่อ 1,000 คน (CPM)\n\n✅ ถ้า CPM ลด แต่ Impressions เพิ่ม (แท่งสีน้ำเงินสูงกว่าเส้นสีแดง) = ดี\n❌ ถ้า CPM สูง แต่ Impressions ไม่ขึ้น (เส้นสีแดงสูงกว่าแท่งสีน้ำเงิน) = เริ่มแพง\n\n⚠️ ควรเลือก Reach campaign ในการแสดงผลของกราฟนี้ เพื่อผลลัพธ์ที่ดีที่สุด`}
               />
               <div
                 className="bg-white border border-gray-200 rounded-lg p-4"
@@ -1363,7 +1363,7 @@ export default function DashboardPage() {
               <div className="mt-8">
                 <ChartHeader
                   title="จำนวนคลิก เทียบกับ ต้นทุนต่อคลิก"
-                  tip={`ใช้ดูว่าคน "สนใจคลิกไหม"\n\n🔵 แท่งน้ำเงิน = จำนวนคลิก\n🔴 เส้นแดง = ราคาต่อคลิก (CPC)\n\n✅ คลิกเยอะ + CPC ถูก = ดี\n❌ คลิกน้อย + CPC แพง = ครีเอทีฟ/กลุ่มเป้าหมายมีปัญหา\n\n⚠️ ควรเลือก Message หรือ Page like campaign เพื่อผลลัพธ์ที่ดีที่สุด`}
+                  tip={`ใช้ดูว่าคน "สนใจคลิกไหม"\n\n🔵 แท่งน้ำเงิน = จำนวนคลิก\n🔴 เส้นสีแดง = ราคาต่อคลิก (CPC)\n\n✅ คลิกเยอะ + CPC ถูก (แท่งทั้ง 2 สูงกว่าเส้นสีแดง) = ดี\n❌ คลิกน้อย + CPC แพง (เส้นสีแดงสูงกว่าแท่งทั้ง 2) = ครีเอทีฟ/กลุ่มเป้าหมายมีปัญหา\n\n⚠️ ควรเลือก Message หรือ Page like campaign ในการแสดงผลของกราฟนี้ เพื่อผลลัพธ์ที่ดีที่สุด`}
                 />
                 <div
                   className="bg-white border border-gray-200 rounded-lg p-4"
@@ -1466,7 +1466,7 @@ export default function DashboardPage() {
             <div className="mt-8">
               <ChartHeader
                 title="จำนวนแชทลูกค้า เทียบกับ ต้นทุนต่อแชท"
-                tip={`ใช้ดูว่าโฆษณาสร้าง "ลูกค้าทัก" จริงไหม\n\n🔵 แท่งน้ำเงิน = จำนวนคนทัก (Messaging)\n🔴 เส้นแดง = ราคาต่อ 1 แชท\n\n✅ ทักเยอะ + cost ต่ำ = ดีมาก\n❌ ทักน้อย + cost สูง = ยิงผิดกลุ่ม/ครีเอทีฟไม่โดน\n\n⚠️ ควรเลือก Message campaign เพื่อผลลัพธ์ที่ดีที่สุด`}
+                tip={`ใช้ดูว่าโฆษณาสร้าง "ลูกค้าทัก" จริงไหม\n\n🔵 แท่งน้ำเงิน = จำนวนคนทัก (Messaging)\n🔴 เส้นสีแดง = ราคาต่อ 1 แชท\n\n✅ ทักเยอะ + cost ต่ำ (แท่งสีน้ำเงินสูงกว่าเส้นสีแดง) = ดีมาก\n❌ ทักน้อย + cost สูง = ยิงผิดกลุ่ม/ครีเอทีฟไม่โดน\n\n⚠️ ควรเลือก Message campaign ในการแสดงผลของกราฟนี้ เพื่อผลลัพธ์ที่ดีที่สุด`}
               />
               <div
                 className="bg-white border border-gray-200 rounded-lg p-4"
@@ -1548,7 +1548,7 @@ export default function DashboardPage() {
             <div className="mt-8">
               <ChartHeader
                 title="การมีส่วนร่วม เทียบกับ ต้นทุนต่อการมีส่วนร่วม"
-                tip={`ใช้ดูว่าคอนเทนต์ "น่าสนใจไหม"\n\n🔵 แท่งน้ำเงิน = จำนวน engagement\n🔴 เส้นแดง = ราคาต่อ engagement\n\n✅ engagement สูง + cost ต่ำ = คอนเทนต์ดี\n❌ engagement ต่ำ + cost สูง = ต้องปรับคอนเทนต์\n\n⚠️ ควรเลือก Engagement campaign เพื่อผลลัพธ์ที่ดีที่สุด`}
+                tip={`ใช้ดูว่าคอนเทนต์ "น่าสนใจไหม"\n\n🔵 แท่งน้ำเงิน = จำนวน engagement\n🔴 เส้นสีแดง = ราคาต่อ engagement\n\n✅ engagement สูง + cost ต่ำ (แท่งสีน้ำเงินสูงกว่าเส้นสีแดง) = คอนเทนต์ดี\n\n⚠️ ควรเลือก Engagement campaign ในการแสดงผลของกราฟนี้ เพื่อผลลัพธ์ที่ดีที่สุด`}
               />
               <div
                 className="bg-white border border-gray-200 rounded-lg p-4"
@@ -1625,7 +1625,7 @@ export default function DashboardPage() {
             <div className="mt-8">
               <ChartHeader
                 title="ภาพรวมแคมเปญ"
-                tip={`ใช้ดูภาพรวมทั้งหมดในช่วงเวลาเดียวกัน\n\n📊 Spend = ใช้เงินเท่าไหร่\n👁️ Impressions = จำนวนการแสดงผล\n👤 Reach (รายวัน) = คนเห็นต่อวัน\n💬 Messaging = คนทัก\n📋 Leads = ลูกค้า\n\nดูว่าเงินที่ใช้ → ได้ผลลัพธ์ไหม\n\nหมายเหตุ: Reach ในกราฟเป็นค่ารายวัน อาจนับซ้ำข้ามวัน\nReach ใน scorecard ด้านบนเป็นค่า deduplicated จาก Facebook\n\n⚠️ สามารถเลือกรวมทุก campaign เพื่อดูภาพรวม`}
+                tip={`ใช้ดูภาพรวมทั้งหมดในช่วงเวลาเดียวกัน\n\n- Spend = ใช้เงินเท่าไหร่\n- Impressions / Reach = คนเห็น\n- Messaging = คนทัก\n- Leads = ลูกค้า\n\nดูว่าเงินที่ใช้ → ได้ผลลัพธ์ไหม\n\n⚠️ สามารถเลือก รวมทุก campaign ในการแสดงผลของกราฟนี้เพื่อดูภาพรวมแคมเปญ`}
               />
               <div
                 className="bg-white border border-gray-200 rounded-lg p-4"
