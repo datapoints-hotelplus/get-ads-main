@@ -826,23 +826,6 @@ export default function DashboardPage() {
     loadOptions("", "");
   }, [loadOptions]);
 
-  // Auto-fetch data only when dates are provided
-  useEffect(() => {
-    if (dateFrom && dateTo) {
-      fetchData();
-      fetchGeo();
-      fetchTimeSeries();
-      fetchDemographics();
-    }
-  }, [
-    dateFrom,
-    dateTo,
-    fetchData,
-    fetchGeo,
-    fetchTimeSeries,
-    fetchDemographics,
-  ]);
-
   // ── Handlers ────────────────────────────────────────────────────────────────
   const handleAccountChange = (val: string) => {
     setAccount(val);
@@ -1888,8 +1871,19 @@ export default function DashboardPage() {
         )}
 
         {!dataLoading && !totals && !error && (
-          <div className="text-center py-16 text-gray-400 text-sm">
-            กดปุ่ม &ldquo;ค้นหา&rdquo; เพื่อดูข้อมูล
+          <div className="text-center py-16 text-sm">
+            {!dateFrom || !dateTo ? (
+              <>
+                <p className="text-red-500 font-medium mb-2">กรุณากรอกวันที่</p>
+                <p className="text-gray-400">
+                  เลือกวันเริ่มต้นและวันสิ้นสุด แล้วกดปุ่ม &ldquo;ค้นหา&rdquo;
+                </p>
+              </>
+            ) : (
+              <p className="text-gray-400">
+                กดปุ่ม &ldquo;ค้นหา&rdquo; เพื่อดูข้อมูล
+              </p>
+            )}
           </div>
         )}
       </div>
