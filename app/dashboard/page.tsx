@@ -284,7 +284,7 @@ function MetricCard({
     <div
       className={`rounded-xl border px-4 py-4 flex flex-col gap-1 transition-all ${
         highlight
-          ? "bg-yellow-50 border-yellow-400 shadow-md ring-2 ring-yellow-200"
+          ? "bg-linear-to-t from-yellow-300 to-yellow-100 border-yellow-400 shadow-md ring-2 ring-yellow-200"
           : "bg-white border-gray-200 hover:shadow-md"
       }`}
     >
@@ -865,9 +865,9 @@ export default function DashboardPage() {
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-linear-to-t from-yellow-100 to-yellow-50 bg-linear-to-t from-yellow-100 to-yellow-50">
+    <div className="min-h-screen bg-linear-to-b from-yellow-100 to-yellow-200">
       {/* ── Top bar with auth ──────────────────────────────────────────── */}
-      <div className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-gray-200/60 shadow-sm">
+      <div className="sticky top-0 z-30 bg-linear-to-b from-yellow-200 to-gray-100 backdrop-blur-md border-b border-yellow-200/60 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-3">
           {/* Auth row */}
           <div className="flex items-center justify-between mb-3">

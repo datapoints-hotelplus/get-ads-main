@@ -2,7 +2,7 @@
 
 export default function NotFound() {
   return (
-    <div className="min-h-screen bg-linear-to-t from-yellow-100 to-yellow-50 flex items-center justify-center">
+    <div className="min-h-screen bg-linear-to-b from-yellow-100 to-yellow-200 flex items-center justify-center">
       <div className="text-center" data-aos="fade-up">
         <p className="text-8xl font-bold text-gray-200 mb-2">404</p>
         <h1 className="text-2xl font-bold text-gray-900 mb-2">ไม่พบหน้านี้</h1>
