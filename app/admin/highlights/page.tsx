@@ -99,16 +99,28 @@ export default function HighlightsPage() {
   );
 
   return (
-    <div className="min-h-screen bg-linear-to-b from-yellow-100 to-yellow-200">
-      <div className="bg-white/90 backdrop-blur-md border-b border-gray-200/60 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => router.push("/admin")}
-            className="text-sm text-gray-500 hover:text-gray-800"
-          >
-            ← Accounts
-          </button>
-          <h1 className="text-xl font-bold text-gray-900">Highlight Metrics</h1>
+    <div className=" min-h-screen bg-gray-100">
+      <div className="bg-primary px-6 py-4 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center">
+            <span className="text-primary font-bold text-sm">H+</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => router.push("/admin")}
+              className="text-sm text-secondary/60 hover:text-secondary"
+            >
+              ← Accounts
+            </button>
+            <div>
+              <span className="text-lg font-bold text-secondary tracking-tight block leading-tight">
+                HOTEL PLUS
+              </span>
+              <span className="text-xs text-secondary/70">
+                Highlight Metrics
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -154,7 +166,7 @@ export default function HighlightsPage() {
                       <button
                         onClick={() => save(campaign)}
                         disabled={saving !== null}
-                        className="text-xs text-black bg-primary hover:bg-primary-dark font-medium px-3 py-1 rounded-lg disabled:opacity-50"
+                        className="text-xs text-white bg-secondary hover:bg-secondary-light font-medium px-3 py-1 rounded-lg disabled:opacity-50"
                       >
                         {saving === campaign ? "กำลังบันทึก..." : "บันทึก"}
                       </button>

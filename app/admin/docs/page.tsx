@@ -245,17 +245,29 @@ export default function AdminDocsPage() {
   const current = sections.find((s) => s.id === active) ?? sections[0];
 
   return (
-    <div className="min-h-screen bg-linear-to-b from-yellow-100 to-yellow-200">
+    <div className=" min-h-screen bg-gray-100">
       {/* Header */}
-      <div className="bg-white/90 backdrop-blur-md border-b border-gray-200/60 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => router.push("/admin")}
-            className="text-sm text-gray-500 hover:text-gray-800"
-          >
-            ← Admin
-          </button>
-          <h1 className="text-xl font-bold text-gray-900">📖 วิธีใช้งานระบบ</h1>
+      <div className="bg-primary px-6 py-4 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center">
+            <span className="text-primary font-bold text-sm">H+</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => router.push("/admin")}
+              className="text-sm text-secondary/60 hover:text-secondary"
+            >
+              ← Admin
+            </button>
+            <div>
+              <span className="text-lg font-bold text-secondary tracking-tight block leading-tight">
+                HOTEL PLUS
+              </span>
+              <span className="text-xs text-secondary/70">
+                📖 วิธีใช้งานระบบ
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 

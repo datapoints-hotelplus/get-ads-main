@@ -234,25 +234,35 @@ export default function AdminUsersPage() {
   // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-linear-to-b from-yellow-100 to-yellow-200">
+    <div className=" min-h-screen bg-gray-100">
       {/* Header */}
-      <div className="bg-white/90 backdrop-blur-md border-b border-gray-200/60 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="bg-primary px-6 py-4 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center">
+            <span className="text-primary font-bold text-sm">H+</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <div>
+              <span className="text-lg font-bold text-secondary tracking-tight block leading-tight">
+                HOTEL PLUS
+              </span>
+              <span className="text-xs text-secondary/70">
+                {view === "permissions" && permUser
+                  ? `Permissions — ${permUser.display_name ?? permUser.username}`
+                  : view === "logs"
+                    ? "Access Logs"
+                    : "Admin — Manage Users"}
+              </span>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
           <button
             onClick={() => router.push("/admin")}
-            className="text-sm text-gray-500 hover:text-gray-800"
+            className="text-sm text-secondary/60 hover:text-secondary font-medium"
           >
             ← Accounts
           </button>
-          <h1 className="text-xl font-bold text-gray-900">
-            {view === "permissions" && permUser
-              ? `Permissions — ${permUser.display_name ?? permUser.username}`
-              : view === "logs"
-                ? "Access Logs"
-                : "Admin — Manage Users"}
-          </h1>
-        </div>
-        <div className="flex items-center gap-3">
           {view !== "users" && (
             <button
               onClick={() => {
@@ -274,7 +284,7 @@ export default function AdminUsersPage() {
           )}
           <button
             onClick={handleLogout}
-            className="text-sm text-red-600 hover:text-red-800 font-medium"
+            className="text-sm bg-secondary text-white font-medium px-3 py-1.5 rounded-lg hover:bg-secondary-light transition-colors"
           >
             Logout
           </button>
@@ -343,7 +353,7 @@ export default function AdminUsersPage() {
                 <button
                   type="submit"
                   disabled={creating}
-                  className="bg-primary hover:bg-primary-dark disabled:opacity-60 text-black font-semibold px-5 py-2 rounded-lg text-sm transition-colors"
+                  className="bg-secondary hover:bg-secondary-light disabled:opacity-60 text-white font-semibold px-5 py-2 rounded-lg text-sm transition-colors"
                 >
                   {creating ? "Creating…" : "Create User"}
                 </button>
@@ -467,7 +477,7 @@ export default function AdminUsersPage() {
                                 <button
                                   type="submit"
                                   disabled={resetLoading}
-                                  className="bg-primary hover:bg-primary-dark disabled:opacity-60 text-black text-xs font-medium px-2 py-1 rounded"
+                                  className="bg-secondary hover:bg-secondary-light disabled:opacity-60 text-white text-xs font-medium px-2 py-1 rounded"
                                 >
                                   {resetLoading ? "…" : "Set"}
                                 </button>

@@ -7,9 +7,9 @@
   --primary-light: #ffe54d;
 
   /* Secondary Colors (CI) */
-  --secondary: #022138;
-  --secondary-light: #213355;
-  --secondary-lighter: #244e61;
+  --secondary: #1a2b4a;
+  --secondary-light: #2d3f5a;
+  --secondary-lighter: #3a4d6b;
 
   /* Accent Colors */
   --accent: #ec1501;
@@ -18,7 +18,7 @@
   /* Neutral Colors */
   --background: #ffffff;
   --foreground: #171717;
-  --surface: #f8f9fa;
+  --surface: #f5f6f8;
   --border: #e5e7eb;
   --text-muted: #6b7280;
 }
@@ -29,9 +29,9 @@
   --color-primary: #fdd52c;
   --color-primary-dark: #f0c919;
   --color-primary-light: #ffe54d;
-  --color-secondary: #022138;
-  --color-secondary-light: #213355;
-  --color-secondary-lighter: #244e61;
+  --color-secondary: #1a2b4a;
+  --color-secondary-light: #2d3f5a;
+  --color-secondary-lighter: #3a4d6b;
   --color-accent: #ec1501;
   --color-accent-light: #ff4d40;
   --font-sans: var(--font-geist-sans);
@@ -85,10 +85,10 @@ a[role="button"] {
   transition: all 0.2s ease-in-out;
 }
 
-/* Primary Button (Yellow) - Minimal Style */
+/* Primary Button (Navy) - Minimal Style */
 .btn-primary {
-  background-color: var(--primary);
-  color: #000;
+  background-color: var(--secondary);
+  color: #fff;
   font-weight: 600;
   border: none;
   border-radius: 0.5rem;
@@ -98,8 +98,8 @@ a[role="button"] {
 }
 
 .btn-primary:hover {
-  background-color: var(--primary-dark);
-  box-shadow: 0 2px 8px rgba(253, 213, 44, 0.2);
+  background-color: var(--secondary-light);
+  box-shadow: 0 2px 8px rgba(26, 43, 74, 0.2);
 }
 
 .btn-primary:active {

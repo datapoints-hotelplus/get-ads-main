@@ -113,7 +113,7 @@ export default function SummaryPage() {
   };
 
   return (
-    <main className="min-h-screen bg-linear-to-b from-yellow-100 to-yellow-200 py-10 px-4">
+    <main className=" min-h-screen bg-gray-100 py-10 px-4">
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center gap-3 mb-6" data-aos="fade-down">
           <div className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center">
@@ -151,7 +151,7 @@ export default function SummaryPage() {
           <button
             onClick={handleFetch}
             disabled={loading}
-            className="bg-primary hover:bg-primary-dark disabled:bg-gray-400 text-black text-sm font-semibold px-6 py-2.5 rounded-xl transition shadow-sm hover:shadow-md"
+            className="bg-secondary hover:bg-secondary-light disabled:bg-gray-400 text-white text-sm font-semibold px-6 py-2.5 rounded-xl transition shadow-sm hover:shadow-md"
           >
             {loading ? "กำลังโหลด..." : "ดูสรุป"}
           </button>

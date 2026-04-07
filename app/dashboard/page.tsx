@@ -179,10 +179,10 @@ function DatePickerField({
   const inputRef = useRef<HTMLInputElement>(null);
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-xs font-medium text-gray-600">{label}</label>
+      <label className="text-xs font-medium text-secondary/70">{label}</label>
       <div
         onClick={() => inputRef.current?.showPicker()}
-        className="relative border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white focus-within:ring-2 focus-within:ring-yellow-400 w-40 cursor-pointer flex items-center justify-between"
+        className="relative border border-secondary/20 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white focus-within:ring-2 focus-within:ring-secondary/30 w-40 cursor-pointer flex items-center justify-between"
       >
         <span className={value ? "" : "text-gray-400"}>
           {value ? isoToDisplay(value) : "dd/mm/yyyy"}
@@ -280,9 +280,29 @@ function MetricCard({
   const green = invertColor ? !isPositive : isPositive;
   const tip = METRIC_TIPS[label];
 
+  // Determine border color based on metric label
+  const getBorderColor = () => {
+    const lowerLabel = label.toLowerCase();
+    if (
+      lowerLabel.includes("lead") ||
+      lowerLabel.includes("messages") ||
+      lowerLabel.includes("engagement")
+    ) {
+      return "border-l-4 border-l-red-500";
+    }
+    if (lowerLabel.includes("reach") || lowerLabel.includes("impression")) {
+      return "border-l-4 border-l-primary";
+    }
+    if (lowerLabel.includes("page likes") || lowerLabel.includes("like")) {
+      return "border-l-4 border-l-blue-500";
+    }
+    // Default gray for costs
+    return "border-l-4 border-l-gray-300";
+  };
+
   return (
     <div
-      className={`rounded-xl border px-4 py-4 flex flex-col gap-1 transition-all ${
+      className={`rounded-xl border px-4 py-4 flex flex-col gap-1 transition-all ${getBorderColor()} ${
         highlight
           ? "bg-linear-to-t from-yellow-300 to-yellow-100 border-yellow-400 shadow-md ring-2 ring-yellow-200"
           : "bg-white border-gray-200 hover:shadow-md"
@@ -865,31 +885,24 @@ export default function DashboardPage() {
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-linear-to-b from-yellow-100 to-yellow-200">
+    <div className="min-h-screen bg-gray-100">
       {/* ── Top bar with auth ──────────────────────────────────────────── */}
-      <div className="sticky top-0 z-30 bg-linear-to-b from-yellow-200 to-gray-100 backdrop-blur-md border-b border-yellow-200/60 shadow-sm">
+      <div className="sticky top-0 z-30 bg-primary shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-3">
           {/* Auth row */}
           <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <svg
-                  className="w-4 h-4 text-black"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-                  />
-                </svg>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center">
+                <span className="text-primary font-bold text-sm">H+</span>
               </div>
-              <span className="text-lg font-bold text-gray-900">
-                Ads Dashboard
-              </span>
+              <div>
+                <span className="text-lg font-bold text-secondary tracking-tight block leading-tight">
+                  HOTEL PLUS
+                </span>
+                <span className="text-xs text-secondary/70">
+                  Ads Performance Dashboard
+                </span>
+              </div>
             </div>
             <div className="flex items-center gap-3">
               {authLoading ? (
@@ -897,21 +910,21 @@ export default function DashboardPage() {
               ) : currentUser ? (
                 <>
                   <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 bg-yellow-100 rounded-full flex items-center justify-center">
-                      <span className="text-xs font-bold text-yellow-700">
+                    <div className="w-7 h-7 bg-secondary rounded-full flex items-center justify-center">
+                      <span className="text-xs font-bold text-primary">
                         {(currentUser.display_name || currentUser.username)
                           .charAt(0)
                           .toUpperCase()}
                       </span>
                     </div>
-                    <span className="text-sm text-gray-700 font-medium">
+                    <span className="text-sm text-secondary font-medium">
                       {currentUser.display_name || currentUser.username}
                     </span>
                   </div>
                   <button
                     type="button"
                     onClick={handleLogout}
-                    className="text-sm text-red-500 hover:text-red-600 font-medium px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors"
+                    className="text-sm bg-secondary text-white font-medium px-3 py-1.5 rounded-lg hover:bg-secondary-light transition-colors"
                   >
                     ออกจากระบบ
                   </button>
@@ -919,7 +932,7 @@ export default function DashboardPage() {
               ) : (
                 <a
                   href="/login"
-                  className="text-sm text-black font-medium px-4 py-1.5 bg-primary rounded-lg hover:bg-primary-dark transition-colors"
+                  className="text-sm font-medium px-4 py-1.5 bg-secondary text-white rounded-lg hover:bg-secondary-light transition-colors"
                 >
                   เข้าสู่ระบบ
                 </a>
@@ -944,14 +957,14 @@ export default function DashboardPage() {
               />
 
               <div className="flex flex-col gap-1 min-w-44 flex-1">
-                <label className="text-xs font-medium text-gray-600">
+                <label className="text-xs font-medium text-secondary/70">
                   Account
                 </label>
                 <select
                   value={account}
                   onChange={(e) => handleAccountChange(e.target.value)}
                   disabled={optLoading}
-                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-yellow-400 disabled:opacity-50"
+                  className="border border-secondary/20 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-secondary/30 disabled:opacity-50"
                 >
                   <option value="">-- ทั้งหมด --</option>
                   {options.accounts.map((a) => (
@@ -964,14 +977,14 @@ export default function DashboardPage() {
 
               {/* Campaign */}
               <div className="flex flex-col gap-1 min-w-44 flex-1">
-                <label className="text-xs font-medium text-gray-600">
+                <label className="text-xs font-medium text-secondary/70">
                   Campaign
                 </label>
                 <select
                   value={campaign}
                   onChange={(e) => handleCampaignChange(e.target.value)}
                   disabled={optLoading}
-                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-yellow-400 disabled:opacity-50 truncate"
+                  className="border border-secondary/20 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-secondary/30 disabled:opacity-50 truncate"
                 >
                   <option value="">-- ทั้งหมด --</option>
                   {options.campaigns.map((c) => (
@@ -984,14 +997,14 @@ export default function DashboardPage() {
 
               {/* Adset */}
               <div className="flex flex-col gap-1 min-w-44 flex-1">
-                <label className="text-xs font-medium text-gray-600">
+                <label className="text-xs font-medium text-secondary/70">
                   Ad Set
                 </label>
                 <select
                   value={adset}
                   onChange={(e) => setAdset(e.target.value)}
                   disabled={optLoading}
-                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-yellow-400 disabled:opacity-50 truncate"
+                  className="border border-secondary/20 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-secondary/30 disabled:opacity-50 truncate"
                 >
                   <option value="">-- ทั้งหมด --</option>
                   {options.adsets.map((s) => (
@@ -1007,7 +1020,7 @@ export default function DashboardPage() {
                 <button
                   type="submit"
                   disabled={dataLoading}
-                  className="bg-primary hover:bg-primary-dark disabled:bg-gray-400 text-black text-sm font-semibold px-6 py-2 rounded-lg transition-colors"
+                  className="bg-secondary hover:bg-secondary-light disabled:bg-gray-400 text-white text-sm font-semibold px-6 py-2 rounded-lg transition-colors"
                 >
                   {dataLoading ? "กำลังโหลด…" : "ค้นหา"}
                 </button>
@@ -1021,7 +1034,7 @@ export default function DashboardPage() {
                     setCampaign("");
                     setAdset("");
                   }}
-                  className="border border-gray-300 hover:bg-gray-100 text-gray-700 text-sm px-4 py-2 rounded-lg transition-colors"
+                  className="bg-secondary hover:bg-secondary-light text-white text-sm px-4 py-2 rounded-lg transition-colors"
                 >
                   รีเซ็ต
                 </button>

@@ -100,7 +100,7 @@ export default function SyncPage() {
   };
 
   return (
-    <main className="min-h-screen bg-linear-to-b from-yellow-100 to-yellow-200 py-12 px-4">
+    <main className=" min-h-screen bg-gray-100 py-12 px-4">
       <div className="max-w-xl mx-auto space-y-5">
         <div className="flex items-center gap-3 mb-2" data-aos="fade-down">
           <div className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center">
