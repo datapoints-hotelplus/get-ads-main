@@ -1,26 +1,306 @@
 @import "tailwindcss";
 
 :root {
+  /* Primary Colors (CI) */
+  --primary: #fdd52c;
+  --primary-dark: #f0c919;
+  --primary-light: #ffe54d;
+
+  /* Secondary Colors (CI) */
+  --secondary: #022138;
+  --secondary-light: #213355;
+  --secondary-lighter: #244e61;
+
+  /* Accent Colors */
+  --accent: #ec1501;
+  --accent-light: #ff4d40;
+
+  /* Neutral Colors */
   --background: #ffffff;
   --foreground: #171717;
+  --surface: #f8f9fa;
+  --border: #e5e7eb;
+  --text-muted: #6b7280;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-primary: #fdd52c;
+  --color-primary-dark: #f0c919;
+  --color-primary-light: #ffe54d;
+  --color-secondary: #022138;
+  --color-secondary-light: #213355;
+  --color-secondary-lighter: #244e61;
+  --color-accent: #ec1501;
+  --color-accent-light: #ff4d40;
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #0f1419;
+    --foreground: #f5f5f5;
+    --surface: #1a1f2e;
+    --border: #2d3748;
+    --text-muted: #a0aec0;
   }
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Helvetica Neue",
+    Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Button Styling with CI Colors ────────────────────────────────────── */
+button,
+a[role="button"] {
+  transition: all 0.2s ease-in-out;
+}
+
+/* Primary Button (Yellow) - Minimal Style */
+.btn-primary {
+  background-color: var(--primary);
+  color: #000;
+  font-weight: 600;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-primary:hover {
+  background-color: var(--primary-dark);
+  box-shadow: 0 2px 8px rgba(253, 213, 44, 0.2);
+}
+
+.btn-primary:active {
+  opacity: 0.9;
+}
+
+/* Secondary Button (Navy) - Minimal Style */
+.btn-secondary {
+  background-color: var(--secondary);
+  color: #fff;
+  font-weight: 600;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-secondary:hover {
+  background-color: var(--secondary-light);
+  box-shadow: 0 2px 8px rgba(2, 33, 56, 0.2);
+}
+
+.btn-secondary:active {
+  opacity: 0.9;
+}
+
+/* ── Cards & Surfaces ──────────────────────────────────────────────────── */
+.card {
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  transition: all 0.3s ease;
+}
+
+.card:hover {
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+  border-color: var(--primary);
+}
+
+/* ── Links ─────────────────────────────────────────────────────────────── */
+a {
+  color: var(--secondary);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+a:hover {
+  color: var(--primary);
+}
+
+/* ── Headings ──────────────────────────────────────────────────────────── */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: var(--secondary);
+  font-weight: 700;
+}
+
+/* ── Keyboard Focus & Accessibility ──────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* ── Selection Color ──────────────────────────────────────────────────── */
+::selection {
+  background-color: var(--primary);
+  color: #000;
+}
+
+/* ── Inputs & Forms ──────────────────────────────────────────────────────– */
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(253, 213, 44, 0.1);
+}
+
+/* ── Utility Classes ───────────────────────────────────────────────────── */
+
+/* Input Utilities */
+.input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  color: #111827;
+}
+
+.input::placeholder {
+  color: #9ca3af;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(253, 213, 44, 0.1);
+}
+
+/* Card Utilities */
+.card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.card:hover {
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+  border-color: var(--primary);
+}
+
+/* Badge Utilities */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badge-primary {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.badge-secondary {
+  background-color: #dbeafe;
+  color: #001f3f;
+}
+
+.badge-accent {
+  background-color: #fee2e2;
+  color: #7f1d1d;
+}
+
+.badge-success {
+  background-color: #dcfce7;
+  color: #15803d;
+}
+
+/* Typography */
+.heading-1 {
+  font-size: 1.875rem;
+  font-weight: 700;
+  color: var(--secondary);
+}
+
+.heading-2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--secondary);
+}
+
+.heading-3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--secondary);
+}
+
+.text-muted {
+  color: #6b7280;
+}
+
+/* Table Utilities */
+.table-header {
+  background-color: #f9fafb;
+  color: #374151;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.table-row {
+  border-bottom: 1px solid #e5e7eb;
+  transition: background-color 0.2s ease;
+}
+
+.table-row:hover {
+  background-color: #f9fafb;
+}
+
+/* Alert Utilities */
+.alert {
+  border-radius: 0.5rem;
+  padding: 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.alert-info {
+  background-color: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
+}
+
+.alert-success {
+  background-color: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #15803d;
+}
+
+.alert-warning {
+  background-color: #fefce8;
+  border: 1px solid #fde047;
+  color: #92400e;
+}
+
+.alert-error {
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #7f1d1d;
 }

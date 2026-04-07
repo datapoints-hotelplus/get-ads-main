@@ -150,6 +150,23 @@ function isoToDisplay(iso: string): string {
   const [y, m, d] = iso.split("-");
   return `${d}/${m}/${y}`;
 }
+
+// ─── Chart Color Palette (CI) ─────────────────────────────────────────────────
+
+const CHART_COLORS = [
+  "#0ea5e9", // 0 ocean blue (แทน navy เดิม - สว่างและเด่นชัด)
+  "#fdd52c", // 1 yellow (primary)
+  "#ec1501", // 2 red (accent)
+  "#7dd3fc", // 3 sky light (แทน navy-light)
+  "#244e61", // 4 teal-navy (ถ้ายังเข้มไป เปลี่ยนเป็น #38bdf8)
+  "#22c55e", // 5 green (avg line)
+] as const;
+
+const CHART_GRID = "#f3f4f6";
+const CHART_BG = "#ffffff";
+
+const GENDER_COLORS = ["#f9a8d4", "#60a5fa", "#c4b5fd"];
+const DEVICE_COLORS = ["#a3e635", "#fb923c", "#f472b6", "#86efac", "#60a5fa"];
 function DatePickerField({
   label,
   value,
@@ -165,7 +182,7 @@ function DatePickerField({
       <label className="text-xs font-medium text-gray-600">{label}</label>
       <div
         onClick={() => inputRef.current?.showPicker()}
-        className="relative border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white focus-within:ring-2 focus-within:ring-blue-500 w-40 cursor-pointer flex items-center justify-between"
+        className="relative border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white focus-within:ring-2 focus-within:ring-yellow-400 w-40 cursor-pointer flex items-center justify-between"
       >
         <span className={value ? "" : "text-gray-400"}>
           {value ? isoToDisplay(value) : "dd/mm/yyyy"}
@@ -265,22 +282,22 @@ function MetricCard({
 
   return (
     <div
-      className={`rounded-xl border px-4 py-4 flex flex-col gap-1 transition-shadow ${
+      className={`rounded-xl border px-4 py-4 flex flex-col gap-1 transition-all ${
         highlight
-          ? "bg-blue-50 border-blue-400 shadow-md ring-2 ring-blue-200"
+          ? "bg-yellow-50 border-yellow-400 shadow-md ring-2 ring-yellow-200"
           : "bg-white border-gray-200 hover:shadow-md"
       }`}
     >
       <div className="flex items-center gap-1">
         <p
-          className={`text-xs font-medium truncate ${highlight ? "text-blue-700" : "text-gray-500"}`}
+          className={`text-xs font-medium truncate ${highlight ? "text-yellow-800" : "text-gray-500"}`}
         >
           {label}
         </p>
-        {highlight && <span className="text-blue-500 text-xs">★</span>}
+        {highlight && <span className="text-yellow-500 text-xs">★</span>}
         {tip && (
           <span className="relative group cursor-help flex-shrink-0">
-            <span className="text-gray-600 hover:text-blue-500 transition-colors text-xs">
+            <span className="text-gray-600 hover:text-yellow-500 transition-colors text-xs">
               ⓘ
             </span>
             <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg whitespace-normal w-48 text-center opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none shadow-lg">
@@ -316,9 +333,9 @@ function MetricCard({
 function ChartHeader({ title, tip }: { title: string; tip: string }) {
   return (
     <div className="flex items-start gap-2 mb-4">
-      <h2 className="text-lg font-bold text-gray-900">{title}</h2>
+      <h2 className="text-lg font-bold text-secondary">{title}</h2>
       <span className="relative group cursor-help flex-shrink-0 mt-1">
-        <span className="text-gray-300 hover:text-blue-500 transition-colors text-sm">
+        <span className="text-gray-300 hover:text-primary transition-colors text-sm">
           ⓘ
         </span>
         <span className="absolute bottom-full left-0 mb-2 px-4 py-3 bg-gray-900 text-white text-xs rounded-xl w-72 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none shadow-xl whitespace-pre-line leading-relaxed">
@@ -855,9 +872,9 @@ export default function DashboardPage() {
           {/* Auth row */}
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
                 <svg
-                  className="w-4 h-4 text-white"
+                  className="w-4 h-4 text-primary"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -880,8 +897,8 @@ export default function DashboardPage() {
               ) : currentUser ? (
                 <>
                   <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 bg-blue-100 rounded-full flex items-center justify-center">
-                      <span className="text-xs font-bold text-blue-600">
+                    <div className="w-7 h-7 bg-yellow-100 rounded-full flex items-center justify-center">
+                      <span className="text-xs font-bold text-yellow-700">
                         {(currentUser.display_name || currentUser.username)
                           .charAt(0)
                           .toUpperCase()}
@@ -902,7 +919,7 @@ export default function DashboardPage() {
               ) : (
                 <a
                   href="/login"
-                  className="text-sm text-white font-medium px-4 py-1.5 bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                  className="text-sm text-black font-medium px-4 py-1.5 bg-primary rounded-lg hover:bg-primary-dark transition-colors"
                 >
                   เข้าสู่ระบบ
                 </a>
@@ -912,7 +929,7 @@ export default function DashboardPage() {
 
           {/* Filter form */}
           <form onSubmit={handleApply} className="space-y-3">
-            {/* Filter row */}
+            {/* Filter row with buttons */}
             <div className="flex flex-wrap items-end gap-3">
               {/* Date From */}
               <DatePickerField
@@ -934,7 +951,7 @@ export default function DashboardPage() {
                   value={account}
                   onChange={(e) => handleAccountChange(e.target.value)}
                   disabled={optLoading}
-                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-yellow-400 disabled:opacity-50"
                 >
                   <option value="">-- ทั้งหมด --</option>
                   {options.accounts.map((a) => (
@@ -954,7 +971,7 @@ export default function DashboardPage() {
                   value={campaign}
                   onChange={(e) => handleCampaignChange(e.target.value)}
                   disabled={optLoading}
-                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 truncate"
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-yellow-400 disabled:opacity-50 truncate"
                 >
                   <option value="">-- ทั้งหมด --</option>
                   {options.campaigns.map((c) => (
@@ -974,7 +991,7 @@ export default function DashboardPage() {
                   value={adset}
                   onChange={(e) => setAdset(e.target.value)}
                   disabled={optLoading}
-                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 truncate"
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-yellow-400 disabled:opacity-50 truncate"
                 >
                   <option value="">-- ทั้งหมด --</option>
                   {options.adsets.map((s) => (
@@ -984,31 +1001,31 @@ export default function DashboardPage() {
                   ))}
                 </select>
               </div>
-            </div>
 
-            {/* Button row */}
-            <div className="flex items-center gap-2">
-              <button
-                type="submit"
-                disabled={dataLoading}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white text-sm font-semibold px-6 py-2 rounded-lg transition-colors"
-              >
-                {dataLoading ? "กำลังโหลด…" : "ค้นหา"}
-              </button>
+              {/* Buttons on same line */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="submit"
+                  disabled={dataLoading}
+                  className="bg-primary hover:bg-primary-dark disabled:bg-gray-400 text-black text-sm font-semibold px-6 py-2 rounded-lg transition-colors"
+                >
+                  {dataLoading ? "กำลังโหลด…" : "ค้นหา"}
+                </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setDateFrom(firstOfMonth());
-                  setDateTo(today());
-                  setAccount("");
-                  setCampaign("");
-                  setAdset("");
-                }}
-                className="border border-gray-300 hover:bg-gray-50 text-gray-600 text-sm px-4 py-2 rounded-lg transition-colors"
-              >
-                รีเซ็ต
-              </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDateFrom(firstOfMonth());
+                    setDateTo(today());
+                    setAccount("");
+                    setCampaign("");
+                    setAdset("");
+                  }}
+                  className="border border-gray-300 hover:bg-gray-100 text-gray-700 text-sm px-4 py-2 rounded-lg transition-colors"
+                >
+                  รีเซ็ต
+                </button>
+              </div>
             </div>
           </form>
         </div>
@@ -1217,7 +1234,7 @@ export default function DashboardPage() {
                       Frequency
                     </p>
                     <span className="relative group cursor-help flex-shrink-0">
-                      <span className="text-gray-300 hover:text-blue-500 transition-colors text-xs">
+                      <span className="text-gray-300 hover:text-primary transition-colors text-xs">
                         ⓘ
                       </span>
                       <span className="absolute top-full left-1/2 -translate-x-1/2 mb-2 px-4 py-3 bg-gray-900 text-white text-xs rounded-xl w-72 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none shadow-xl whitespace-pre-line leading-relaxed">
@@ -1285,14 +1302,16 @@ export default function DashboardPage() {
                       0: {
                         type: "bars",
                         targetAxisIndex: 1,
-                        color: "#93c5fd",
+                        color: CHART_COLORS[1],
+                        pointSize: 0,
                       },
                       1: {
                         type: "line",
                         targetAxisIndex: 0,
-                        color: "#ef4444",
+                        color: CHART_COLORS[2],
                         lineWidth: 2,
                         curveType: "function",
+                        pointSize: 0,
                       },
                     },
                     vAxes: {
@@ -1300,17 +1319,20 @@ export default function DashboardPage() {
                         title: "cpm",
                         format: "#,###",
                         minValue: 0,
+                        gridlines: { color: CHART_GRID },
                       },
                       1: {
                         title: "impressions",
                         format: "short",
                         minValue: 0,
+                        gridlines: { color: CHART_GRID },
                       },
                     },
                     hAxis: {
                       slantedText: true,
                       slantedTextAngle: 45,
                       textStyle: { fontSize: 10 },
+                      gridlines: { color: "transparent" },
                     },
                     legend: { position: "top" },
                     chartArea: {
@@ -1320,7 +1342,7 @@ export default function DashboardPage() {
                       bottom: 80,
                     },
                     bar: { groupWidth: "80%" },
-                    backgroundColor: "#ffffff",
+                    backgroundColor: CHART_BG,
                   }}
                 />
               </div>
@@ -1385,24 +1407,27 @@ export default function DashboardPage() {
                         0: {
                           type: "bars",
                           targetAxisIndex: 1,
-                          color: "#60a5fa",
+                          color: CHART_COLORS[1],
+                          pointSize: 0,
                         },
                         1: {
                           type: "bars",
                           targetAxisIndex: 1,
-                          color: "#c4b5fd",
+                          color: CHART_COLORS[3],
+                          pointSize: 0,
                         },
                         2: {
                           type: "line",
                           targetAxisIndex: 0,
-                          color: "#ef4444",
+                          color: CHART_COLORS[2],
                           lineWidth: 2,
                           curveType: "function",
+                          pointSize: 0,
                         },
                         3: {
                           type: "line",
                           targetAxisIndex: 0,
-                          color: "#22c55e",
+                          color: CHART_COLORS[5],
                           lineWidth: 2,
                           lineDashStyle: [0, 0],
                           pointSize: 0,
@@ -1414,17 +1439,20 @@ export default function DashboardPage() {
                           title: "cpc | unique_inline_link_clicks",
                           format: "#,###",
                           minValue: 0,
+                          gridlines: { color: CHART_GRID },
                         },
                         1: {
                           title: "inline_link_clicks",
                           format: "#,###",
                           minValue: 0,
+                          gridlines: { color: CHART_GRID },
                         },
                       },
                       hAxis: {
                         slantedText: true,
                         slantedTextAngle: 45,
                         textStyle: { fontSize: 10 },
+                        gridlines: { color: "transparent" },
                       },
                       legend: { position: "top" },
                       chartArea: {
@@ -1434,7 +1462,7 @@ export default function DashboardPage() {
                         bottom: 80,
                       },
                       bar: { groupWidth: "80%" },
-                      backgroundColor: "#ffffff",
+                      backgroundColor: CHART_BG,
                     }}
                   />
                 </div>
@@ -1482,14 +1510,16 @@ export default function DashboardPage() {
                       0: {
                         type: "line",
                         targetAxisIndex: 0,
-                        color: "#ef4444",
+                        color: CHART_COLORS[2],
                         lineWidth: 2,
                         curveType: "function",
+                        pointSize: 0,
                       },
                       1: {
                         type: "bars",
                         targetAxisIndex: 1,
-                        color: "#60a5fa",
+                        color: CHART_COLORS[1],
+                        pointSize: 0,
                       },
                     },
                     vAxes: {
@@ -1497,17 +1527,20 @@ export default function DashboardPage() {
                         title: "Cost per messaging conversation started",
                         format: "#,###",
                         minValue: 0,
+                        gridlines: { color: CHART_GRID },
                       },
                       1: {
                         title: "messaging_conversations_started",
                         format: "#,###",
                         minValue: 0,
+                        gridlines: { color: CHART_GRID },
                       },
                     },
                     hAxis: {
                       slantedText: true,
                       slantedTextAngle: 45,
                       textStyle: { fontSize: 10 },
+                      gridlines: { color: "transparent" },
                     },
                     legend: { position: "top" },
                     chartArea: {
@@ -1517,7 +1550,7 @@ export default function DashboardPage() {
                       bottom: 80,
                     },
                     bar: { groupWidth: "80%" },
-                    backgroundColor: "#ffffff",
+                    backgroundColor: CHART_BG,
                   }}
                 />
               </div>
@@ -1560,14 +1593,16 @@ export default function DashboardPage() {
                       0: {
                         type: "line",
                         targetAxisIndex: 0,
-                        color: "#ef4444",
+                        color: CHART_COLORS[2],
                         lineWidth: 2,
                         curveType: "function",
+                        pointSize: 0,
                       },
                       1: {
                         type: "bars",
                         targetAxisIndex: 1,
-                        color: "#60a5fa",
+                        color: CHART_COLORS[1],
+                        pointSize: 0,
                       },
                     },
                     vAxes: {
@@ -1575,17 +1610,20 @@ export default function DashboardPage() {
                         title: "Cost per Engagement",
                         format: "#,###",
                         minValue: 0,
+                        gridlines: { color: CHART_GRID },
                       },
                       1: {
                         title: "Post Engagement",
                         format: "#,###",
                         minValue: 0,
+                        gridlines: { color: CHART_GRID },
                       },
                     },
                     hAxis: {
                       slantedText: true,
                       slantedTextAngle: 45,
                       textStyle: { fontSize: 10 },
+                      gridlines: { color: "transparent" },
                     },
                     legend: { position: "top" },
                     chartArea: {
@@ -1595,7 +1633,7 @@ export default function DashboardPage() {
                       bottom: 80,
                     },
                     bar: { groupWidth: "80%" },
-                    backgroundColor: "#ffffff",
+                    backgroundColor: CHART_BG,
                   }}
                 />
               </div>
@@ -1646,33 +1684,38 @@ export default function DashboardPage() {
                     series: {
                       0: {
                         targetAxisIndex: 1,
-                        color: "#60a5fa",
+                        color: CHART_COLORS[1],
                         lineWidth: 2,
                         curveType: "function",
+                        pointSize: 0,
                       },
                       1: {
                         targetAxisIndex: 1,
-                        color: "#fb923c",
+                        color: CHART_COLORS[2],
                         lineWidth: 2,
                         curveType: "function",
+                        pointSize: 0,
                       },
                       2: {
                         targetAxisIndex: 0,
-                        color: "#a78bfa",
+                        color: CHART_COLORS[3],
                         lineWidth: 2,
                         curveType: "function",
+                        pointSize: 0,
                       },
                       3: {
                         targetAxisIndex: 0,
-                        color: "#a3e635",
+                        color: CHART_COLORS[4],
                         lineWidth: 2,
                         curveType: "function",
+                        pointSize: 0,
                       },
                       4: {
                         targetAxisIndex: 1,
-                        color: "#22d3ee",
+                        color: CHART_COLORS[5],
                         lineWidth: 2,
                         curveType: "function",
+                        pointSize: 0,
                       },
                     },
                     vAxes: {
@@ -1680,17 +1723,20 @@ export default function DashboardPage() {
                         title: "impressions | reach",
                         format: "short",
                         minValue: 0,
+                        gridlines: { color: CHART_GRID },
                       },
                       1: {
                         title: "spend | messaging | leads",
                         format: "short",
                         minValue: 0,
+                        gridlines: { color: CHART_GRID },
                       },
                     },
                     hAxis: {
                       slantedText: true,
                       slantedTextAngle: 45,
                       textStyle: { fontSize: 10 },
+                      gridlines: { color: "transparent" },
                     },
                     legend: { position: "top" },
                     chartArea: {
@@ -1699,7 +1745,7 @@ export default function DashboardPage() {
                       top: 40,
                       bottom: 80,
                     },
-                    backgroundColor: "#ffffff",
+                    backgroundColor: CHART_BG,
                     pointSize: 0,
                   }}
                 />
@@ -1822,13 +1868,13 @@ export default function DashboardPage() {
                       })()}
                       options={{
                         isStacked: true,
-                        colors: ["#f9a8d4", "#60a5fa", "#c4b5fd"],
+                        colors: GENDER_COLORS,
                         hAxis: { format: "short", minValue: 0 },
                         vAxis: { textStyle: { fontSize: 12 } },
                         legend: { position: "top" },
                         chartArea: { left: 60, right: 20, top: 40, bottom: 20 },
                         bar: { groupWidth: "70%" },
-                        backgroundColor: "#ffffff",
+                        backgroundColor: CHART_BG,
                       }}
                     />
                   </div>
@@ -1847,19 +1893,13 @@ export default function DashboardPage() {
                       ]}
                       options={{
                         pieHole: 0.45,
-                        colors: [
-                          "#a3e635",
-                          "#fb923c",
-                          "#f472b6",
-                          "#86efac",
-                          "#60a5fa",
-                        ],
+                        colors: DEVICE_COLORS,
                         legend: {
                           position: "right",
                           textStyle: { fontSize: 11 },
                         },
                         chartArea: { left: 10, right: 10, top: 20, bottom: 20 },
-                        backgroundColor: "#ffffff",
+                        backgroundColor: CHART_BG,
                         pieSliceTextStyle: { fontSize: 11 },
                       }}
                     />

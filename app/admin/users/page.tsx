@@ -259,7 +259,7 @@ export default function AdminUsersPage() {
                 setView("users");
                 setPermUser(null);
               }}
-              className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+              className="text-sm text-secondary hover:text-primary font-medium"
             >
               ← Users
             </button>
@@ -286,7 +286,10 @@ export default function AdminUsersPage() {
         {view === "users" && (
           <>
             {/* Create User Form */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6" data-aos="fade-up">
+            <div
+              className="bg-white rounded-xl shadow-sm border border-gray-200 p-6"
+              data-aos="fade-up"
+            >
               <h2 className="text-lg font-semibold text-gray-900 mb-4">
                 Create New User
               </h2>
@@ -302,7 +305,7 @@ export default function AdminUsersPage() {
                       value={newUsername}
                       onChange={(e) => setNewUsername(e.target.value)}
                       placeholder="john_doe"
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="input"
                     />
                   </div>
                   <div>
@@ -316,7 +319,7 @@ export default function AdminUsersPage() {
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                       placeholder="Min 6 characters"
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="input"
                     />
                   </div>
                   <div>
@@ -328,7 +331,7 @@ export default function AdminUsersPage() {
                       value={newDisplayName}
                       onChange={(e) => setNewDisplayName(e.target.value)}
                       placeholder="John Doe"
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="input"
                     />
                   </div>
                 </div>
@@ -340,7 +343,7 @@ export default function AdminUsersPage() {
                 <button
                   type="submit"
                   disabled={creating}
-                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-semibold px-5 py-2 rounded-lg text-sm transition-colors"
+                  className="bg-primary hover:bg-primary-dark disabled:opacity-60 text-black font-semibold px-5 py-2 rounded-lg text-sm transition-colors"
                 >
                   {creating ? "Creating…" : "Create User"}
                 </button>
@@ -348,7 +351,11 @@ export default function AdminUsersPage() {
             </div>
 
             {/* Users Table */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden" data-aos="fade-up" data-aos-delay="100">
+            <div
+              className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden"
+              data-aos="fade-up"
+              data-aos-delay="100"
+            >
               <div className="px-6 py-4 border-b border-gray-100">
                 <h2 className="text-lg font-semibold text-gray-900">
                   Users
@@ -414,7 +421,7 @@ export default function AdminUsersPage() {
                             <div className="flex items-center justify-end gap-3">
                               <button
                                 onClick={() => openPermissions(user)}
-                                className="text-blue-600 hover:text-blue-800 font-medium text-xs"
+                                className="text-sm text-secondary hover:text-primary font-medium text-xs"
                               >
                                 Pages
                               </button>
@@ -455,12 +462,12 @@ export default function AdminUsersPage() {
                                   value={resetPwd}
                                   onChange={(e) => setResetPwd(e.target.value)}
                                   placeholder="New password"
-                                  className="border border-gray-300 rounded px-2 py-1 text-xs text-gray-900 w-36 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                  className="border border-gray-300 rounded px-2 py-1 text-xs text-gray-900 w-36 focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary"
                                 />
                                 <button
                                   type="submit"
                                   disabled={resetLoading}
-                                  className="bg-yellow-500 hover:bg-yellow-600 disabled:opacity-60 text-white text-xs font-medium px-2 py-1 rounded"
+                                  className="bg-primary hover:bg-primary-dark disabled:opacity-60 text-black text-xs font-medium px-2 py-1 rounded"
                                 >
                                   {resetLoading ? "…" : "Set"}
                                 </button>
@@ -491,7 +498,10 @@ export default function AdminUsersPage() {
 
         {/* ── PERMISSIONS VIEW ───────────────────────────────────────────── */}
         {view === "permissions" && permUser && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6" data-aos="fade-up">
+          <div
+            className="bg-white rounded-xl shadow-sm border border-gray-200 p-6"
+            data-aos="fade-up"
+          >
             <p className="text-sm text-gray-500 mb-1">
               User:{" "}
               <span className="font-semibold text-gray-900">
@@ -520,7 +530,7 @@ export default function AdminUsersPage() {
                       type="checkbox"
                       checked={granted.has(acc.account_id)}
                       onChange={() => togglePerm(acc.account_id)}
-                      className="h-4 w-4 text-blue-600 rounded"
+                      className="h-4 w-4 text-primary rounded"
                     />
                     <div>
                       <p className="text-sm font-medium text-gray-900">
@@ -539,7 +549,7 @@ export default function AdminUsersPage() {
               <button
                 onClick={savePermissions}
                 disabled={permSaving || permLoading}
-                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-semibold px-5 py-2 rounded-lg text-sm transition-colors"
+                className="bg-primary hover:bg-primary-dark disabled:opacity-60 text-black font-semibold px-5 py-2 rounded-lg text-sm transition-colors"
               >
                 {permSaving ? "Saving…" : "Save Permissions"}
               </button>
@@ -558,7 +568,10 @@ export default function AdminUsersPage() {
 
         {/* ── LOGS VIEW ──────────────────────────────────────────────────── */}
         {view === "logs" && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden" data-aos="fade-up">
+          <div
+            className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden"
+            data-aos="fade-up"
+          >
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-900">
                 Access Logs
@@ -571,7 +584,7 @@ export default function AdminUsersPage() {
               {logsUser && (
                 <button
                   onClick={() => openLogs()}
-                  className="text-sm text-blue-600 hover:text-blue-800"
+                  className="text-sm text-secondary hover:text-primary"
                 >
                   Show all users
                 </button>

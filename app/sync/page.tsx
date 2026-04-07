@@ -100,19 +100,33 @@ export default function SyncPage() {
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 py-12 px-4">
+    <main className="min-h-screen bg-gray-50 py-12 px-4">
       <div className="max-w-xl mx-auto space-y-5">
         <div className="flex items-center gap-3 mb-2" data-aos="fade-down">
-          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center">
-            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          <div className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center">
+            <svg
+              className="w-5 h-5 text-primary"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
             </svg>
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Sync Panel</h1>
         </div>
 
         {/* Get All Page */}
-        <div className="bg-white border border-purple-200 rounded-xl p-5 shadow-sm" data-aos="fade-up" data-aos-delay="100">
+        <div
+          className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm"
+          data-aos="fade-up"
+          data-aos-delay="100"
+        >
           <h2 className="text-base font-semibold text-gray-800 mb-1">
             Get All Page → Supabase &quot;allpage&quot;
           </h2>
@@ -122,7 +136,7 @@ export default function SyncPage() {
           <button
             onClick={handleAllPage}
             disabled={allPaging}
-            className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white font-semibold py-2.5 rounded-xl transition shadow-sm hover:shadow-md"
+            className="w-full bg-primary hover:bg-primary-dark disabled:bg-gray-400 text-black font-semibold py-2.5 rounded-xl transition shadow-sm hover:shadow-md"
           >
             {allPaging ? "กำลังดึง..." : "Get All Page"}
           </button>
@@ -149,7 +163,11 @@ export default function SyncPage() {
         </div>
 
         {/* Backfill */}
-        <div className="bg-white border border-orange-200 rounded-xl p-5 shadow-sm" data-aos="fade-up" data-aos-delay="200">
+        <div
+          className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm"
+          data-aos="fade-up"
+          data-aos-delay="200"
+        >
           <h2 className="text-base font-semibold text-gray-800 mb-1">
             Backfill (6 เดือนย้อนหลัง)
           </h2>
@@ -159,7 +177,7 @@ export default function SyncPage() {
           <button
             onClick={handleBackfill}
             disabled={backfilling}
-            className="w-full bg-orange-500 hover:bg-orange-600 disabled:bg-gray-400 text-white font-semibold py-2.5 rounded-xl transition shadow-sm hover:shadow-md"
+            className="w-full bg-primary hover:bg-primary-dark disabled:bg-gray-400 text-black font-semibold py-2.5 rounded-xl transition shadow-sm hover:shadow-md"
           >
             {backfilling ? "กำลัง Backfill..." : "เริ่ม Backfill"}
           </button>
@@ -191,7 +209,11 @@ export default function SyncPage() {
         </div>
 
         {/* Daily Sync */}
-        <div className="bg-white border border-teal-200 rounded-xl p-5 shadow-sm" data-aos="fade-up" data-aos-delay="300">
+        <div
+          className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm"
+          data-aos="fade-up"
+          data-aos-delay="300"
+        >
           <h2 className="text-base font-semibold text-gray-800 mb-1">
             Daily Sync (เมื่อวาน)
           </h2>
@@ -201,7 +223,7 @@ export default function SyncPage() {
           <button
             onClick={handleDaily}
             disabled={dailying}
-            className="w-full bg-teal-600 hover:bg-teal-700 disabled:bg-gray-400 text-white font-semibold py-2.5 rounded-xl transition shadow-sm hover:shadow-md"
+            className="w-full bg-primary hover:bg-primary-dark disabled:bg-gray-400 text-black font-semibold py-2.5 rounded-xl transition shadow-sm hover:shadow-md"
           >
             {dailying ? "กำลัง Sync..." : "Daily Sync"}
           </button>
@@ -235,4 +257,3 @@ export default function SyncPage() {
     </main>
   );
 }
-

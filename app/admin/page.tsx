@@ -110,19 +110,19 @@ export default function AdminPage() {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">
+        <h1 className="text-xl font-bold text-secondary">
           Admin — Manage Accounts
         </h1>
         <div className="flex items-center gap-4">
           <button
             onClick={() => router.push("/admin/users")}
-            className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+            className="text-sm text-secondary hover:text-primary font-medium"
           >
             Manage Users
           </button>
           <button
             onClick={() => router.push("/admin/highlights")}
-            className="text-sm text-purple-600 hover:text-purple-800 font-medium"
+            className="text-sm text-secondary hover:text-primary font-medium"
           >
             Highlight Metrics
           </button>
@@ -143,7 +143,10 @@ export default function AdminPage() {
 
       <div className="max-w-3xl mx-auto px-4 py-8 space-y-8">
         {/* Add Account Form */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6" data-aos="fade-up">
+        <div
+          className="bg-white rounded-xl shadow-sm border border-gray-200 p-6"
+          data-aos="fade-up"
+        >
           <h2 className="text-lg font-semibold text-gray-900 mb-4">
             Add Account
           </h2>
@@ -159,7 +162,7 @@ export default function AdminPage() {
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   placeholder="My Business Page"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="input"
                 />
               </div>
               <div>
@@ -172,7 +175,7 @@ export default function AdminPage() {
                   value={newId}
                   onChange={(e) => setNewId(e.target.value)}
                   placeholder="act_123456789 or 123456789"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="input"
                 />
               </div>
             </div>
@@ -182,7 +185,7 @@ export default function AdminPage() {
             <button
               type="submit"
               disabled={addLoading}
-              className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-semibold px-5 py-2 rounded-lg transition-colors"
+              className="bg-primary hover:bg-primary-dark disabled:opacity-60 text-black font-semibold px-5 py-2 rounded-lg text-sm transition-colors"
             >
               {addLoading ? "Adding…" : "Add Account"}
             </button>
@@ -190,7 +193,11 @@ export default function AdminPage() {
         </div>
 
         {/* Accounts Table */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden" data-aos="fade-up" data-aos-delay="100">
+        <div
+          className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden"
+          data-aos="fade-up"
+          data-aos-delay="100"
+        >
           <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900">
               Accounts

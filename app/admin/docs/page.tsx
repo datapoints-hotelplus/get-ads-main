@@ -270,7 +270,7 @@ export default function AdminDocsPage() {
                   onClick={() => setActive(s.id)}
                   className={`w-full text-left px-4 py-3 text-sm flex items-center gap-2 transition-colors border-b border-gray-100 last:border-b-0 ${
                     active === s.id
-                      ? "bg-blue-50 text-blue-700 font-semibold"
+                      ? "bg-yellow-50 text-secondary font-semibold border-l-4 border-l-primary"
                       : "text-gray-700 hover:bg-gray-50"
                   }`}
                 >
@@ -286,7 +286,9 @@ export default function AdminDocsPage() {
             <div className="bg-white rounded-xl border border-gray-200 p-8 shadow-sm">
               <div className="flex items-center gap-3 mb-6">
                 <span className="text-3xl">{current.icon}</span>
-                <h2 className="text-2xl font-bold text-gray-900">{current.title}</h2>
+                <h2 className="text-2xl font-bold text-gray-900">
+                  {current.title}
+                </h2>
               </div>
               <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
                 {current.content}

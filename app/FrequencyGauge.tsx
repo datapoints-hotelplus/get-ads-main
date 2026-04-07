@@ -1,11 +1,7 @@
 "use client";
 
 import { useRef, useEffect } from "react";
-import {
-  Chart as ChartJS,
-  ArcElement,
-  Tooltip,
-} from "chart.js";
+import { Chart as ChartJS, ArcElement, Tooltip } from "chart.js";
 import { Doughnut } from "react-chartjs-2";
 
 ChartJS.register(ArcElement, Tooltip);
@@ -35,13 +31,9 @@ const gaugeCenterText = {
 
     // Delta %
     if (delta !== null && delta !== undefined) {
-      ctx.fillStyle = delta > 0 ? "#ef4444" : delta < 0 ? "#10b981" : "#9ca3af";
+      ctx.fillStyle = delta > 0 ? "#ec1501" : delta < 0 ? "#10b981" : "#9ca3af";
       ctx.font = "500 11px system-ui, sans-serif";
-      ctx.fillText(
-        `${delta > 0 ? "+" : ""}${delta.toFixed(2)}%`,
-        cx,
-        cy + 20,
-      );
+      ctx.fillText(`${delta > 0 ? "+" : ""}${delta.toFixed(2)}%`, cx, cy + 20);
     }
     ctx.restore();
   },
@@ -73,7 +65,7 @@ export default function FrequencyGauge({ frequency, delta }: Props) {
         datasets: [
           {
             data: [val, remaining],
-            backgroundColor: ["#8b5cf6", "#e5e7eb"],
+            backgroundColor: ["#022138", "#e5e7eb"],
             borderWidth: 0,
             circumference: 180,
             rotation: 270,

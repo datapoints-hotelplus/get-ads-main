@@ -34,7 +34,10 @@ export default function HighlightsPage() {
   useEffect(() => {
     Promise.all([
       fetch("/api/admin/highlights?list=campaigns").then((r) => {
-        if (r.status === 401) { router.push("/admin/login"); return null; }
+        if (r.status === 401) {
+          router.push("/admin/login");
+          return null;
+        }
         return r.json();
       }),
     ]).then(([data]) => {
@@ -85,21 +88,24 @@ export default function HighlightsPage() {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ campaign_name: c, metrics }),
-        })
-      )
+        }),
+      ),
     );
     setSaving(null);
   }
 
   const filtered = campaigns.filter((c) =>
-    c.toLowerCase().includes(search.toLowerCase())
+    c.toLowerCase().includes(search.toLowerCase()),
   );
 
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <button onClick={() => router.push("/admin")} className="text-sm text-gray-500 hover:text-gray-800">
+          <button
+            onClick={() => router.push("/admin")}
+            className="text-sm text-gray-500 hover:text-gray-800"
+          >
             ← Accounts
           </button>
           <h1 className="text-xl font-bold text-gray-900">Highlight Metrics</h1>
@@ -117,7 +123,7 @@ export default function HighlightsPage() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="ค้นหา Campaign..."
-                className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="input"
               />
             </div>
 
@@ -129,21 +135,26 @@ export default function HighlightsPage() {
                   data-aos="fade-up"
                 >
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-semibold text-gray-900 truncate max-w-md" title={campaign}>
+                    <h3
+                      className="text-sm font-semibold text-gray-900 truncate max-w-md"
+                      title={campaign}
+                    >
                       {campaign}
                     </h3>
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => applyToAll(campaign)}
                         disabled={saving !== null}
-                        className="text-xs text-purple-600 hover:text-purple-800 font-medium px-3 py-1 border border-purple-200 rounded-lg hover:bg-purple-50 disabled:opacity-50"
+                        className="text-xs text-secondary hover:text-primary font-medium px-3 py-1 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
                       >
-                        {saving === "__all__" ? "กำลังบันทึก..." : "ใช้กับทุก Campaign"}
+                        {saving === "__all__"
+                          ? "กำลังบันทึก..."
+                          : "ใช้กับทุก Campaign"}
                       </button>
                       <button
                         onClick={() => save(campaign)}
                         disabled={saving !== null}
-                        className="text-xs text-white bg-blue-600 hover:bg-blue-700 font-medium px-3 py-1 rounded-lg disabled:opacity-50"
+                        className="text-xs text-black bg-primary hover:bg-primary-dark font-medium px-3 py-1 rounded-lg disabled:opacity-50"
                       >
                         {saving === campaign ? "กำลังบันทึก..." : "บันทึก"}
                       </button>
@@ -151,15 +162,17 @@ export default function HighlightsPage() {
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {ALL_METRICS.map((m) => {
-                      const active = (highlights[campaign] ?? []).includes(m.key);
+                      const active = (highlights[campaign] ?? []).includes(
+                        m.key,
+                      );
                       return (
                         <button
                           key={m.key}
                           onClick={() => toggle(campaign, m.key)}
                           className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
                             active
-                              ? "bg-blue-600 text-white border-blue-600"
-                              : "bg-white text-gray-600 border-gray-300 hover:border-blue-400 hover:text-blue-600"
+                              ? "bg-primary text-black border-primary"
+                              : "bg-white text-gray-600 border-gray-300 hover:border-secondary hover:text-secondary"
                           }`}
                         >
                           {m.label}
