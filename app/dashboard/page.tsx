@@ -155,7 +155,7 @@ function isoToDisplay(iso: string): string {
 
 const CHART_COLORS = [
   "#0ea5e9", // 0 ocean blue (แทน navy เดิม - สว่างและเด่นชัด)
-  "#fdd52c", // 1 yellow (primary)
+  "#60a5fa", // 1 yellow (primary)
   "#ec1501", // 2 red (accent)
   "#7dd3fc", // 3 sky light (แทน navy-light)
   "#244e61", // 4 teal-navy (ถ้ายังเข้มไป เปลี่ยนเป็น #38bdf8)
@@ -865,16 +865,16 @@ export default function DashboardPage() {
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-linear-to-t from-yellow-100 to-yellow-50">
       {/* ── Top bar with auth ──────────────────────────────────────────── */}
-      <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-sm border-b border-gray-200 shadow-sm">
+      <div className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-gray-200/60 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-3">
           {/* Auth row */}
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
                 <svg
-                  className="w-4 h-4 text-primary"
+                  className="w-4 h-4 text-black"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -1086,7 +1086,7 @@ export default function DashboardPage() {
         {!dataLoading && totals && (
           <>
             {/* ── Scorecards + Gauge ─────────────────────────────────────── */}
-            <div className="flex gap-4 mb-8 items-start" data-aos="fade-up">
+            <div className="flex gap-4 mb-8 items-start">
               {/* Scorecard grid */}
               {(() => {
                 const isHL = (label: string) => {
@@ -1094,7 +1094,7 @@ export default function DashboardPage() {
                   return key ? highlightMetrics.includes(key) : false;
                 };
                 return (
-                  <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                  <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3" data-aos="fade-up">
                     <MetricCard
                       label="Impressions"
                       value={fmtK(totals.impressions)}
@@ -1227,7 +1227,7 @@ export default function DashboardPage() {
                 );
               })()}
               {/* Frequency Gauge */}
-              <div className="hidden lg:block w-64 flex-none">
+              <div className="hidden lg:block w-64 flex-none" data-aos="fade-left">
                 <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 hover:shadow-md transition-shadow">
                   <div className="flex items-center justify-center gap-1 mb-1">
                     <p className="text-xs text-gray-500 font-medium text-center">
@@ -1768,10 +1768,10 @@ export default function DashboardPage() {
               />
               <div
                 className="grid grid-cols-1 lg:grid-cols-2 gap-6"
-                data-aos="fade-up"
+                data-aos="fade-left"
               >
                 {/* Map */}
-                <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <div className="bg-white border border-gray-200 rounded-lg p-4" data-aos="fade-right">
                   <ThaiGeoChart
                     regions={geoRegions.map((r) => ({
                       region: r.region,
@@ -1837,11 +1837,10 @@ export default function DashboardPage() {
               />
               <div
                 className="grid grid-cols-1 lg:grid-cols-3 gap-6"
-                data-aos="fade-up"
               >
                 {/* Age/Gender Stacked Bar Chart */}
                 {ageGender.length > 0 && (
-                  <div className="lg:col-span-2 bg-white border border-gray-200 rounded-xl p-4">
+                  <div className="lg:col-span-2 bg-white border border-gray-200 rounded-xl p-4" data-aos="fade-left">
                     <Chart
                       chartType="BarChart"
                       width="100%"
@@ -1882,7 +1881,7 @@ export default function DashboardPage() {
 
                 {/* Device Donut Chart */}
                 {devices.length > 0 && (
-                  <div className="bg-white border border-gray-200 rounded-xl p-4">
+                  <div className="bg-white border border-gray-200 rounded-xl p-4" data-aos="fade-right">
                     <Chart
                       chartType="PieChart"
                       width="100%"
