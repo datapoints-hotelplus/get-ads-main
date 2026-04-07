@@ -865,7 +865,7 @@ export default function DashboardPage() {
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-linear-to-t from-yellow-100 to-yellow-50">
+    <div className="min-h-screen bg-linear-to-t from-yellow-100 to-yellow-50 bg-linear-to-t from-yellow-100 to-yellow-50">
       {/* ── Top bar with auth ──────────────────────────────────────────── */}
       <div className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-gray-200/60 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-3">
@@ -1094,7 +1094,10 @@ export default function DashboardPage() {
                   return key ? highlightMetrics.includes(key) : false;
                 };
                 return (
-                  <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3" data-aos="fade-up">
+                  <div
+                    className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3"
+                    data-aos="fade-up"
+                  >
                     <MetricCard
                       label="Impressions"
                       value={fmtK(totals.impressions)}
@@ -1227,7 +1230,10 @@ export default function DashboardPage() {
                 );
               })()}
               {/* Frequency Gauge */}
-              <div className="hidden lg:block w-64 flex-none" data-aos="fade-left">
+              <div
+                className="hidden lg:block w-64 flex-none"
+                data-aos="fade-left"
+              >
                 <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 hover:shadow-md transition-shadow">
                   <div className="flex items-center justify-center gap-1 mb-1">
                     <p className="text-xs text-gray-500 font-medium text-center">
@@ -1771,7 +1777,10 @@ export default function DashboardPage() {
                 data-aos="fade-left"
               >
                 {/* Map */}
-                <div className="bg-white border border-gray-200 rounded-lg p-4" data-aos="fade-right">
+                <div
+                  className="bg-white border border-gray-200 rounded-lg p-4"
+                  data-aos="fade-right"
+                >
                   <ThaiGeoChart
                     regions={geoRegions.map((r) => ({
                       region: r.region,
@@ -1835,12 +1844,13 @@ export default function DashboardPage() {
                 title="กลุ่มเป้าหมาย"
                 tip={`ใช้ดูว่าโฆษณาเข้าถึงกลุ่มไหนมากที่สุด\n\n📊 กราฟแท่ง = แยกตามอายุ + เพศ\n🍩 กราฟวงกลม = แยกตามอุปกรณ์\n\nช่วยปรับ targeting ให้ตรงกลุ่มมากขึ้น`}
               />
-              <div
-                className="grid grid-cols-1 lg:grid-cols-3 gap-6"
-              >
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Age/Gender Stacked Bar Chart */}
                 {ageGender.length > 0 && (
-                  <div className="lg:col-span-2 bg-white border border-gray-200 rounded-xl p-4" data-aos="fade-left">
+                  <div
+                    className="lg:col-span-2 bg-white border border-gray-200 rounded-xl p-4"
+                    data-aos="fade-left"
+                  >
                     <Chart
                       chartType="BarChart"
                       width="100%"
@@ -1881,7 +1891,10 @@ export default function DashboardPage() {
 
                 {/* Device Donut Chart */}
                 {devices.length > 0 && (
-                  <div className="bg-white border border-gray-200 rounded-xl p-4" data-aos="fade-right">
+                  <div
+                    className="bg-white border border-gray-200 rounded-xl p-4"
+                    data-aos="fade-right"
+                  >
                     <Chart
                       chartType="PieChart"
                       width="100%"
