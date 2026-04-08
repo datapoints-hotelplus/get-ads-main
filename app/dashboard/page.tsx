@@ -463,42 +463,42 @@ function HeatmapTable({ rows }: { rows: GroupRow[] }) {
         [
           {
             key: "impressions",
-            label: "impressions",
+            label: "ครั้งแสดง",
             fmt: (v: number) => fmtK(v),
           },
           {
             key: "clicks",
-            label: "inline_link_clicks",
+            label: "จำนวนคลิก",
             fmt: (v: number) => fmtK(v),
           },
           {
             key: "unique_clicks",
-            label: "unique_link_cli…",
+            label: "คลิกไม่ซ้ำ",
             fmt: (v: number) => fmtK(v),
           },
-          { key: "reach", label: "reach", fmt: (v: number) => fmtK(v) },
-          { key: "spend", label: "spend", fmt: (v: number) => fmtK(v) },
-          { key: "revenue", label: "revenue", fmt: (v: number) => fmtK(v) },
+          { key: "reach", label: "ผู้เห็น", fmt: (v: number) => fmtK(v) },
+          { key: "spend", label: "ยอดใช้จ่าย", fmt: (v: number) => fmtK(v) },
+          { key: "revenue", label: "ยอดขาย", fmt: (v: number) => fmtK(v) },
           {
             key: "roas",
             label: "ROAS",
             fmt: (v: number) => `${v.toFixed(2)}x`,
           },
           { key: "ctr", label: "CTR", fmt: (v: number) => `${v.toFixed(2)}%` },
-          { key: "cpc", label: "CPC", fmt: (v: number) => fmtK(v) },
+          { key: "cpc", label: "ต้นทุนต่อคลิก", fmt: (v: number) => fmtK(v) },
           {
             key: "post_engagement",
-            label: "Post Engagement",
+            label: "การมีส่วนร่วม",
             fmt: (v: number) => fmtK(v),
           },
           {
             key: "cost_per_engagement",
-            label: "Cost/Engagement",
+            label: "ต้นทุนต่อการมีส่วนร่วม",
             fmt: (v: number) => fmtK(v),
           },
           {
             key: "cost_per_like",
-            label: "Cost/Like",
+            label: "ต้นทุนต่อการติดตาม",
             fmt: (v: number) => fmtK(v),
           },
         ] as const
@@ -1242,11 +1242,12 @@ export default function DashboardPage() {
                   </div>
                 );
               })()}
-              {/* Frequency Gauge */}
+              {/* Frequency Gauge + Color Legend (vertical stack) */}
               <div
-                className="hidden lg:block w-64 flex-none"
+                className="hidden lg:flex flex-col w-64 flex-none gap-4"
                 data-aos="fade-left"
               >
+                {/* Frequency Gauge */}
                 <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 hover:shadow-md transition-shadow">
                   <div className="flex items-center justify-center gap-1 mb-1">
                     <p className="text-xs text-gray-500 font-medium text-center">
@@ -1273,6 +1274,30 @@ export default function DashboardPage() {
                   <div className="flex justify-between text-xs text-gray-400 font-medium px-2 -mt-1">
                     <span>0</span>
                     <span>8</span>
+                  </div>
+                </div>
+                {/* Color Legend for MetricCards */}
+                <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 space-y-2">
+                  <p className="text-xs font-semibold text-secondary mb-2">
+                    กำกับสี
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-primary" />
+                    <span className="text-xs text-gray-600">เขต / คนเห็น</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-red-500" />
+                    <span className="text-xs text-gray-600">
+                      ลีด / แชท / มีส่วนร่วม
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-blue-500" />
+                    <span className="text-xs text-gray-600">ติดตามเพจ</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-gray-300" />
+                    <span className="text-xs text-gray-600">ต้นทุน</span>
                   </div>
                 </div>
               </div>
@@ -1404,10 +1429,10 @@ export default function DashboardPage() {
                     height="400px"
                     data={[
                       [
-                        "Date",
-                        "inline_link_clicks",
-                        "unique_inline_link_clicks",
-                        "cpc",
+                        "วันที่",
+                        "คลิก",
+                        "คลิกไม่ซ้ำ",
+                        "ต้นทุนต่อคลิก",
                         { role: "annotation" },
                         `เฉลี่ย (${avgCpc.toFixed(2)})`,
                       ],
@@ -1455,13 +1480,13 @@ export default function DashboardPage() {
                       },
                       vAxes: {
                         0: {
-                          title: "cpc | unique_inline_link_clicks",
+                          title: "ต้นทุนต่อคลิก | คลิกไม่ซ้ำ",
                           format: "#,###",
                           minValue: 0,
                           gridlines: { color: CHART_GRID },
                         },
                         1: {
-                          title: "inline_link_clicks",
+                          title: "จำนวนคลิก",
                           format: "#,###",
                           minValue: 0,
                           gridlines: { color: CHART_GRID },
@@ -1512,11 +1537,7 @@ export default function DashboardPage() {
                   width="100%"
                   height="400px"
                   data={[
-                    [
-                      "Date",
-                      "Cost per messaging conversation started",
-                      "messaging_conversations_started",
-                    ],
+                    ["วันที่", "ต้นทุนต่อแชท", "จำนวนแชท"],
                     ...timeSeries.map((p) => [
                       p.date,
                       p.cost_per_message,
@@ -1543,13 +1564,13 @@ export default function DashboardPage() {
                     },
                     vAxes: {
                       0: {
-                        title: "Cost per messaging conversation started",
+                        title: "ต้นทุนต่อแชท",
                         format: "#,###",
                         minValue: 0,
                         gridlines: { color: CHART_GRID },
                       },
                       1: {
-                        title: "messaging_conversations_started",
+                        title: "จำนวนแชท",
                         format: "#,###",
                         minValue: 0,
                         gridlines: { color: CHART_GRID },
@@ -1599,7 +1620,7 @@ export default function DashboardPage() {
                   width="100%"
                   height="400px"
                   data={[
-                    ["Date", "Cost per Engagement", "Post Engagement"],
+                    ["วันที่", "ต้นทุนต่อการมีส่วนร่วม", "การมีส่วนร่วม"],
                     ...timeSeries.map((p) => [
                       p.date,
                       p.cost_per_engagement,
@@ -1626,13 +1647,13 @@ export default function DashboardPage() {
                     },
                     vAxes: {
                       0: {
-                        title: "Cost per Engagement",
+                        title: "ต้นทุนต่อการมีส่วนร่วม",
                         format: "#,###",
                         minValue: 0,
                         gridlines: { color: CHART_GRID },
                       },
                       1: {
-                        title: "Post Engagement",
+                        title: "การมีส่วนร่วม",
                         format: "#,###",
                         minValue: 0,
                         gridlines: { color: CHART_GRID },
@@ -1682,12 +1703,12 @@ export default function DashboardPage() {
                   height="400px"
                   data={[
                     [
-                      "Date",
-                      "spend",
-                      "messaging_conversations_started",
-                      "impressions",
-                      "reach (รายวัน)",
-                      "leads",
+                      "วันที่",
+                      "ยอดใช้จ่าย",
+                      "จำนวนแชท",
+                      "ครั้งแสดง",
+                      "ผู้เห็น",
+                      "ลีด",
                     ],
                     ...timeSeries.map((p) => [
                       p.date,
@@ -1739,13 +1760,13 @@ export default function DashboardPage() {
                     },
                     vAxes: {
                       0: {
-                        title: "impressions | reach",
+                        title: "ครั้งแสดง | ผู้เห็น",
                         format: "short",
                         minValue: 0,
                         gridlines: { color: CHART_GRID },
                       },
                       1: {
-                        title: "spend | messaging | leads",
+                        title: "ยอดใช้จ่าย | แชท | ลีด",
                         format: "short",
                         minValue: 0,
                         gridlines: { color: CHART_GRID },
@@ -1812,10 +1833,10 @@ export default function DashboardPage() {
                             #
                           </th>
                           <th className="text-left px-4 py-2 text-gray-600 font-medium">
-                            Region
+                            พื้นที่
                           </th>
                           <th className="text-right px-4 py-2 text-gray-600 font-medium">
-                            inline_link_clicks
+                            จำนวนคลิก
                           </th>
                         </tr>
                       </thead>

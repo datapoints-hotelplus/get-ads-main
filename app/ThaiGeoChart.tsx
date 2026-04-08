@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Chart as ChartJS, CategoryScale, Tooltip, Legend } from "chart.js";
 import {
-  Chart as ChartJS,
-  CategoryScale,
-  Tooltip,
-  Legend,
-} from "chart.js";
-import { ChoroplethController, GeoFeature, ColorScale, ProjectionScale } from "chartjs-chart-geo";
+  ChoroplethController,
+  GeoFeature,
+  ColorScale,
+  ProjectionScale,
+} from "chartjs-chart-geo";
 import * as topojson from "topojson-client";
 
 ChartJS.register(
@@ -31,7 +31,9 @@ export default function ThaiGeoChart({ regions }: Props) {
 
   // Load Thailand GeoJSON
   useEffect(() => {
-    fetch("https://raw.githubusercontent.com/apisit/thailand.json/master/thailand.json")
+    fetch(
+      "https://raw.githubusercontent.com/apisit/thailand.json/master/thailand.json",
+    )
       .then((r) => r.json())
       .then((data) => {
         // This file is GeoJSON (FeatureCollection), not TopoJSON
@@ -63,11 +65,18 @@ export default function ThaiGeoChart({ regions }: Props) {
     for (const r of regions) {
       regionMap.set(r.region.toLowerCase(), r.value);
       // Also try without "จ." or "จังหวัด" prefix
-      regionMap.set(r.region.replace(/^(จ\.|จังหวัด)\s*/i, "").toLowerCase(), r.value);
+      regionMap.set(
+        r.region.replace(/^(จ\.|จังหวัด)\s*/i, "").toLowerCase(),
+        r.value,
+      );
     }
 
     const data = features.map((f: any) => {
-      const name = (f.properties.name || f.properties.NAME_1 || "").toLowerCase();
+      const name = (
+        f.properties.name ||
+        f.properties.NAME_1 ||
+        ""
+      ).toLowerCase();
       return {
         feature: f,
         value: regionMap.get(name) ?? 0,
@@ -77,10 +86,12 @@ export default function ThaiGeoChart({ regions }: Props) {
     chartRef.current = new ChartJS(canvasRef.current, {
       type: "choropleth" as any,
       data: {
-        labels: features.map((f: any) => f.properties.name || f.properties.NAME_1 || ""),
+        labels: features.map(
+          (f: any) => f.properties.name || f.properties.NAME_1 || "",
+        ),
         datasets: [
           {
-            label: "Clicks",
+            label: "คลิก",
             data,
             outline: features,
           } as any,

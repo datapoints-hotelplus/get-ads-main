@@ -190,19 +190,22 @@ export default function SummaryPage() {
                 highlight={data.totals.roas >= 1 ? "green" : "red"}
               />
               <KpiCard
-                label="Purchases"
+                label="การซื้อ"
                 value={fmt(data.totals.purchases, 0)}
-                sub={`Cost/Purchase ฿${fmt(data.totals.cost_per_purchase)}`}
+                sub={`ต้นทุนต่อครั้ง ฿${fmt(data.totals.cost_per_purchase)}`}
               />
               <KpiCard
-                label="Reach"
+                label="ผู้เห็น"
                 value={fmt(data.totals.reach, 0)}
-                sub={`Impressions ${fmt(data.totals.impressions, 0)}`}
+                sub={`การแสดง ${fmt(data.totals.impressions, 0)}`}
               />
-              <KpiCard label="Clicks" value={fmt(data.totals.clicks, 0)} />
-              <KpiCard label="CTR" value={`${fmt(data.totals.ctr)}%`} />
-              <KpiCard label="CPC" value={`฿${fmt(data.totals.cpc)}`} />
-              <KpiCard label="Frequency" value="—" sub="Average per person" />
+              <KpiCard label="คลิก" value={fmt(data.totals.clicks, 0)} />
+              <KpiCard label="อัตราคลิก" value={`${fmt(data.totals.ctr)}%`} />
+              <KpiCard
+                label="ต้นทุนต่อคลิก"
+                value={`฿${fmt(data.totals.cpc)}`}
+              />
+              <KpiCard label="ความถี่" value="—" sub="เฉลี่ยต่อคน" />
             </div>
 
             {/* By Campaign */}
@@ -215,13 +218,13 @@ export default function SummaryPage() {
                   <thead className="bg-secondary text-gray-100 uppercase text-xs">
                     <tr>
                       <th className="px-3 py-3">Campaign</th>
-                      <th className="px-3 py-3 text-right">Spend (฿)</th>
-                      <th className="px-3 py-3 text-right">Reach</th>
-                      <th className="px-3 py-3 text-right">Impressions</th>
-                      <th className="px-3 py-3 text-right">Clicks</th>
-                      <th className="px-3 py-3 text-right">CTR (%)</th>
-                      <th className="px-3 py-3 text-right">Purchases</th>
-                      <th className="px-3 py-3 text-right">Revenue (฿)</th>
+                      <th className="px-3 py-3 text-right">ยอดใช้จ่าย (฿)</th>
+                      <th className="px-3 py-3 text-right">ผู้เห็น</th>
+                      <th className="px-3 py-3 text-right">ครั้งแสดง</th>
+                      <th className="px-3 py-3 text-right">คลิก</th>
+                      <th className="px-3 py-3 text-right">อัตราคลิก (%)</th>
+                      <th className="px-3 py-3 text-right">การซื้อ</th>
+                      <th className="px-3 py-3 text-right">ยอดขาย (฿)</th>
                       <th className="px-3 py-3 text-right">ROAS</th>
                     </tr>
                   </thead>
