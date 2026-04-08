@@ -1283,21 +1283,21 @@ export default function DashboardPage() {
                   </p>
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-primary" />
-                    <span className="text-xs text-gray-600">เขต / คนเห็น</span>
+                    <span className="text-xs text-gray-600">Reach (คนเห็น)</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-red-500" />
                     <span className="text-xs text-gray-600">
-                      ลีด / แชท / มีส่วนร่วม
+                      Engage (มีส่วนร่วม)
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-blue-500" />
-                    <span className="text-xs text-gray-600">ติดตามเพจ</span>
+                    <span className="text-xs text-gray-600">Follow (ติดตาม)</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-gray-300" />
-                    <span className="text-xs text-gray-600">ต้นทุน</span>
+                    <span className="text-xs text-gray-600">Cost (ต้นทุน)</span>
                   </div>
                 </div>
               </div>
