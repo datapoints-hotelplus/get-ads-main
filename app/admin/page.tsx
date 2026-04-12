@@ -21,6 +21,11 @@ export default function AdminPage() {
 
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
   const [toggleLoading, setToggleLoading] = useState<string | null>(null);
+  const [fetchLoading, setFetchLoading] = useState(false);
+  const [fetchMessage, setFetchMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
 
   async function fetchAccounts() {
     const res = await fetch("/api/admin/accounts");
@@ -106,6 +111,37 @@ export default function AdminPage() {
     router.push("/admin/login");
   }
 
+  async function handleFetchFromFacebook() {
+    if (
+      !window.confirm(
+        "ดึงข้อมูล Ad Account จาก Facebook และอัปเดตชื่อในระบบ?\n(Account ID เดิมจะถูกอัปเดตชื่อ ไม่ถูกลบ)",
+      )
+    )
+      return;
+    setFetchLoading(true);
+    setFetchMessage(null);
+    try {
+      const res = await fetch("/api/admin/accounts", { method: "PUT" });
+      const data = await res.json();
+      if (res.ok) {
+        setFetchMessage({
+          type: "success",
+          text: `ดึงข้อมูลสำเร็จ ${data.fetched} บัญชี`,
+        });
+        await fetchAccounts();
+      } else {
+        setFetchMessage({
+          type: "error",
+          text: data.error ?? "เกิดข้อผิดพลาด",
+        });
+      }
+    } catch {
+      setFetchMessage({ type: "error", text: "Network error" });
+    } finally {
+      setFetchLoading(false);
+    }
+  }
+
   return (
     <div className=" min-h-screen bg-gray-100">
       {/* Header */}
@@ -135,6 +171,12 @@ export default function AdminPage() {
             className="text-sm text-secondary/80 hover:text-secondary font-medium"
           >
             Highlight Metrics
+          </button>
+          <button
+            onClick={() => router.push("/admin/sync")}
+            className="text-sm text-secondary/80 hover:text-secondary font-medium"
+          >
+            Sync Panel
           </button>
           <button
             onClick={() => router.push("/admin/docs")}
@@ -208,7 +250,7 @@ export default function AdminPage() {
           data-aos="fade-up"
           data-aos-delay="100"
         >
-          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
             <h2 className="text-lg font-semibold text-gray-900">
               Accounts
               {!loading && (
@@ -217,6 +259,41 @@ export default function AdminPage() {
                 </span>
               )}
             </h2>
+            <div className="flex items-center gap-3">
+              {fetchMessage && (
+                <span
+                  className={`text-sm ${fetchMessage.type === "success" ? "text-green-600" : "text-red-600"}`}
+                >
+                  {fetchMessage.text}
+                </span>
+              )}
+              <button
+                onClick={handleFetchFromFacebook}
+                disabled={fetchLoading}
+                className="inline-flex items-center gap-1.5 bg-secondary hover:bg-secondary-light disabled:opacity-60 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+              >
+                {fetchLoading ? (
+                  "กำลังดึงข้อมูล…"
+                ) : (
+                  <>
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                      />
+                    </svg>
+                    Fetch from Facebook
+                  </>
+                )}
+              </button>
+            </div>
           </div>
 
           {loading ? (

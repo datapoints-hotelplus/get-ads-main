@@ -11,6 +11,7 @@ import {
   type SortingState,
 } from "@tanstack/react-table";
 import { Chart } from "react-google-charts";
+import ReactSelect from "react-select";
 import FrequencyGauge from "../FrequencyGauge";
 import ThaiGeoChart from "../ThaiGeoChart";
 
@@ -280,29 +281,9 @@ function MetricCard({
   const green = invertColor ? !isPositive : isPositive;
   const tip = METRIC_TIPS[label];
 
-  // Determine border color based on metric label
-  const getBorderColor = () => {
-    const lowerLabel = label.toLowerCase();
-    if (
-      lowerLabel.includes("lead") ||
-      lowerLabel.includes("messages") ||
-      lowerLabel.includes("engagement")
-    ) {
-      return "border-l-4 border-l-red-500";
-    }
-    if (lowerLabel.includes("reach") || lowerLabel.includes("impression")) {
-      return "border-l-4 border-l-primary";
-    }
-    if (lowerLabel.includes("page likes") || lowerLabel.includes("like")) {
-      return "border-l-4 border-l-blue-500";
-    }
-    // Default gray for costs
-    return "border-l-4 border-l-gray-300";
-  };
-
   return (
     <div
-      className={`rounded-xl border px-4 py-4 flex flex-col gap-1 transition-all ${getBorderColor()} ${
+      className={`rounded-xl border px-4 py-4 flex flex-col gap-1 transition-all border-l-4 border-l-gray-300 ${
         highlight
           ? "bg-linear-to-t from-yellow-300 to-yellow-100 border-yellow-400 shadow-md ring-2 ring-yellow-200"
           : "bg-white border-gray-200 hover:shadow-md"
@@ -641,6 +622,36 @@ export default function DashboardPage() {
   const [campaign, setCampaign] = useState("");
   const [adset, setAdset] = useState("");
 
+  // Shared styles for react-select dropdowns
+  const selectStyles = {
+    control: (base: object) => ({
+      ...base,
+      minHeight: "38px",
+      fontSize: "0.875rem",
+      borderColor: "#d1d5db",
+      borderRadius: "0.5rem",
+      boxShadow: "none",
+      "&:hover": { borderColor: "#9ca3af" },
+    }),
+    menu: (base: object) => ({ ...base, fontSize: "0.875rem", zIndex: 50 }),
+    option: (
+      base: object,
+      state: { isFocused: boolean; isSelected: boolean },
+    ) => ({
+      ...base,
+      fontSize: "0.875rem",
+      color: "#111827",
+      backgroundColor: state.isSelected
+        ? "#e5e7eb"
+        : state.isFocused
+          ? "#f3f4f6"
+          : "#ffffff",
+    }),
+    singleValue: (base: object) => ({ ...base, color: "#111827" }),
+    placeholder: (base: object) => ({ ...base, color: "#9ca3af" }),
+    input: (base: object) => ({ ...base, color: "#111827" }),
+  };
+
   // Options for selects
   const [options, setOptions] = useState<Options>({
     accounts: [],
@@ -674,8 +685,20 @@ export default function DashboardPage() {
   >([]);
   const [demoLoading, setDemoLoading] = useState(false);
 
-  // Highlight metrics config
-  const [highlightMetrics, setHighlightMetrics] = useState<string[]>([]);
+  // Highlight metrics based on campaign name prefix
+  const highlightMetrics = useMemo<string[]>(() => {
+    if (!campaign) return [];
+    const upper = campaign.toUpperCase();
+    if (upper.startsWith("MES"))
+      return ["messages", "cost_per_message", "ctr", "clicks", "spend"];
+    if (upper.startsWith("AWN"))
+      return ["reach", "cpm", "impressions", "spend"];
+    if (upper.startsWith("ENG"))
+      return ["post_engagement", "cost_per_engagement", "post_shares", "spend"];
+    if (upper.startsWith("PL"))
+      return ["page_likes", "cost_per_like", "reach", "spend"];
+    return [];
+  }, [campaign]);
 
   // Time-series data state (CPM vs Impressions)
   const [timeSeries, setTimeSeries] = useState<TimeSeriesPoint[]>([]);
@@ -747,23 +770,6 @@ export default function DashboardPage() {
   useEffect(() => {
     loadOptions(account, campaign);
   }, [account, campaign, loadOptions]);
-
-  // Fetch highlight metrics when campaign changes
-  useEffect(() => {
-    if (!campaign) {
-      setHighlightMetrics([]);
-      return;
-    }
-    fetch(
-      `/api/dashboard?type=highlights&campaign=${encodeURIComponent(campaign)}`,
-    )
-      .then((r) => r.json())
-      .then((data) => {
-        const hl = data.highlights?.[campaign] ?? [];
-        setHighlightMetrics(hl);
-      })
-      .catch(() => setHighlightMetrics([]));
-  }, [campaign]);
 
   // ── Fetch dashboard data ────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
@@ -960,19 +966,19 @@ export default function DashboardPage() {
                 <label className="text-xs font-medium text-secondary/70">
                   Account
                 </label>
-                <select
-                  value={account}
-                  onChange={(e) => handleAccountChange(e.target.value)}
-                  disabled={optLoading}
-                  className="border border-secondary/20 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-secondary/30 disabled:opacity-50"
-                >
-                  <option value="">-- ทั้งหมด --</option>
-                  {options.accounts.map((a) => (
-                    <option key={a} value={a}>
-                      {a}
-                    </option>
-                  ))}
-                </select>
+                <ReactSelect
+                  value={account ? { value: account, label: account } : null}
+                  onChange={(opt) => handleAccountChange(opt ? opt.value : "")}
+                  isDisabled={optLoading}
+                  placeholder="-- ทั้งหมด --"
+                  isClearable
+                  options={options.accounts.map((a) => ({
+                    value: a,
+                    label: a,
+                  }))}
+                  classNamePrefix="rs"
+                  styles={selectStyles}
+                />
               </div>
 
               {/* Campaign */}
@@ -980,19 +986,19 @@ export default function DashboardPage() {
                 <label className="text-xs font-medium text-secondary/70">
                   Campaign
                 </label>
-                <select
-                  value={campaign}
-                  onChange={(e) => handleCampaignChange(e.target.value)}
-                  disabled={optLoading}
-                  className="border border-secondary/20 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-secondary/30 disabled:opacity-50 truncate"
-                >
-                  <option value="">-- ทั้งหมด --</option>
-                  {options.campaigns.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
+                <ReactSelect
+                  value={campaign ? { value: campaign, label: campaign } : null}
+                  onChange={(opt) => handleCampaignChange(opt ? opt.value : "")}
+                  isDisabled={optLoading}
+                  placeholder="-- ทั้งหมด --"
+                  isClearable
+                  options={options.campaigns.map((c) => ({
+                    value: c,
+                    label: c,
+                  }))}
+                  classNamePrefix="rs"
+                  styles={selectStyles}
+                />
               </div>
 
               {/* Adset */}
@@ -1000,19 +1006,16 @@ export default function DashboardPage() {
                 <label className="text-xs font-medium text-secondary/70">
                   Ad Set
                 </label>
-                <select
-                  value={adset}
-                  onChange={(e) => setAdset(e.target.value)}
-                  disabled={optLoading}
-                  className="border border-secondary/20 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-secondary/30 disabled:opacity-50 truncate"
-                >
-                  <option value="">-- ทั้งหมด --</option>
-                  {options.adsets.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
+                <ReactSelect
+                  value={adset ? { value: adset, label: adset } : null}
+                  onChange={(opt) => setAdset(opt ? opt.value : "")}
+                  isDisabled={optLoading}
+                  placeholder="-- ทั้งหมด --"
+                  isClearable
+                  options={options.adsets.map((s) => ({ value: s, label: s }))}
+                  classNamePrefix="rs"
+                  styles={selectStyles}
+                />
               </div>
 
               {/* Buttons on same line */}
@@ -1274,30 +1277,6 @@ export default function DashboardPage() {
                   <div className="flex justify-between text-xs text-gray-400 font-medium px-2 -mt-1">
                     <span>0</span>
                     <span>8</span>
-                  </div>
-                </div>
-                {/* Color Legend for MetricCards */}
-                <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 space-y-2">
-                  <p className="text-xs font-semibold text-secondary mb-2">
-                    กำกับสี
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-primary" />
-                    <span className="text-xs text-gray-600">Reach (คนเห็น)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-red-500" />
-                    <span className="text-xs text-gray-600">
-                      Engage (มีส่วนร่วม)
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-blue-500" />
-                    <span className="text-xs text-gray-600">Follow (ติดตาม)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-gray-300" />
-                    <span className="text-xs text-gray-600">Cost (ต้นทุน)</span>
                   </div>
                 </div>
               </div>

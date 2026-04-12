@@ -1,3 +1,4 @@
+// ดึงข้อมูลย้อนหลัง 7 วัน (00:00–23:59 ทุกวัน) แล้ว upsert เข้า Supabase
 import { NextResponse } from "next/server";
 import axios from "axios";
 import { getSupabase } from "@/lib/supabase";
@@ -10,8 +11,6 @@ type FBItem = { actions?: FBAction[]; action_values?: FBAction[] } & Record<
   unknown
 >;
 type SheetKey = "rawdata" | "geo" | "demographic" | "device";
-
-// ─── Field lists ──────────────────────────────────────────────────────────────
 
 const BASE_FIELDS = [
   "ad_id",
@@ -75,25 +74,18 @@ const SCHEMA: Record<
   },
 };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 function num(v: unknown): number {
   const n = parseFloat(String(v ?? "0"));
   return isNaN(n) ? 0 : n;
 }
-
 function findAction(arr: FBAction[] | undefined, type: string): number {
   return num(arr?.find((a) => a.action_type === type)?.value);
 }
-
 function findVideoAction(arr: unknown, type: string): number {
   if (!Array.isArray(arr)) return 0;
   return num((arr as FBAction[]).find((a) => a.action_type === type)?.value);
 }
-
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-// ─── Row parsers → plain objects for Supabase ─────────────────────────────────
 
 function toRawdata(item: FBItem) {
   const spend = num(item.spend);
@@ -122,23 +114,9 @@ function toRawdata(item: FBItem) {
     item.video_avg_time_watched_actions,
     "video_view",
   );
-  // 3-second views = video_view action
   const video_views_3s = findAction(item.actions, "video_view");
-  const hook_rate =
-    impressions > 0
-      ? parseFloat(((video_views_3s / impressions) * 100).toFixed(4))
-      : 0;
-  const hold_rate =
-    video_views_3s > 0
-      ? parseFloat(((video_p100 / video_views_3s) * 100).toFixed(4))
-      : 0;
   const post_engagement = findAction(item.actions, "post_engagement");
   const page_likes = findAction(item.actions, "like");
-  const cost_per_engagement =
-    post_engagement > 0 ? parseFloat((spend / post_engagement).toFixed(4)) : 0;
-  const cost_per_like =
-    page_likes > 0 ? parseFloat((spend / page_likes).toFixed(4)) : 0;
-
   return {
     date_start: String(item.date_start ?? ""),
     date_stop: String(item.date_stop ?? ""),
@@ -175,53 +153,59 @@ function toRawdata(item: FBItem) {
     roas: spend > 0 ? parseFloat((purchase_value / spend).toFixed(4)) : 0,
     cost_per_result:
       purchases > 0 ? parseFloat((spend / purchases).toFixed(4)) : 0,
-    // Video engagement
     video_views_3s,
     video_p25,
     video_p50,
     video_p75,
     video_p100,
     video_avg_time,
-    hook_rate,
-    hold_rate,
-    // Messaging & Leads
+    hook_rate:
+      impressions > 0
+        ? parseFloat(((video_views_3s / impressions) * 100).toFixed(4))
+        : 0,
+    hold_rate:
+      video_views_3s > 0
+        ? parseFloat(((video_p100 / video_views_3s) * 100).toFixed(4))
+        : 0,
     messaging_conversations_started: findAction(
       item.actions,
       "onsite_conversion.messaging_conversation_started_7d",
     ),
     leads: findAction(item.actions, "lead"),
-    // Post interactions
     post_shares: findAction(item.actions, "post"),
     post_comments: findAction(item.actions, "comment"),
     post_reactions: findAction(item.actions, "post_reaction"),
     page_likes,
     post_engagement,
-    cost_per_engagement,
-    cost_per_like,
+    cost_per_engagement:
+      post_engagement > 0
+        ? parseFloat((spend / post_engagement).toFixed(4))
+        : 0,
+    cost_per_like:
+      page_likes > 0 ? parseFloat((spend / page_likes).toFixed(4)) : 0,
   };
 }
 
 function toGeo(item: FBItem) {
-  const spend = num(item.spend);
-  const purchases = findAction(item.actions, "purchase");
+  const clicks = parseInt(String(item.inline_link_clicks ?? "0"), 10);
   return {
     date_start: String(item.date_start ?? ""),
     date_stop: String(item.date_stop ?? ""),
     ad_id: String(item.ad_id ?? ""),
     ad_name: String(item.ad_name ?? ""),
     region: String(item.region ?? ""),
-    spend,
+    spend: num(item.spend),
     reach: parseInt(String(item.reach ?? "0"), 10),
     impressions: parseInt(String(item.impressions ?? "0"), 10),
-    inline_link_clicks: parseInt(String(item.inline_link_clicks ?? "0"), 10),
-    purchases,
+    inline_link_clicks: clicks,
+    clicks_all: clicks,
+    purchases: findAction(item.actions, "purchase"),
     purchase_value: findAction(item.action_values, "purchase"),
   };
 }
 
 function toDemographic(item: FBItem) {
-  const spend = num(item.spend);
-  const purchases = findAction(item.actions, "purchase");
+  const clicks = parseInt(String(item.inline_link_clicks ?? "0"), 10);
   return {
     date_start: String(item.date_start ?? ""),
     date_stop: String(item.date_stop ?? ""),
@@ -229,36 +213,35 @@ function toDemographic(item: FBItem) {
     ad_name: String(item.ad_name ?? ""),
     age: String(item.age ?? ""),
     gender: String(item.gender ?? ""),
-    spend,
+    spend: num(item.spend),
     reach: parseInt(String(item.reach ?? "0"), 10),
     impressions: parseInt(String(item.impressions ?? "0"), 10),
-    inline_link_clicks: parseInt(String(item.inline_link_clicks ?? "0"), 10),
-    purchases,
+    inline_link_clicks: clicks,
+    clicks_all: clicks,
+    purchases: findAction(item.actions, "purchase"),
     purchase_value: findAction(item.action_values, "purchase"),
   };
 }
 
 function toDevice(item: FBItem) {
-  const spend = num(item.spend);
-  const purchases = findAction(item.actions, "purchase");
+  const clicks = parseInt(String(item.inline_link_clicks ?? "0"), 10);
   return {
     date_start: String(item.date_start ?? ""),
     date_stop: String(item.date_stop ?? ""),
     ad_id: String(item.ad_id ?? ""),
     ad_name: String(item.ad_name ?? ""),
     impression_device: String(item.impression_device ?? ""),
-    spend,
+    spend: num(item.spend),
     reach: parseInt(String(item.reach ?? "0"), 10),
     impressions: parseInt(String(item.impressions ?? "0"), 10),
-    inline_link_clicks: parseInt(String(item.inline_link_clicks ?? "0"), 10),
-    purchases,
+    inline_link_clicks: clicks,
+    clicks_all: clicks,
+    purchases: findAction(item.actions, "purchase"),
     purchase_value: findAction(item.action_values, "purchase"),
   };
 }
 
-// ─── Fetch one month, all pages ───────────────────────────────────────────────
-
-async function fetchMonth(
+async function fetchRange(
   accountId: string,
   accessToken: string,
   since: string,
@@ -274,7 +257,6 @@ async function fetchMonth(
   while (firstRequest || nextUrl) {
     firstRequest = false;
     page++;
-
     const res: { data: { data?: FBItem[]; paging?: { next?: string } } } =
       nextUrl
         ? await axios.get(nextUrl)
@@ -289,83 +271,42 @@ async function fetchMonth(
               access_token: accessToken,
             },
           });
-
     const page_items = (res.data.data ?? []).filter((i) => num(i.spend) > 0);
     items.push(...page_items);
     nextUrl = res.data.paging?.next ?? null;
-
     console.log(
-      `  [${sheetKey}][${since}→${until}] page ${page} — +${page_items.length} (total ${items.length})${nextUrl ? " →" : " ✓"}`,
+      `  [${sheetKey}][${since}→${until}] page ${page} +${page_items.length} (total ${items.length})${nextUrl ? " →" : " ✓"}`,
     );
   }
-
   return items;
 }
-
-// ─── Supabase insert only (no delete) ────────────────────────────────────────
-
-async function insertOnly(
-  table: string,
-  rows: Record<string, unknown>[],
-): Promise<void> {
-  if (rows.length === 0) return;
-  const supabase = getSupabase();
-  const CHUNK = 1000;
-  for (let i = 0; i < rows.length; i += CHUNK) {
-    const { error } = await supabase
-      .from(table)
-      .insert(rows.slice(i, i + CHUNK));
-    if (error) throw new Error(`Supabase insert ${table}: ${error.message}`);
-  }
-}
-
-// ─── Supabase delete + insert per chunk ──────────────────────────────────────
 
 async function deleteAndInsert(
   table: string,
   rows: Record<string, unknown>[],
   since: string,
   until: string,
-  hasAccountName = true,
 ): Promise<void> {
   if (rows.length === 0) return;
 
   const supabase = getSupabase();
+  const accountGroups = new Map<string, string[]>();
+  for (const row of rows) {
+    const account = String(row.account_name ?? "");
+    const adId = String(row.ad_id ?? "");
+    if (!accountGroups.has(account)) accountGroups.set(account, []);
+    accountGroups.get(account)!.push(adId);
+  }
+
   const DEL_CHUNK = 200;
-
-  if (hasAccountName) {
-    // Group rows by account_name to delete only their own data
-    const accountGroups = new Map<string, string[]>();
-    for (const row of rows) {
-      const account = String(row.account_name ?? "");
-      const adId = String(row.ad_id ?? "");
-      if (!accountGroups.has(account)) accountGroups.set(account, []);
-      accountGroups.get(account)!.push(adId);
-    }
-
-    for (const [account, adIds] of accountGroups.entries()) {
-      const uniqueAdIds = [...new Set(adIds)];
-      for (let i = 0; i < uniqueAdIds.length; i += DEL_CHUNK) {
-        const chunk = uniqueAdIds.slice(i, i + DEL_CHUNK);
-        const { error: delErr } = await supabase
-          .from(table)
-          .delete()
-          .eq("account_name", account)
-          .gte("date_start", since)
-          .lte("date_start", until)
-          .in("ad_id", chunk);
-        if (delErr)
-          throw new Error(`Supabase delete ${table}: ${delErr.message}`);
-      }
-    }
-  } else {
-    // Tables without account_name (geo, demographic, device) — delete by ad_id + date range
-    const allAdIds = [...new Set(rows.map((r) => String(r.ad_id ?? "")))];
-    for (let i = 0; i < allAdIds.length; i += DEL_CHUNK) {
-      const chunk = allAdIds.slice(i, i + DEL_CHUNK);
+  for (const [account, adIds] of accountGroups.entries()) {
+    const uniqueAdIds = [...new Set(adIds)];
+    for (let i = 0; i < uniqueAdIds.length; i += DEL_CHUNK) {
+      const chunk = uniqueAdIds.slice(i, i + DEL_CHUNK);
       const { error: delErr } = await supabase
         .from(table)
         .delete()
+        .eq("account_name", account)
         .gte("date_start", since)
         .lte("date_start", until)
         .in("ad_id", chunk);
@@ -383,8 +324,6 @@ async function deleteAndInsert(
   }
 }
 
-// ─── Read account IDs ─────────────────────────────────────────────────────────
-
 async function getAccountIds(): Promise<{ name: string; id: string }[]> {
   const supabase = getSupabase();
   const { data, error } = await supabase
@@ -399,30 +338,9 @@ async function getAccountIds(): Promise<{ name: string; id: string }[]> {
   }));
 }
 
-// ─── Monthly chunks ───────────────────────────────────────────────────────────
+// ─── GET handler — ดึงข้อมูลย้อนหลัง 7 วัน (00:00–23:59) ────────────────────
 
-function monthChunks(
-  since: string,
-  until: string,
-): { since: string; until: string }[] {
-  const chunks: { since: string; until: string }[] = [];
-  const end = new Date(until);
-  let cur = new Date(since);
-  while (cur <= end) {
-    const chunkSince = cur.toISOString().slice(0, 10);
-    const lastDay = new Date(cur.getFullYear(), cur.getMonth() + 1, 0);
-    const chunkUntil = (lastDay > end ? end : lastDay)
-      .toISOString()
-      .slice(0, 10);
-    chunks.push({ since: chunkSince, until: chunkUntil });
-    cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
-  }
-  return chunks;
-}
-
-// ─── Main route ───────────────────────────────────────────────────────────────
-
-export async function POST() {
+export async function GET() {
   const accessToken = process.env.FB_ACCESS_TOKEN;
   if (!accessToken) {
     return NextResponse.json(
@@ -431,39 +349,49 @@ export async function POST() {
     );
   }
 
-  const accounts = await getAccountIds();
+  let accounts: { name: string; id: string }[];
+  try {
+    accounts = await getAccountIds();
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Failed to load accounts" },
+      { status: 500 },
+    );
+  }
+
   if (accounts.length === 0) {
     return NextResponse.json(
-      { error: "ไม่พบ Account ID ใน PageIDs sheet" },
+      { error: "ไม่พบ Active Account" },
       { status: 404 },
     );
   }
 
-  const now = new Date();
-  const until = now.toISOString().slice(0, 10);
-  // ย้อนหลัง 1 ปีนับจากวันที่กด
-  const sinceDate = new Date(now);
-  sinceDate.setFullYear(sinceDate.getFullYear() - 1);
-  sinceDate.setDate(sinceDate.getDate() + 1); // วันถัดไปของวันเดียวกัน 1 ปีที่แล้ว
+  // since = 7 วันที่แล้ว, until = เมื่อวาน (00:00–23:59 ครบทุกวัน)
+  const untilDate = new Date();
+  untilDate.setDate(untilDate.getDate() - 1);
+  const sinceDate = new Date(untilDate);
+  sinceDate.setDate(sinceDate.getDate() - 6);
+
   const since = sinceDate.toISOString().slice(0, 10);
-  const chunks = monthChunks(since, until);
+  const until = untilDate.toISOString().slice(0, 10);
 
   console.log(
-    `\n[sync-backfill] START — ${since} → ${until} (daily), ${accounts.length} accounts, ${chunks.length} months`,
+    `\n[sync-7days] START — ${since} → ${until}, ${accounts.length} accounts`,
   );
 
+  type SheetCounts = Record<SheetKey, number>;
   const summary: {
     name: string;
     id: string;
-    rows: Record<SheetKey, number>;
+    rows: SheetCounts;
     error?: string;
   }[] = [];
 
   for (const [idx, account] of accounts.entries()) {
     console.log(
-      `\n[sync-backfill] [${idx + 1}/${accounts.length}] ${account.name} (act_${account.id})`,
+      `\n[sync-7days] [${idx + 1}/${accounts.length}] ${account.name}`,
     );
-    const rowCounts: Record<SheetKey, number> = {
+    const rowCounts: SheetCounts = {
       rawdata: 0,
       geo: 0,
       demographic: 0,
@@ -471,80 +399,33 @@ export async function POST() {
     };
 
     try {
-      for (const chunk of chunks) {
-        console.log(
-          `  [${chunk.since}→${chunk.until}] fetching & saving 4 streams in parallel...`,
-        );
+      const [rawItems, geoItems, demoItems, deviceItems] = await Promise.all([
+        fetchRange(account.id, accessToken, since, until, "rawdata"),
+        fetchRange(account.id, accessToken, since, until, "geo"),
+        fetchRange(account.id, accessToken, since, until, "demographic"),
+        fetchRange(account.id, accessToken, since, until, "device"),
+      ]);
 
-        // Fetch + save each stream in parallel (each saves to DB as soon as its fetch completes)
-        const [rawCount, geoCount, demoCount, deviceCount] = await Promise.all([
-          // rawdata: fetch → delete old → insert
-          fetchMonth(
-            account.id,
-            accessToken,
-            chunk.since,
-            chunk.until,
-            "rawdata",
-          ).then(async (items) => {
-            await deleteAndInsert(
-              "ads_rawdata",
-              items.map(toRawdata),
-              chunk.since,
-              chunk.until,
-              true,
-            );
-            console.log(`  ✓ rawdata saved: ${items.length} rows`);
-            return items.length;
-          }),
-          // geo: fetch → insert
-          fetchMonth(
-            account.id,
-            accessToken,
-            chunk.since,
-            chunk.until,
-            "geo",
-          ).then(async (items) => {
-            await insertOnly("ads_geo", items.map(toGeo));
-            console.log(`  ✓ geo saved: ${items.length} rows`);
-            return items.length;
-          }),
-          // demographic: fetch → insert
-          fetchMonth(
-            account.id,
-            accessToken,
-            chunk.since,
-            chunk.until,
-            "demographic",
-          ).then(async (items) => {
-            await insertOnly("ads_demographic", items.map(toDemographic));
-            console.log(`  ✓ demographic saved: ${items.length} rows`);
-            return items.length;
-          }),
-          // device: fetch → insert
-          fetchMonth(
-            account.id,
-            accessToken,
-            chunk.since,
-            chunk.until,
-            "device",
-          ).then(async (items) => {
-            await insertOnly("ads_device", items.map(toDevice));
-            console.log(`  ✓ device saved: ${items.length} rows`);
-            return items.length;
-          }),
-        ]);
+      await Promise.all([
+        deleteAndInsert("ads_rawdata", rawItems.map(toRawdata), since, until),
+        deleteAndInsert("ads_geo", geoItems.map(toGeo), since, until),
+        deleteAndInsert(
+          "ads_demographic",
+          demoItems.map(toDemographic),
+          since,
+          until,
+        ),
+        deleteAndInsert("ads_device", deviceItems.map(toDevice), since, until),
+      ]);
 
-        rowCounts.rawdata += rawCount;
-        rowCounts.geo += geoCount;
-        rowCounts.demographic += demoCount;
-        rowCounts.device += deviceCount;
+      rowCounts.rawdata = rawItems.length;
+      rowCounts.geo = geoItems.length;
+      rowCounts.demographic = demoItems.length;
+      rowCounts.device = deviceItems.length;
 
-        console.log(
-          `  ✓ chunk done — raw:${rawCount} geo:${geoCount} demo:${demoCount} device:${deviceCount}`,
-        );
-        await sleep(500);
-      }
-
+      console.log(
+        `  ✓ raw:${rawItems.length} geo:${geoItems.length} demo:${demoItems.length} device:${deviceItems.length}`,
+      );
       summary.push({ name: account.name, id: account.id, rows: rowCounts });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "unknown error";
@@ -557,12 +438,9 @@ export async function POST() {
       });
     }
 
-    if (idx < accounts.length - 1) {
-      console.log("  ...waiting 3s");
-      await sleep(3000);
-    }
+    if (idx < accounts.length - 1) await sleep(3000);
   }
 
-  console.log("[sync-backfill] DONE ✓\n");
+  console.log("[sync-7days] DONE ✓\n");
   return NextResponse.json({ success: true, since, until, accounts: summary });
 }

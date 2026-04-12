@@ -12,6 +12,7 @@
     "@supabase/supabase-js": "^2.99.3",
     "@tanstack/react-table": "^8.21.3",
     "@types/aos": "^3.0.7",
+    "@types/react-select": "^5.0.0",
     "aos": "^2.3.4",
     "axios": "^1.13.6",
     "chart.js": "^4.5.1",
@@ -25,6 +26,7 @@
     "react-chartjs-2": "^5.3.1",
     "react-dom": "19.2.4",
     "react-google-charts": "^5.2.1",
+    "react-select": "^5.10.2",
     "topojson-client": "^3.1.0"
   },
   "devDependencies": {
