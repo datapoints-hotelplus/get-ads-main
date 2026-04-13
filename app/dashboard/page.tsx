@@ -670,7 +670,7 @@ export default function DashboardPage() {
   const [rows, setRows] = useState<GroupRow[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [count, setCount] = useState(0);
+  const [count, setCount] = useState(0); 
 
   // Geo data state
   const [geoRegions, setGeoRegions] = useState<GeoRegion[]>([]);
