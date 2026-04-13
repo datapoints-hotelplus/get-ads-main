@@ -284,6 +284,25 @@ async function fetchRange(
   return items;
 }
 
+// ─── Supabase insert only (no delete) ────────────────────────────────────────
+
+async function insertOnly(
+  table: string,
+  rows: Record<string, unknown>[],
+): Promise<void> {
+  if (rows.length === 0) return;
+  const supabase = getSupabase();
+  const CHUNK = 1000;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const { error } = await supabase
+      .from(table)
+      .insert(rows.slice(i, i + CHUNK));
+    if (error) throw new Error(`Supabase insert ${table}: ${error.message}`);
+  }
+}
+
+// ─── Supabase delete + insert per chunk ──────────────────────────────────────
+
 async function deleteAndInsert(
   table: string,
   rows: Record<string, unknown>[],
@@ -430,19 +449,9 @@ export async function POST() {
           sinceStr,
           untilStr,
         ),
-        deleteAndInsert("ads_geo", geoItems.map(toGeo), sinceStr, untilStr),
-        deleteAndInsert(
-          "ads_demographic",
-          demoItems.map(toDemographic),
-          sinceStr,
-          untilStr,
-        ),
-        deleteAndInsert(
-          "ads_device",
-          deviceItems.map(toDevice),
-          sinceStr,
-          untilStr,
-        ),
+        insertOnly("ads_geo", geoItems.map(toGeo)),
+        insertOnly("ads_demographic", demoItems.map(toDemographic)),
+        insertOnly("ads_device", deviceItems.map(toDevice)),
       ]);
 
       rowCounts.rawdata = rawItems.length;
