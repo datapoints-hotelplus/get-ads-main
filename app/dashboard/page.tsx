@@ -771,6 +771,23 @@ export default function DashboardPage() {
     loadOptions(account, campaign);
   }, [account, campaign, loadOptions]);
 
+  // Fetch highlight metrics when campaign changes
+  useEffect(() => {
+    if (!campaign) {
+      setHighlightMetrics([]);
+      return;
+    }
+    fetch(
+      `/api/dashboard?type=highlights&campaign=${encodeURIComponent(campaign)}`,
+    )
+      .then((r) => r.json())
+      .then((data) => {
+        const hl = data.highlights?.[campaign] ?? [];
+        setHighlightMetrics(hl);
+      })
+      .catch(() => setHighlightMetrics([]));
+  }, [campaign]);
+
   // ── Fetch dashboard data ────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
     setDataLoading(true);
