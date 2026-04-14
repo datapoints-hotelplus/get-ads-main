@@ -281,21 +281,73 @@ async function fetchRange(
   return items;
 }
 
-// ─── Supabase insert only (no delete) ────────────────────────────────────────
+// ─── Delete duplicates based on unique key then insert ─────────────────────────
 
-async function insertOnly(
+async function deleteByUniqueKeysAndInsert(
   table: string,
   rows: Record<string, unknown>[],
+  uniqueKeyFields: string[],
 ): Promise<void> {
   if (rows.length === 0) return;
+
   const supabase = getSupabase();
-  const CHUNK = 1000;
-  for (let i = 0; i < rows.length; i += CHUNK) {
-    const { error } = await supabase
-      .from(table)
-      .insert(rows.slice(i, i + CHUNK));
-    if (error) throw new Error(`Supabase insert ${table}: ${error.message}`);
+
+  // ดึง ad_id ทั้งหมดที่จะ insert
+  const adIds = [...new Set(rows.map((r) => String(r.ad_id ?? "")))].filter(
+    (id) => id,
+  );
+  if (adIds.length === 0) return;
+
+  // SELECT ข้อมูลเก่าทั้งหมด (ครั้งเดียว) ⚡
+  const { data: existingRecords } = await supabase
+    .from(table)
+    .select("id, " + uniqueKeyFields.join(", "))
+    .in("ad_id", adIds);
+
+  // หา IDs ที่ต้องลบ (in-memory comparison)
+  const idsToDelete: string[] = [];
+  for (const newRow of rows) {
+    const newKey = uniqueKeyFields
+      .map((f) => String(newRow[f] ?? ""))
+      .join("|");
+
+    for (const existing of existingRecords ?? []) {
+      const existingKey = uniqueKeyFields
+        .map((f) => String(existing[f as keyof typeof existing] ?? ""))
+        .join("|");
+
+      if (newKey === existingKey) {
+        idsToDelete.push(existing.id as string);
+      }
+    }
   }
+
+  // DELETE BULK (ครั้งเดียว!) ⚡
+  if (idsToDelete.length > 0) {
+    const DEL_CHUNK = 1000;
+    for (let i = 0; i < idsToDelete.length; i += DEL_CHUNK) {
+      const { error: delErr } = await supabase
+        .from(table)
+        .delete()
+        .in("id", idsToDelete.slice(i, i + DEL_CHUNK));
+      if (delErr) throw new Error(`delete ${table}: ${delErr.message}`);
+    }
+  }
+
+  // INSERT (parallel) ⚡
+  const CHUNK = 1000;
+  const insertPromises = [];
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    insertPromises.push(
+      supabase
+        .from(table)
+        .insert(rows.slice(i, i + CHUNK))
+        .then(({ error }) => {
+          if (error) throw new Error(`insert ${table}: ${error.message}`);
+        }),
+    );
+  }
+  await Promise.allSettled(insertPromises);
 }
 
 // ─── Supabase delete + insert per chunk ──────────────────────────────────────
@@ -427,9 +479,21 @@ export async function GET() {
 
       await Promise.all([
         deleteAndInsert("ads_rawdata", rawItems.map(toRawdata), since, until),
-        insertOnly("ads_geo", geoItems.map(toGeo)),
-        insertOnly("ads_demographic", demoItems.map(toDemographic)),
-        insertOnly("ads_device", deviceItems.map(toDevice)),
+        deleteByUniqueKeysAndInsert("ads_geo", geoItems.map(toGeo), [
+          "ad_id",
+          "date_start",
+          "region",
+        ]),
+        deleteByUniqueKeysAndInsert(
+          "ads_demographic",
+          demoItems.map(toDemographic),
+          ["ad_id", "date_start", "age", "gender"],
+        ),
+        deleteByUniqueKeysAndInsert("ads_device", deviceItems.map(toDevice), [
+          "ad_id",
+          "date_start",
+          "impression_device",
+        ]),
       ]);
 
       rowCounts.rawdata = rawItems.length;

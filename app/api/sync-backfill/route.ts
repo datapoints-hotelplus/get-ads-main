@@ -302,21 +302,73 @@ async function fetchMonth(
   return items;
 }
 
-// ─── Supabase insert only (no delete) ────────────────────────────────────────
+// ─── Delete duplicates based on unique key then insert ─────────────────────────
 
-async function insertOnly(
+async function deleteByUniqueKeysAndInsert(
   table: string,
   rows: Record<string, unknown>[],
+  uniqueKeyFields: string[],
 ): Promise<void> {
   if (rows.length === 0) return;
+
   const supabase = getSupabase();
-  const CHUNK = 1000;
-  for (let i = 0; i < rows.length; i += CHUNK) {
-    const { error } = await supabase
-      .from(table)
-      .insert(rows.slice(i, i + CHUNK));
-    if (error) throw new Error(`Supabase insert ${table}: ${error.message}`);
+
+  // ดึง ad_id ทั้งหมดที่จะ insert
+  const adIds = [...new Set(rows.map((r) => String(r.ad_id ?? "")))].filter(
+    (id) => id,
+  );
+  if (adIds.length === 0) return;
+
+  // SELECT ข้อมูลเก่าทั้งหมด (ครั้งเดียว) ⚡
+  const { data: existingRecords } = await supabase
+    .from(table)
+    .select("id, " + uniqueKeyFields.join(", "))
+    .in("ad_id", adIds);
+
+  // หา IDs ที่ต้องลบ (in-memory comparison)
+  const idsToDelete: string[] = [];
+  for (const newRow of rows) {
+    const newKey = uniqueKeyFields
+      .map((f) => String(newRow[f] ?? ""))
+      .join("|");
+
+    for (const existing of existingRecords ?? []) {
+      const existingKey = uniqueKeyFields
+        .map((f) => String(existing[f as keyof typeof existing] ?? ""))
+        .join("|");
+
+      if (newKey === existingKey) {
+        idsToDelete.push(existing.id as string);
+      }
+    }
   }
+
+  // DELETE BULK (ครั้งเดียว!) ⚡
+  if (idsToDelete.length > 0) {
+    const DEL_CHUNK = 1000;
+    for (let i = 0; i < idsToDelete.length; i += DEL_CHUNK) {
+      const { error: delErr } = await supabase
+        .from(table)
+        .delete()
+        .in("id", idsToDelete.slice(i, i + DEL_CHUNK));
+      if (delErr) throw new Error(`delete ${table}: ${delErr.message}`);
+    }
+  }
+
+  // INSERT (parallel) ⚡
+  const CHUNK = 1000;
+  const insertPromises = [];
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    insertPromises.push(
+      supabase
+        .from(table)
+        .insert(rows.slice(i, i + CHUNK))
+        .then(({ error }) => {
+          if (error) throw new Error(`insert ${table}: ${error.message}`);
+        }),
+    );
+  }
+  await Promise.allSettled(insertPromises);
 }
 
 // ─── Supabase delete + insert per chunk ──────────────────────────────────────
@@ -496,7 +548,7 @@ export async function POST() {
             console.log(`  ✓ rawdata saved: ${items.length} rows`);
             return items.length;
           }),
-          // geo: fetch → insert
+          // geo: fetch → delete duplicates → insert
           fetchMonth(
             account.id,
             accessToken,
@@ -504,11 +556,15 @@ export async function POST() {
             chunk.until,
             "geo",
           ).then(async (items) => {
-            await insertOnly("ads_geo", items.map(toGeo));
+            await deleteByUniqueKeysAndInsert("ads_geo", items.map(toGeo), [
+              "ad_id",
+              "date_start",
+              "region",
+            ]);
             console.log(`  ✓ geo saved: ${items.length} rows`);
             return items.length;
           }),
-          // demographic: fetch → insert
+          // demographic: fetch → delete duplicates → insert
           fetchMonth(
             account.id,
             accessToken,
@@ -516,11 +572,15 @@ export async function POST() {
             chunk.until,
             "demographic",
           ).then(async (items) => {
-            await insertOnly("ads_demographic", items.map(toDemographic));
+            await deleteByUniqueKeysAndInsert(
+              "ads_demographic",
+              items.map(toDemographic),
+              ["ad_id", "date_start", "age", "gender"],
+            );
             console.log(`  ✓ demographic saved: ${items.length} rows`);
             return items.length;
           }),
-          // device: fetch → insert
+          // device: fetch → delete duplicates → insert
           fetchMonth(
             account.id,
             accessToken,
@@ -528,7 +588,11 @@ export async function POST() {
             chunk.until,
             "device",
           ).then(async (items) => {
-            await insertOnly("ads_device", items.map(toDevice));
+            await deleteByUniqueKeysAndInsert(
+              "ads_device",
+              items.map(toDevice),
+              ["ad_id", "date_start", "impression_device"],
+            );
             console.log(`  ✓ device saved: ${items.length} rows`);
             return items.length;
           }),
