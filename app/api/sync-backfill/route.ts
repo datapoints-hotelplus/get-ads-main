@@ -332,9 +332,9 @@ async function deleteByUniqueKeysAndInsert(
       .map((f) => String(newRow[f] ?? ""))
       .join("|");
 
-    for (const existing of existingRecords ?? []) {
+    for (const existing of (existingRecords ?? []) as unknown as Record<string, unknown>[]) {
       const existingKey = uniqueKeyFields
-        .map((f) => String(existing[f as keyof typeof existing] ?? ""))
+        .map((f) => String(existing[f] ?? ""))
         .join("|");
 
       if (newKey === existingKey) {

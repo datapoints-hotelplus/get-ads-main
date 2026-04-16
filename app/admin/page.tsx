@@ -73,16 +73,18 @@ export default function AdminPage() {
   async function handleToggleActive(account_id: string, current: boolean) {
     setToggleLoading(account_id);
     try {
-      await fetch("/api/admin/accounts", {
+      const res = await fetch("/api/admin/accounts", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ account_id, is_active: !current }),
       });
-      setAccounts((prev) =>
-        prev.map((a) =>
-          a.account_id === account_id ? { ...a, is_active: !current } : a,
-        ),
-      );
+      if (res.ok) {
+        setAccounts((prev) =>
+          prev.map((a) =>
+            a.account_id === account_id ? { ...a, is_active: !current } : a,
+          ),
+        );
+      }
     } finally {
       setToggleLoading(null);
     }

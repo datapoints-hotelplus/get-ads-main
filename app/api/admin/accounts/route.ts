@@ -94,6 +94,37 @@ export async function DELETE(req: NextRequest) {
   return NextResponse.json({ success: true });
 }
 
+export async function PATCH(req: NextRequest) {
+  if (!(await checkAuth())) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const body = await req.json().catch(() => ({}));
+  const { account_id, is_active } = body as {
+    account_id?: string;
+    is_active?: boolean;
+  };
+
+  if (!account_id || typeof is_active !== "boolean") {
+    return NextResponse.json(
+      { error: "account_id and is_active are required" },
+      { status: 400 },
+    );
+  }
+
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from("ads_allpage")
+    .update({ is_active })
+    .eq("account_id", account_id);
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true });
+}
+
 // PUT /api/admin/accounts — fetch from Facebook and upsert into Supabase
 export async function PUT() {
   if (!(await checkAuth())) {

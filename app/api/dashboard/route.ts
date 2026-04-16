@@ -76,10 +76,11 @@ export async function GET(request: NextRequest) {
 
       const allowedNames = await getAllowedAccountNames();
 
-      // Account names from allpage table — filtered by user permissions
+      // Account names from allpage table — filtered by user permissions (active only)
       let accountQuery = supabase
         .from("ads_allpage")
         .select("account_name")
+        .eq("is_active", true)
         .order("account_name");
       if (allowedNames !== null && allowedNames.length > 0) {
         accountQuery = accountQuery.in("account_name", allowedNames);
