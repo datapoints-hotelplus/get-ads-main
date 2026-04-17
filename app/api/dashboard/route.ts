@@ -465,7 +465,7 @@ export async function GET(request: NextRequest) {
         totalRegionImpressions += data.impressions ?? 0;
       }
 
-      for (const [region, data] of regionMap.entries()) {
+      for (const [, data] of regionMap.entries()) {
         // If we got reach from API, allocate proportionally; otherwise use database reach
         if (totalReachForAllocation > 0 && totalRegionImpressions > 0) {
           data.reach = parseFloat(
@@ -518,54 +518,6 @@ export async function GET(request: NextRequest) {
       prevTo = pTo.toISOString().split("T")[0];
     }
 
-    const selectFields =
-      "date_start,date_stop,account_name,campaign_name,adset_name,ad_name," +
-      "spend,reach,impressions,inline_link_clicks,unique_inline_link_clicks,clicks_all," +
-      "purchases,purchase_value,cpc,ctr,cpm,frequency," +
-      "leads,messaging_conversations_started,post_shares,page_likes," +
-      "post_engagement,cost_per_engagement,cost_per_like";
-
-    function buildQuery(from: string, to: string) {
-      let q = supabase
-        .from("ads_rawdata")
-        .select(selectFields)
-        .order("date_start", { ascending: false });
-      if (from) q = q.gte("date_start", from);
-      if (to) q = q.lte("date_start", to);
-      // Apply account filter — use explicit account param or fall back to allowed list
-      if (account) {
-        q = q.eq("account_name", account);
-      } else if (allowedNames !== null) {
-        q = q.in("account_name", allowedNames);
-      }
-      if (campaign) q = q.eq("campaign_name", campaign);
-      if (adset) q = q.eq("adset_name", adset);
-      return q.limit(50000);
-    }
-
-    // Fetch current + previous period data + account IDs + all campaign/adset pairs in parallel
-    let pageQuery = supabase
-      .from("ads_allpage")
-      .select("account_id, account_name");
-    if (allowedNames !== null) {
-      pageQuery = pageQuery.in("account_name", allowedNames);
-    }
-
-    const [currentRes, prevRes, pageRes, allPairsRes] = await Promise.all([
-      buildQuery(dateFrom, dateTo),
-      prevFrom
-        ? buildQuery(prevFrom, prevTo)
-        : Promise.resolve({ data: [], error: null }),
-      pageQuery.then((r) => r),
-      // All distinct campaign+adset combos via RPC (no row-limit issue)
-      supabase
-        .rpc("get_campaign_adset_pairs", { p_account: account || null })
-        .then((r) => r),
-    ]);
-
-    if (currentRes.error) throw currentRes.error;
-    if (prevRes.error) throw prevRes.error;
-
     type RawRow = {
       date_start: string;
       date_stop: string;
@@ -593,8 +545,61 @@ export async function GET(request: NextRequest) {
       cost_per_engagement: number;
       cost_per_like: number;
     };
-    const rows = (currentRes.data ?? []) as unknown as RawRow[];
-    const prevRows = (prevRes.data ?? []) as unknown as RawRow[];
+
+    const selectFields =
+      "date_start,date_stop,account_name,campaign_name,adset_name,ad_name," +
+      "spend,reach,impressions,inline_link_clicks,unique_inline_link_clicks,clicks_all," +
+      "purchases,purchase_value,cpc,ctr,cpm,frequency," +
+      "leads,messaging_conversations_started,post_shares,page_likes," +
+      "post_engagement,cost_per_engagement,cost_per_like";
+
+    async function fetchAllRows(from: string, to: string): Promise<RawRow[]> {
+      const CHUNK = 50000;
+      const all: RawRow[] = [];
+      let offset = 0;
+      while (true) {
+        let q = supabase
+          .from("ads_rawdata")
+          .select(selectFields)
+          .order("date_start", { ascending: false });
+        if (from) q = q.gte("date_start", from);
+        if (to) q = q.lte("date_start", to);
+        if (account) {
+          q = q.eq("account_name", account);
+        } else if (allowedNames !== null) {
+          q = q.in("account_name", allowedNames);
+        }
+        if (campaign) q = q.eq("campaign_name", campaign);
+        if (adset) q = q.eq("adset_name", adset);
+        q = q.range(offset, offset + CHUNK - 1);
+        const { data, error } = await q;
+        if (error) throw error;
+        const chunk = (data ?? []) as unknown as RawRow[];
+        all.push(...chunk);
+        if (chunk.length < CHUNK) break;
+        offset += CHUNK;
+      }
+      return all;
+    }
+
+    // Fetch current + previous period data + account IDs + all campaign/adset pairs in parallel
+    let pageQuery = supabase
+      .from("ads_allpage")
+      .select("account_id, account_name");
+    if (allowedNames !== null) {
+      pageQuery = pageQuery.in("account_name", allowedNames);
+    }
+
+    const [rows, prevRows, pageRes, allPairsRes] = await Promise.all([
+      fetchAllRows(dateFrom, dateTo),
+      prevFrom ? fetchAllRows(prevFrom, prevTo) : Promise.resolve([] as RawRow[]),
+      pageQuery.then((r) => r),
+      // All distinct campaign+adset combos via RPC (no row-limit issue)
+      supabase
+        .rpc("get_campaign_adset_pairs", { p_account: account || null })
+        .then((r) => r),
+    ]);
+
 
     // Aggregate helper
     function aggregate(data: RawRow[]) {
