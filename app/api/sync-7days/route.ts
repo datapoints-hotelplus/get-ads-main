@@ -1,4 +1,4 @@
-// ดึงข้อมูลย้อนหลัง 7 วัน (00:00–23:59 ทุกวัน) แล้ว upsert เข้า Supabase
+// ดึงข้อมูลวันนี้ (00:00–ตอนนี้) แล้ว upsert เข้า Supabase
 import { NextResponse } from "next/server";
 import axios from "axios";
 import { getSupabase } from "@/lib/supabase";
@@ -409,7 +409,7 @@ async function getAccountIds(): Promise<{ name: string; id: string }[]> {
   }));
 }
 
-// ─── GET handler — ดึงข้อมูลย้อนหลัง 7 วัน (00:00–23:59) ────────────────────
+// ─── GET handler — ดึงข้อมูลวันนี้ (00:00–ตอนนี้) ───────────────────────────
 
 export async function GET() {
   const accessToken = process.env.FB_ACCESS_TOKEN;
@@ -437,14 +437,10 @@ export async function GET() {
     );
   }
 
-  // since = 7 วันที่แล้ว, until = เมื่อวาน (00:00–23:59 ครบทุกวัน)
-  const untilDate = new Date();
-  untilDate.setDate(untilDate.getDate() - 1);
-  const sinceDate = new Date(untilDate);
-  sinceDate.setDate(sinceDate.getDate() - 6);
-
-  const since = sinceDate.toISOString().slice(0, 10);
-  const until = untilDate.toISOString().slice(0, 10);
+  // since = until = วันนี้ (00:00–ตอนนี้)
+  const today = new Date().toISOString().slice(0, 10);
+  const since = today;
+  const until = today;
 
   console.log(
     `\n[sync-7days] START — ${since} → ${until}, ${accounts.length} accounts`,
