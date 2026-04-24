@@ -93,6 +93,20 @@ function findVideoAction(arr: unknown, type: string): number {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// ─── Deduplicate rows by composite key (Facebook can return same row on multiple pages) ───
+function dedupe(
+  rows: Record<string, unknown>[],
+  keyFields: string[],
+): Record<string, unknown>[] {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    const key = keyFields.map((f) => String(row[f] ?? "")).join("|");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 // ─── Row parsers → plain objects for Supabase ─────────────────────────────────
 
 function toRawdata(item: FBItem) {
@@ -189,7 +203,10 @@ function toRawdata(item: FBItem) {
       item.actions,
       "onsite_conversion.messaging_conversation_started_7d",
     ),
-    leads: findAction(item.actions, "lead"),
+    // Sum form leads + pixel custom conversions to cover both campaign objective types
+    leads:
+      findAction(item.actions, "lead") +
+      findAction(item.actions, "offsite_conversion.fb_pixel_custom"),
     // Post interactions
     post_shares: findAction(item.actions, "post"),
     post_comments: findAction(item.actions, "comment"),
@@ -256,7 +273,57 @@ function toDevice(item: FBItem) {
   };
 }
 
-// ─── Fetch one month, all pages ───────────────────────────────────────────────
+// ─── Fetch one month, all pages (with retry) ─────────────────────────────────
+
+async function fbGet(
+  url: string,
+  params?: Record<string, unknown>,
+  retries = 7,
+): Promise<{ data: { data?: FBItem[]; paging?: { next?: string } } }> {
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      return params ? await axios.get(url, { params }) : await axios.get(url);
+    } catch (err) {
+      lastErr = err;
+      const status = axios.isAxiosError(err) ? err.response?.status : null;
+      const fbErr = axios.isAxiosError(err)
+        ? (
+            err.response?.data as {
+              error?: {
+                code?: number;
+                error_subcode?: number;
+                message?: string;
+                is_transient?: boolean;
+              };
+            }
+          )?.error
+        : undefined;
+      const fbServiceTemporarilyUnavailable =
+        fbErr?.code === 2 &&
+        (fbErr?.error_subcode === 1504044 ||
+          String(fbErr?.message ?? "")
+            .toLowerCase()
+            .includes("service temporarily unavailable"));
+      const retryable =
+        !status ||
+        status >= 500 ||
+        status === 429 ||
+        fbErr?.is_transient === true ||
+        fbServiceTemporarilyUnavailable;
+      if (!retryable || attempt === retries) throw err;
+      // 5s, 10s, 20s, 40s, 80s, 120s (capped) — covers ~5 min of Facebook outages
+      const delay = Math.min(5000 * 2 ** (attempt - 1), 120_000);
+      // small random jitter (±10%) to avoid thundering-herd on concurrent streams
+      const jitter = Math.floor(delay * 0.1 * (Math.random() * 2 - 1));
+      console.warn(
+        `  [retry ${attempt}/${retries - 1}] status=${status ?? "network"} — wait ${((delay + jitter) / 1000).toFixed(1)}s`,
+      );
+      await new Promise((r) => setTimeout(r, delay + jitter));
+    }
+  }
+  throw lastErr;
+}
 
 async function fetchMonth(
   accountId: string,
@@ -277,20 +344,20 @@ async function fetchMonth(
 
     const res: { data: { data?: FBItem[]; paging?: { next?: string } } } =
       nextUrl
-        ? await axios.get(nextUrl)
-        : await axios.get(`${FB_GRAPH_API}/act_${accountId}/insights`, {
-            params: {
-              level: "ad",
-              fields,
-              ...(breakdown ? { breakdowns: breakdown } : {}),
-              time_range: JSON.stringify({ since, until }),
-              time_increment: timeIncrement,
-              limit: 1000,
-              access_token: accessToken,
-            },
+        ? await fbGet(nextUrl)
+        : await fbGet(`${FB_GRAPH_API}/act_${accountId}/insights`, {
+            level: "ad",
+            fields,
+            ...(breakdown ? { breakdowns: breakdown } : {}),
+            time_range: JSON.stringify({ since, until }),
+            time_increment: timeIncrement,
+            limit: 1000,
+            access_token: accessToken,
           });
 
-    const page_items = (res.data.data ?? []).filter((i) => num(i.spend) > 0);
+    const page_items = (res.data.data ?? []).filter(
+      (i: FBItem) => num(i.spend) > 0,
+    );
     items.push(...page_items);
     nextUrl = res.data.paging?.next ?? null;
 
@@ -302,73 +369,42 @@ async function fetchMonth(
   return items;
 }
 
-// ─── Delete duplicates based on unique key then insert ─────────────────────────
+// deleteByUniqueKeysAndInsert removed — use dedupe() + deleteAndInsert(..., false) instead
 
-async function deleteByUniqueKeysAndInsert(
-  table: string,
-  rows: Record<string, unknown>[],
-  uniqueKeyFields: string[],
-): Promise<void> {
-  if (rows.length === 0) return;
+function formatAxiosError(err: unknown): string {
+  if (!axios.isAxiosError(err)) {
+    return err instanceof Error ? err.message : String(err);
+  }
 
-  const supabase = getSupabase();
-
-  // ดึง ad_id ทั้งหมดที่จะ insert
-  const adIds = [...new Set(rows.map((r) => String(r.ad_id ?? "")))].filter(
-    (id) => id,
-  );
-  if (adIds.length === 0) return;
-
-  // SELECT ข้อมูลเก่าทั้งหมด (ครั้งเดียว) ⚡
-  const { data: existingRecords } = await supabase
-    .from(table)
-    .select("id, " + uniqueKeyFields.join(", "))
-    .in("ad_id", adIds);
-
-  // หา IDs ที่ต้องลบ (in-memory comparison)
-  const idsToDelete: string[] = [];
-  for (const newRow of rows) {
-    const newKey = uniqueKeyFields
-      .map((f) => String(newRow[f] ?? ""))
-      .join("|");
-
-    for (const existing of (existingRecords ?? []) as unknown as Record<string, unknown>[]) {
-      const existingKey = uniqueKeyFields
-        .map((f) => String(existing[f] ?? ""))
-        .join("|");
-
-      if (newKey === existingKey) {
-        idsToDelete.push(existing.id as string);
+  const status = err.response?.status;
+  const data = err.response?.data as
+    | {
+        error?: {
+          message?: string;
+          code?: number;
+          error_subcode?: number;
+          type?: string;
+          fbtrace_id?: string;
+          is_transient?: boolean;
+        };
       }
-    }
+    | undefined;
+  const fb = data?.error;
+
+  if (!fb) {
+    return status ? `HTTP ${status}: ${err.message}` : err.message;
   }
 
-  // DELETE BULK (ครั้งเดียว!) ⚡
-  if (idsToDelete.length > 0) {
-    const DEL_CHUNK = 1000;
-    for (let i = 0; i < idsToDelete.length; i += DEL_CHUNK) {
-      const { error: delErr } = await supabase
-        .from(table)
-        .delete()
-        .in("id", idsToDelete.slice(i, i + DEL_CHUNK));
-      if (delErr) throw new Error(`delete ${table}: ${delErr.message}`);
-    }
-  }
-
-  // INSERT (parallel) ⚡
-  const CHUNK = 1000;
-  const insertPromises = [];
-  for (let i = 0; i < rows.length; i += CHUNK) {
-    insertPromises.push(
-      supabase
-        .from(table)
-        .insert(rows.slice(i, i + CHUNK))
-        .then(({ error }) => {
-          if (error) throw new Error(`insert ${table}: ${error.message}`);
-        }),
-    );
-  }
-  await Promise.allSettled(insertPromises);
+  return [
+    status ? `HTTP ${status}` : "HTTP error",
+    fb.type ? `type=${fb.type}` : null,
+    fb.code ? `code=${fb.code}` : null,
+    fb.error_subcode ? `subcode=${fb.error_subcode}` : null,
+    fb.is_transient ? "transient=true" : null,
+    fb.message ?? err.message,
+  ]
+    .filter(Boolean)
+    .join(" | ");
 }
 
 // ─── Supabase delete + insert per chunk ──────────────────────────────────────
@@ -491,12 +527,13 @@ export async function POST() {
     );
   }
 
-  const now = new Date();
-  const until = now.toISOString().slice(0, 10);
+  const until = new Date().toLocaleDateString("en-CA", {
+    timeZone: "Asia/Bangkok",
+  });
   // ย้อนหลัง 1 ปีนับจากวันที่กด
-  const sinceDate = new Date(now);
+  const sinceDate = new Date(until);
   sinceDate.setFullYear(sinceDate.getFullYear() - 1);
-  sinceDate.setDate(sinceDate.getDate() + 1); // วันถัดไปของวันเดียวกัน 1 ปีที่แล้ว
+  sinceDate.setDate(sinceDate.getDate() + 1);
   const since = sinceDate.toISOString().slice(0, 10);
   const chunks = monthChunks(since, until);
 
@@ -529,8 +566,7 @@ export async function POST() {
         );
 
         // Fetch + save each stream in parallel (each saves to DB as soon as its fetch completes)
-        const [rawCount, geoCount, demoCount, deviceCount] = await Promise.all([
-          // rawdata: fetch → delete old → insert
+        const streamJobs: Array<Promise<{ key: SheetKey; count: number }>> = [
           fetchMonth(
             account.id,
             accessToken,
@@ -546,9 +582,8 @@ export async function POST() {
               true,
             );
             console.log(`  ✓ rawdata saved: ${items.length} rows`);
-            return items.length;
+            return { key: "rawdata" as const, count: items.length };
           }),
-          // geo: fetch → delete duplicates → insert
           fetchMonth(
             account.id,
             accessToken,
@@ -556,15 +591,21 @@ export async function POST() {
             chunk.until,
             "geo",
           ).then(async (items) => {
-            await deleteByUniqueKeysAndInsert("ads_geo", items.map(toGeo), [
+            const rows = dedupe(items.map(toGeo), [
               "ad_id",
               "date_start",
               "region",
             ]);
-            console.log(`  ✓ geo saved: ${items.length} rows`);
-            return items.length;
+            await deleteAndInsert(
+              "ads_geo",
+              rows,
+              chunk.since,
+              chunk.until,
+              false,
+            );
+            console.log(`  ✓ geo saved: ${rows.length} rows`);
+            return { key: "geo" as const, count: rows.length };
           }),
-          // demographic: fetch → delete duplicates → insert
           fetchMonth(
             account.id,
             accessToken,
@@ -572,15 +613,22 @@ export async function POST() {
             chunk.until,
             "demographic",
           ).then(async (items) => {
-            await deleteByUniqueKeysAndInsert(
+            const rows = dedupe(items.map(toDemographic), [
+              "ad_id",
+              "date_start",
+              "age",
+              "gender",
+            ]);
+            await deleteAndInsert(
               "ads_demographic",
-              items.map(toDemographic),
-              ["ad_id", "date_start", "age", "gender"],
+              rows,
+              chunk.since,
+              chunk.until,
+              false,
             );
-            console.log(`  ✓ demographic saved: ${items.length} rows`);
-            return items.length;
+            console.log(`  ✓ demographic saved: ${rows.length} rows`);
+            return { key: "demographic" as const, count: rows.length };
           }),
-          // device: fetch → delete duplicates → insert
           fetchMonth(
             account.id,
             accessToken,
@@ -588,23 +636,42 @@ export async function POST() {
             chunk.until,
             "device",
           ).then(async (items) => {
-            await deleteByUniqueKeysAndInsert(
+            const rows = dedupe(items.map(toDevice), [
+              "ad_id",
+              "date_start",
+              "impression_device",
+            ]);
+            await deleteAndInsert(
               "ads_device",
-              items.map(toDevice),
-              ["ad_id", "date_start", "impression_device"],
+              rows,
+              chunk.since,
+              chunk.until,
+              false,
             );
-            console.log(`  ✓ device saved: ${items.length} rows`);
-            return items.length;
+            console.log(`  ✓ device saved: ${rows.length} rows`);
+            return { key: "device" as const, count: rows.length };
           }),
-        ]);
+        ];
 
-        rowCounts.rawdata += rawCount;
-        rowCounts.geo += geoCount;
-        rowCounts.demographic += demoCount;
-        rowCounts.device += deviceCount;
+        const settled = await Promise.allSettled(streamJobs);
+        const chunkCounts: Record<SheetKey, number> = {
+          rawdata: 0,
+          geo: 0,
+          demographic: 0,
+          device: 0,
+        };
+
+        for (const result of settled) {
+          if (result.status === "fulfilled") {
+            rowCounts[result.value.key] += result.value.count;
+            chunkCounts[result.value.key] = result.value.count;
+            continue;
+          }
+          console.error(`  [stream-error] ${formatAxiosError(result.reason)}`);
+        }
 
         console.log(
-          `  ✓ chunk done — raw:${rawCount} geo:${geoCount} demo:${demoCount} device:${deviceCount}`,
+          `  ✓ chunk done — raw:${chunkCounts.rawdata} geo:${chunkCounts.geo} demo:${chunkCounts.demographic} device:${chunkCounts.device}`,
         );
         await sleep(500);
       }

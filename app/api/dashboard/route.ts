@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 import {
+  fetchAccountLeads,
   fetchAccountReach,
   fetchAgeGenderBreakdown,
   fetchDeviceBreakdown,
@@ -592,14 +593,15 @@ export async function GET(request: NextRequest) {
 
     const [rows, prevRows, pageRes, allPairsRes] = await Promise.all([
       fetchAllRows(dateFrom, dateTo),
-      prevFrom ? fetchAllRows(prevFrom, prevTo) : Promise.resolve([] as RawRow[]),
+      prevFrom
+        ? fetchAllRows(prevFrom, prevTo)
+        : Promise.resolve([] as RawRow[]),
       pageQuery.then((r) => r),
       // All distinct campaign+adset combos via RPC (no row-limit issue)
       supabase
         .rpc("get_campaign_adset_pairs", { p_account: account || null })
         .then((r) => r),
     ]);
-
 
     // Aggregate helper
     function aggregate(data: RawRow[]) {
@@ -678,16 +680,24 @@ export async function GET(request: NextRequest) {
 
     const accessToken = process.env.FB_ACCESS_TOKEN ?? "";
     if (accessToken && accountIds.length > 0 && dateFrom && dateTo) {
-      const [reachCurrent, reachPrev] = await Promise.all([
-        fetchAccountReach(accountIds, accessToken, dateFrom, dateTo),
-        prevFrom
-          ? fetchAccountReach(accountIds, accessToken, prevFrom, prevTo)
-          : Promise.resolve(0),
-      ]);
+      const [reachCurrent, reachPrev, leadsCurrent, leadsPrev] =
+        await Promise.all([
+          fetchAccountReach(accountIds, accessToken, dateFrom, dateTo),
+          prevFrom
+            ? fetchAccountReach(accountIds, accessToken, prevFrom, prevTo)
+            : Promise.resolve(0),
+          fetchAccountLeads(accountIds, accessToken, dateFrom, dateTo),
+          prevFrom
+            ? fetchAccountLeads(accountIds, accessToken, prevFrom, prevTo)
+            : Promise.resolve(0),
+        ]);
       // Use API reach for totals only (account-level unique reach)
       // Campaign breakdown will use database reach to avoid overlap issues
       totals.reach = reachCurrent;
       prevTotals.reach = reachPrev;
+      // Use API leads: offsite_conversion.fb_pixel_custom (matches Ads Manager "Results")
+      totals.leads = leadsCurrent;
+      prevTotals.leads = leadsPrev;
       // Recompute frequency with updated reach
       totals.frequency =
         reachCurrent > 0
@@ -696,6 +706,15 @@ export async function GET(request: NextRequest) {
       prevTotals.frequency =
         reachPrev > 0
           ? parseFloat((prevTotals.impressions / reachPrev).toFixed(2))
+          : 0;
+      // Recompute cost_per_lead with updated leads
+      totals.cost_per_lead =
+        leadsCurrent > 0
+          ? parseFloat((totals.spend / leadsCurrent).toFixed(2))
+          : 0;
+      prevTotals.cost_per_lead =
+        leadsPrev > 0
+          ? parseFloat((prevTotals.spend / leadsPrev).toFixed(2))
           : 0;
     }
 

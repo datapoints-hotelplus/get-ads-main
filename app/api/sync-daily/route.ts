@@ -173,7 +173,10 @@ function toRawdata(item: FBItem) {
       item.actions,
       "onsite_conversion.messaging_conversation_started_7d",
     ),
-    leads: findAction(item.actions, "lead"),
+    // Sum form leads + pixel custom conversions to cover both campaign objective types
+    leads:
+      findAction(item.actions, "lead") +
+      findAction(item.actions, "offsite_conversion.fb_pixel_custom"),
     post_shares: findAction(item.actions, "post"),
     post_comments: findAction(item.actions, "comment"),
     post_reactions: findAction(item.actions, "post_reaction"),
@@ -399,16 +402,19 @@ export async function POST() {
     );
   }
 
-  // 7 วันย้อนหลัง
-  const until = new Date();
-  until.setDate(until.getDate() - 1);
-  const since = new Date(until);
-  since.setDate(since.getDate() - 6);
-  const sinceStr = since.toISOString().slice(0, 10);
-  const untilStr = until.toISOString().slice(0, 10);
+  // 7 วันย้อนหลัง (คำนวณในเวลาไทย)
+  const todayTH = new Date().toLocaleDateString("en-CA", {
+    timeZone: "Asia/Bangkok",
+  });
+  const untilDate = new Date(todayTH);
+  untilDate.setDate(untilDate.getDate() - 1);
+  const sinceDate = new Date(todayTH);
+  sinceDate.setDate(sinceDate.getDate() - 7);
+  const sinceStr = sinceDate.toISOString().slice(0, 10);
+  const untilStr = untilDate.toISOString().slice(0, 10);
 
   // cutoff = 6 เดือนย้อนหลัง
-  const cutoffDate = new Date();
+  const cutoffDate = new Date(todayTH);
   cutoffDate.setMonth(cutoffDate.getMonth() - 6);
   const cutoff = cutoffDate.toISOString().slice(0, 10);
 

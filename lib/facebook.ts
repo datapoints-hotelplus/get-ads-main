@@ -146,6 +146,54 @@ export async function fetchAccountReach(
 }
 
 /**
+ * Fetch total leads for a list of ad account IDs directly from Facebook Insights API.
+ * - time_increment=all_days  → one row per account for the whole period (no daily summing / no overlap)
+ * - action_attribution_windows=7d_click,1d_view → matches Ads Manager default attribution
+ * - Uses "offsite_conversion.fb_pixel_custom" which matches this account's Ads Manager Results column.
+ *   "lead" (Facebook Form) is excluded — it tracks a separate event for this account.
+ */
+export async function fetchAccountLeads(
+  accountIds: string[],
+  accessToken: string,
+  since: string,
+  until: string,
+): Promise<number> {
+  let total = 0;
+  const timeRange = encodeURIComponent(JSON.stringify({ since, until }));
+
+  for (const accountId of accountIds) {
+    const url =
+      `${FB_GRAPH_API_V25}/${accountId}/insights?fields=actions` +
+      `&time_range=${timeRange}` +
+      `&level=account` +
+      `&time_increment=all_days` +
+      `&action_attribution_windows=7d_click%2C1d_view` +
+      `&access_token=${accessToken}`;
+
+    const res: {
+      data: {
+        data?: { actions?: { action_type: string; value: string }[] }[];
+      };
+    } = await axios.get(url);
+
+    for (const item of res.data.data ?? []) {
+      for (const action of item.actions ?? []) {
+        // Sum pixel custom conversions (website) + messaging leads (DM)
+        // These two together match Ads Manager "Results" column for this account
+        if (
+          action.action_type === "offsite_conversion.fb_pixel_custom" ||
+          action.action_type === "onsite_conversion.lead"
+        ) {
+          total += parseFloat(action.value ?? "0") || 0;
+        }
+      }
+    }
+  }
+
+  return Math.round(total);
+}
+
+/**
  * Fetch reach broken down by campaign for a list of ad account IDs.
  * Makes one API call per account at level=campaign, returns a Map<campaign_name, {campaign_id, reach}>.
  * Accurate unique reach per campaign (not summed from daily raw rows).

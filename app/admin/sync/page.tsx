@@ -31,6 +31,18 @@ type DailyResult = {
     error?: string;
   }[];
 };
+type LatestResult = {
+  success: boolean;
+  latestDate: string;
+  since: string;
+  until: string;
+  accounts: {
+    name: string;
+    id: string;
+    rows: Record<string, number>;
+    error?: string;
+  }[];
+};
 
 export default function AdminSyncPage() {
   const router = useRouter();
@@ -54,6 +66,10 @@ export default function AdminSyncPage() {
   const [syncing7, setSyncing7] = useState(false);
   const [sync7Result, setSync7Result] = useState<BackfillResult | null>(null);
   const [sync7Error, setSync7Error] = useState<string | null>(null);
+
+  const [syncingLatest, setSyncingLatest] = useState(false);
+  const [syncLatestResult, setSyncLatestResult] = useState<LatestResult | null>(null);
+  const [syncLatestError, setSyncLatestError] = useState<string | null>(null);
 
   const handleAllPage = async () => {
     setAllPaging(true);
@@ -119,6 +135,22 @@ export default function AdminSyncPage() {
       setSync7Error(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
     } finally {
       setSyncing7(false);
+    }
+  };
+
+  const handleSyncLatest = async () => {
+    setSyncingLatest(true);
+    setSyncLatestError(null);
+    setSyncLatestResult(null);
+    try {
+      const res = await fetch("/api/sync-latest");
+      const data = await res.json();
+      if (!res.ok) setSyncLatestError(data.error ?? "เกิดข้อผิดพลาด");
+      else setSyncLatestResult(data);
+    } catch (err) {
+      setSyncLatestError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
+    } finally {
+      setSyncingLatest(false);
     }
   };
 
@@ -302,13 +334,13 @@ export default function AdminSyncPage() {
           )}
         </div>
 
-        {/* 7-Day Sync */}
+        {/* Today Sync */}
         <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
           <h2 className="text-base font-semibold text-gray-800 mb-1">
-            Sync 7 วันย้อนหลัง
+            ดึงข้อมูลวันนี้
           </h2>
           <p className="text-sm text-gray-500 mb-4">
-            ดึงข้อมูลย้อนหลัง 7 วัน (00:00–23:59 ทุกวัน) แล้ว upsert เข้า
+            ดึงข้อมูลตั้งแต่ 00:00 ถึงตอนนี้ของวันปัจจุบัน แล้ว upsert เข้า
             Supabase
           </p>
           <button
@@ -316,7 +348,7 @@ export default function AdminSyncPage() {
             disabled={syncing7}
             className="w-full bg-secondary hover:bg-secondary-light disabled:bg-gray-400 text-white font-semibold py-2.5 rounded-xl transition"
           >
-            {syncing7 ? "กำลัง Sync..." : "Sync 7 วันย้อนหลัง"}
+            {syncing7 ? "กำลัง Sync..." : "ดึงข้อมูลวันนี้"}
           </button>
           {sync7Error && (
             <p className="mt-3 text-sm text-red-600">{sync7Error}</p>
@@ -328,6 +360,51 @@ export default function AdminSyncPage() {
               </p>
               <ul className="text-sm text-green-700 space-y-0.5">
                 {sync7Result.accounts.map((a) => (
+                  <li key={a.id}>
+                    {a.name}{" "}
+                    <span className="text-green-500 font-mono text-xs">
+                      {a.error
+                        ? `error: ${a.error}`
+                        : Object.entries(a.rows)
+                            .map(([k, v]) => `${k}:${v}`)
+                            .join(" · ")}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+        {/* Sync Latest */}
+        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+          <h2 className="text-base font-semibold text-gray-800 mb-1">
+            อัปเดตข้อมูลให้เป็นล่าสุด
+          </h2>
+          <p className="text-sm text-gray-500 mb-4">
+            เช็ควันที่ล่าสุดในฐานข้อมูล แล้วดึงข้อมูลตั้งแต่วันนั้นถึงวันนี้
+          </p>
+          <button
+            onClick={handleSyncLatest}
+            disabled={syncingLatest}
+            className="w-full bg-secondary hover:bg-secondary-light disabled:bg-gray-400 text-white font-semibold py-2.5 rounded-xl transition"
+          >
+            {syncingLatest ? "กำลัง Sync..." : "อัปเดตข้อมูลให้เป็นล่าสุด"}
+          </button>
+          {syncLatestError && (
+            <p className="mt-3 text-sm text-red-600">{syncLatestError}</p>
+          )}
+          {syncLatestResult && (
+            <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-xl">
+              <p className="text-green-800 font-semibold text-sm mb-1">
+                Sync สำเร็จ — ข้อมูลล่าสุดเดิม:{" "}
+                <span className="font-mono">{syncLatestResult.latestDate ?? "ไม่มี"}</span>
+                {" → "}ดึงตั้งแต่{" "}
+                <span className="font-mono">{syncLatestResult.since}</span>
+                {" ถึง "}
+                <span className="font-mono">{syncLatestResult.until}</span>
+              </p>
+              <ul className="text-sm text-green-700 space-y-0.5">
+                {syncLatestResult.accounts.map((a) => (
                   <li key={a.id}>
                     {a.name}{" "}
                     <span className="text-green-500 font-mono text-xs">

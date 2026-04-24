@@ -171,7 +171,10 @@ function toRawdata(item: FBItem) {
       item.actions,
       "onsite_conversion.messaging_conversation_started_7d",
     ),
-    leads: findAction(item.actions, "lead"),
+    // Sum form leads + pixel custom conversions to cover both campaign objective types
+    leads:
+      findAction(item.actions, "lead") +
+      findAction(item.actions, "offsite_conversion.fb_pixel_custom"),
     post_shares: findAction(item.actions, "post"),
     post_comments: findAction(item.actions, "comment"),
     post_reactions: findAction(item.actions, "post_reaction"),
@@ -311,7 +314,10 @@ async function deleteByUniqueKeysAndInsert(
       .map((f) => String(newRow[f] ?? ""))
       .join("|");
 
-    for (const existing of (existingRecords ?? []) as unknown as Record<string, unknown>[]) {
+    for (const existing of (existingRecords ?? []) as unknown as Record<
+      string,
+      unknown
+    >[]) {
       const existingKey = uniqueKeyFields
         .map((f) => String(existing[f] ?? ""))
         .join("|");
@@ -409,56 +415,35 @@ async function getAccountIds(): Promise<{ name: string; id: string }[]> {
   }));
 }
 
-// ─── GET handler — ดึงข้อมูลวันนี้ (00:00–ตอนนี้) ───────────────────────────
+// ─── Core sync logic (exported for reuse) ────────────────────────────────────
 
-export async function GET() {
+export type SyncSummaryItem = {
+  name: string;
+  id: string;
+  rows: Record<SheetKey, number>;
+  error?: string;
+};
+
+export async function runSync(
+  since: string,
+  until: string,
+  label = "sync",
+): Promise<{ since: string; until: string; accounts: SyncSummaryItem[] }> {
   const accessToken = process.env.FB_ACCESS_TOKEN;
-  if (!accessToken) {
-    return NextResponse.json(
-      { error: "Missing FB_ACCESS_TOKEN" },
-      { status: 400 },
-    );
-  }
+  if (!accessToken) throw new Error("Missing FB_ACCESS_TOKEN");
 
-  let accounts: { name: string; id: string }[];
-  try {
-    accounts = await getAccountIds();
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Failed to load accounts" },
-      { status: 500 },
-    );
-  }
-
-  if (accounts.length === 0) {
-    return NextResponse.json(
-      { error: "ไม่พบ Active Account" },
-      { status: 404 },
-    );
-  }
-
-  // since = until = วันนี้ (00:00–ตอนนี้)
-  const today = new Date().toISOString().slice(0, 10);
-  const since = today;
-  const until = today;
+  const accounts = await getAccountIds();
+  if (accounts.length === 0) throw new Error("ไม่พบ Active Account");
 
   console.log(
-    `\n[sync-7days] START — ${since} → ${until}, ${accounts.length} accounts`,
+    `\n[${label}] START — ${since} → ${until}, ${accounts.length} accounts`,
   );
 
-  type SheetCounts = Record<SheetKey, number>;
-  const summary: {
-    name: string;
-    id: string;
-    rows: SheetCounts;
-    error?: string;
-  }[] = [];
+  const summary: SyncSummaryItem[] = [];
 
   for (const [idx, account] of accounts.entries()) {
-    console.log(
-      `\n[sync-7days] [${idx + 1}/${accounts.length}] ${account.name}`,
-    );
-    const rowCounts: SheetCounts = {
+    console.log(`\n[${label}] [${idx + 1}/${accounts.length}] ${account.name}`);
+    const rowCounts: Record<SheetKey, number> = {
       rawdata: 0,
       geo: 0,
       demographic: 0,
@@ -515,6 +500,23 @@ export async function GET() {
     if (idx < accounts.length - 1) await sleep(3000);
   }
 
-  console.log("[sync-7days] DONE ✓\n");
-  return NextResponse.json({ success: true, since, until, accounts: summary });
+  console.log(`[${label}] DONE ✓\n`);
+  return { since, until, accounts: summary };
+}
+
+// ─── GET handler — ดึงข้อมูลวันนี้ (00:00–ตอนนี้) ───────────────────────────
+
+export async function GET() {
+  try {
+    const today = new Date().toLocaleDateString("en-CA", {
+      timeZone: "Asia/Bangkok",
+    });
+    const result = await runSync(today, today, "sync-today");
+    return NextResponse.json({ success: true, ...result });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Server error" },
+      { status: 500 },
+    );
+  }
 }
