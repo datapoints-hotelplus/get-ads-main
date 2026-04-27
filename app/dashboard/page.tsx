@@ -694,7 +694,7 @@ export default function DashboardPage() {
     if (upper.startsWith("AWN"))
       return ["reach", "cpm", "impressions", "spend"];
     if (upper.startsWith("ENG"))
-      return ["post_engagement", "cost_per_engagement", "post_shares", "spend"];
+      return ["post_engagement", "cost_per_engagement", "post_shares", "spend", "ctr"];
     if (upper.startsWith("PL"))
       return ["page_likes", "cost_per_like", "reach", "spend"];
     return [];
