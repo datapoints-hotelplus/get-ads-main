@@ -680,41 +680,45 @@ export async function GET(request: NextRequest) {
 
     const accessToken = process.env.FB_ACCESS_TOKEN ?? "";
     if (accessToken && accountIds.length > 0 && dateFrom && dateTo) {
+      const apiFilter = {
+        campaignName: campaign || undefined,
+        adsetName: adset || undefined,
+      };
       const [statsCurrent, statsPrev, leadsCurrent, leadsPrev] =
         await Promise.all([
-          fetchAccountReachAndClicks(accountIds, accessToken, dateFrom, dateTo),
+          fetchAccountReachAndClicks(accountIds, accessToken, dateFrom, dateTo, apiFilter),
           prevFrom
             ? fetchAccountReachAndClicks(
                 accountIds,
                 accessToken,
                 prevFrom,
                 prevTo,
+                apiFilter,
               )
-            : Promise.resolve({ reach: 0, clicks: 0 }),
-          fetchAccountLeads(accountIds, accessToken, dateFrom, dateTo),
+            : Promise.resolve({ reach: 0, clicks: 0, impressions: 0 }),
+          fetchAccountLeads(accountIds, accessToken, dateFrom, dateTo, apiFilter),
           prevFrom
-            ? fetchAccountLeads(accountIds, accessToken, prevFrom, prevTo)
+            ? fetchAccountLeads(accountIds, accessToken, prevFrom, prevTo, apiFilter)
             : Promise.resolve(0),
         ]);
-      // Use API reach for totals only (account-level unique reach)
+      // Use API reach + clicks (account-level, same as reach — consistent regardless of campaign/adset filter)
       totals.reach = statsCurrent.reach;
       prevTotals.reach = statsPrev.reach;
-      // Use API clicks_all for accurate CTR
       totals.clicks_all = statsCurrent.clicks;
       prevTotals.clicks_all = statsPrev.clicks;
-      // Recompute CTR with API-sourced clicks_all
+      // CTR: both clicks and impressions from API (consistent source)
       totals.ctr =
-        totals.impressions > 0
+        statsCurrent.impressions > 0
           ? parseFloat(
-              ((totals.clicks_all / totals.impressions) * 100).toFixed(2),
+              ((statsCurrent.clicks / statsCurrent.impressions) * 100).toFixed(
+                2,
+              ),
             )
           : 0;
       prevTotals.ctr =
-        prevTotals.impressions > 0
+        statsPrev.impressions > 0
           ? parseFloat(
-              ((prevTotals.clicks_all / prevTotals.impressions) * 100).toFixed(
-                2,
-              ),
+              ((statsPrev.clicks / statsPrev.impressions) * 100).toFixed(2),
             )
           : 0;
       // Use API leads

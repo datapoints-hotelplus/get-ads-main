@@ -154,33 +154,68 @@ export async function fetchAccountReachAndClicks(
   accessToken: string,
   since: string,
   until: string,
-): Promise<{ reach: number; clicks: number }> {
+  options?: { campaignName?: string; adsetName?: string },
+): Promise<{ reach: number; clicks: number; impressions: number }> {
   let totalReach = 0;
   let totalClicks = 0;
+  let totalImpressions = 0;
   const timeRange = encodeURIComponent(JSON.stringify({ since, until }));
+
+  // Determine level and filtering based on filter options
+  let level = "account";
+  let filteringParam = "";
+  if (options?.adsetName) {
+    level = "adset";
+    filteringParam =
+      "&filtering=" +
+      encodeURIComponent(
+        JSON.stringify([
+          { field: "adset.name", operator: "EQUAL", value: options.adsetName },
+        ]),
+      );
+  } else if (options?.campaignName) {
+    level = "campaign";
+    filteringParam =
+      "&filtering=" +
+      encodeURIComponent(
+        JSON.stringify([
+          {
+            field: "campaign.name",
+            operator: "EQUAL",
+            value: options.campaignName,
+          },
+        ]),
+      );
+  }
 
   for (const accountId of accountIds) {
     const url =
       `${FB_GRAPH_API_V25}/${accountId}/insights` +
-      `?fields=reach,clicks` +
+      `?fields=reach,clicks,impressions` +
       `&time_range=${timeRange}` +
-      `&level=account` +
+      `&level=${level}` +
       `&time_increment=all_days` +
+      filteringParam +
       `&access_token=${accessToken}`;
 
     const res: {
       data: {
-        data?: { reach?: string; clicks?: string }[];
+        data?: { reach?: string; clicks?: string; impressions?: string }[];
       };
     } = await axios.get(url);
 
     for (const item of res.data.data ?? []) {
       totalReach += parseInt(String(item.reach ?? "0"), 10);
       totalClicks += parseInt(String(item.clicks ?? "0"), 10);
+      totalImpressions += parseInt(String(item.impressions ?? "0"), 10);
     }
   }
 
-  return { reach: totalReach, clicks: totalClicks };
+  return {
+    reach: totalReach,
+    clicks: totalClicks,
+    impressions: totalImpressions,
+  };
 }
 
 /**
@@ -195,17 +230,45 @@ export async function fetchAccountLeads(
   accessToken: string,
   since: string,
   until: string,
+  options?: { campaignName?: string; adsetName?: string },
 ): Promise<number> {
   let total = 0;
   const timeRange = encodeURIComponent(JSON.stringify({ since, until }));
+
+  let level = "account";
+  let filteringParam = "";
+  if (options?.adsetName) {
+    level = "adset";
+    filteringParam =
+      "&filtering=" +
+      encodeURIComponent(
+        JSON.stringify([
+          { field: "adset.name", operator: "EQUAL", value: options.adsetName },
+        ]),
+      );
+  } else if (options?.campaignName) {
+    level = "campaign";
+    filteringParam =
+      "&filtering=" +
+      encodeURIComponent(
+        JSON.stringify([
+          {
+            field: "campaign.name",
+            operator: "EQUAL",
+            value: options.campaignName,
+          },
+        ]),
+      );
+  }
 
   for (const accountId of accountIds) {
     const url =
       `${FB_GRAPH_API_V25}/${accountId}/insights?fields=actions` +
       `&time_range=${timeRange}` +
-      `&level=account` +
+      `&level=${level}` +
       `&time_increment=all_days` +
       `&action_attribution_windows=7d_click%2C1d_view` +
+      filteringParam +
       `&access_token=${accessToken}`;
 
     const res: {
@@ -238,17 +301,32 @@ export async function fetchCampaignReach(
   since: string,
   until: string,
 ): Promise<
-  Map<string, { campaign_id: string; account_id: string; reach: number }>
+  Map<
+    string,
+    {
+      campaign_id: string;
+      account_id: string;
+      reach: number;
+      clicks: number;
+      ctr: number;
+    }
+  >
 > {
   const result = new Map<
     string,
-    { campaign_id: string; account_id: string; reach: number }
+    {
+      campaign_id: string;
+      account_id: string;
+      reach: number;
+      clicks: number;
+      impressions: number;
+    }
   >();
   const timeRange = encodeURIComponent(JSON.stringify({ since, until }));
 
   for (const accountId of accountIds) {
     let url: string | null =
-      `${FB_GRAPH_API_V25}/${accountId}/insights?fields=reach,campaign_name,campaign_id` +
+      `${FB_GRAPH_API_V25}/${accountId}/insights?fields=reach,clicks,impressions,campaign_name,campaign_id` +
       `&time_range=${timeRange}&level=campaign&access_token=${accessToken}`;
 
     while (url) {
@@ -256,6 +334,8 @@ export async function fetchCampaignReach(
         data: {
           data?: {
             reach?: string;
+            clicks?: string;
+            impressions?: string;
             campaign_name?: string;
             campaign_id?: string;
           }[];
@@ -266,18 +346,41 @@ export async function fetchCampaignReach(
         const name = item.campaign_name ?? "";
         const id = item.campaign_id ?? "";
         const reach = parseInt(String(item.reach ?? "0"), 10);
+        const clicks = parseInt(String(item.clicks ?? "0"), 10);
+        const impressions = parseInt(String(item.impressions ?? "0"), 10);
         const existing = result.get(name);
         result.set(name, {
           campaign_id: id || existing?.campaign_id || "",
           account_id: accountId,
           reach: (existing?.reach ?? 0) + reach,
+          clicks: (existing?.clicks ?? 0) + clicks,
+          impressions: (existing?.impressions ?? 0) + impressions,
         });
       }
       url = res.data.paging?.next ?? null;
     }
   }
 
-  return result;
+  const out = new Map<
+    string,
+    {
+      campaign_id: string;
+      account_id: string;
+      reach: number;
+      clicks: number;
+      ctr: number;
+    }
+  >();
+  for (const [name, { impressions, ...entry }] of result.entries()) {
+    out.set(name, {
+      ...entry,
+      ctr:
+        impressions > 0
+          ? parseFloat(((entry.clicks / impressions) * 100).toFixed(2))
+          : 0,
+    });
+  }
+  return out;
 }
 
 /**
@@ -289,22 +392,42 @@ export async function fetchAdReach(
   accessToken: string,
   since: string,
   until: string,
-): Promise<{ ad_id: string; ad_name: string; reach: number }[]> {
+): Promise<
+  {
+    ad_id: string;
+    ad_name: string;
+    reach: number;
+    clicks: number;
+    ctr: number;
+  }[]
+> {
   const result = new Map<
     string,
-    { ad_id: string; ad_name: string; reach: number }
+    {
+      ad_id: string;
+      ad_name: string;
+      reach: number;
+      clicks: number;
+      impressions: number;
+    }
   >();
   const timeRange = encodeURIComponent(JSON.stringify({ since, until }));
 
   for (const accountId of accountIds) {
     let url: string | null =
-      `${FB_GRAPH_API_V25}/${accountId}/insights?fields=reach,ad_id,ad_name` +
-      `&time_range=${timeRange}&level=ad&access_token=${accessToken}`;
+      `${FB_GRAPH_API_V25}/${accountId}/insights?fields=reach,clicks,impressions,ad_id,ad_name` +
+      `&time_range=${timeRange}&level=ad&time_increment=all_days&access_token=${accessToken}`;
 
     while (url) {
       const res: {
         data: {
-          data?: { reach?: string; ad_id?: string; ad_name?: string }[];
+          data?: {
+            reach?: string;
+            clicks?: string;
+            impressions?: string;
+            ad_id?: string;
+            ad_name?: string;
+          }[];
           paging?: { next?: string };
         };
       } = await axios.get(url);
@@ -312,18 +435,30 @@ export async function fetchAdReach(
         const id = item.ad_id ?? "";
         const name = item.ad_name ?? "";
         const reach = parseInt(String(item.reach ?? "0"), 10);
+        const clicks = parseInt(String(item.clicks ?? "0"), 10);
+        const impressions = parseInt(String(item.impressions ?? "0"), 10);
         const existing = result.get(id);
         result.set(id, {
           ad_id: id,
           ad_name: name,
           reach: (existing?.reach ?? 0) + reach,
+          clicks: (existing?.clicks ?? 0) + clicks,
+          impressions: (existing?.impressions ?? 0) + impressions,
         });
       }
       url = res.data.paging?.next ?? null;
     }
   }
 
-  return Array.from(result.values()).sort((a, b) => b.reach - a.reach);
+  return Array.from(result.values())
+    .map(({ impressions, ...entry }) => ({
+      ...entry,
+      ctr:
+        impressions > 0
+          ? parseFloat(((entry.clicks / impressions) * 100).toFixed(2))
+          : 0,
+    }))
+    .sort((a, b) => b.reach - a.reach);
 }
 
 /**
