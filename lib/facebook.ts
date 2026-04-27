@@ -267,7 +267,6 @@ export async function fetchAccountLeads(
       `&time_range=${timeRange}` +
       `&level=${level}` +
       `&time_increment=all_days` +
-      `&action_attribution_windows=7d_click%2C1d_view` +
       filteringParam +
       `&access_token=${accessToken}`;
 
@@ -278,13 +277,17 @@ export async function fetchAccountLeads(
     } = await axios.get(url);
 
     for (const item of res.data.data ?? []) {
+      let leadTotal = 0;
+      let onsiteLeadTotal = 0;
       for (const action of item.actions ?? []) {
-        // Sum pixel custom conversions (website) + messaging leads (DM)
-        // These two together match Ads Manager "Results" column for this account
         if (action.action_type === "lead") {
-          total += parseFloat(action.value ?? "0") || 0;
+          leadTotal += parseFloat(action.value ?? "0") || 0;
+        }
+        if (action.action_type === "onsite_conversion.lead") {
+          onsiteLeadTotal += parseFloat(action.value ?? "0") || 0;
         }
       }
+      total += leadTotal - onsiteLeadTotal;
     }
   }
   return Math.round(total);

@@ -686,7 +686,13 @@ export async function GET(request: NextRequest) {
       };
       const [statsCurrent, statsPrev, leadsCurrent, leadsPrev] =
         await Promise.all([
-          fetchAccountReachAndClicks(accountIds, accessToken, dateFrom, dateTo, apiFilter),
+          fetchAccountReachAndClicks(
+            accountIds,
+            accessToken,
+            dateFrom,
+            dateTo,
+            apiFilter,
+          ),
           prevFrom
             ? fetchAccountReachAndClicks(
                 accountIds,
@@ -696,9 +702,21 @@ export async function GET(request: NextRequest) {
                 apiFilter,
               )
             : Promise.resolve({ reach: 0, clicks: 0, impressions: 0 }),
-          fetchAccountLeads(accountIds, accessToken, dateFrom, dateTo, apiFilter),
+          fetchAccountLeads(
+            accountIds,
+            accessToken,
+            dateFrom,
+            dateTo,
+            apiFilter,
+          ),
           prevFrom
-            ? fetchAccountLeads(accountIds, accessToken, prevFrom, prevTo, apiFilter)
+            ? fetchAccountLeads(
+                accountIds,
+                accessToken,
+                prevFrom,
+                prevTo,
+                apiFilter,
+              )
             : Promise.resolve(0),
         ]);
       // Use API reach + clicks (account-level, same as reach — consistent regardless of campaign/adset filter)
