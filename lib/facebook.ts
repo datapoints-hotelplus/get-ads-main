@@ -175,21 +175,19 @@ export async function fetchAccountLeads(
         data?: { actions?: { action_type: string; value: string }[] }[];
       };
     } = await axios.get(url);
-
+    
     for (const item of res.data.data ?? []) {
       for (const action of item.actions ?? []) {
         // Sum pixel custom conversions (website) + messaging leads (DM)
         // These two together match Ads Manager "Results" column for this account
         if (
-          action.action_type === "offsite_conversion.fb_pixel_custom" ||
-          action.action_type === "onsite_conversion.lead"
+          action.action_type === "lead"
         ) {
           total += parseFloat(action.value ?? "0") || 0;
         }
       }
     }
   }
-
   return Math.round(total);
 }
 
