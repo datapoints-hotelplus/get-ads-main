@@ -146,6 +146,44 @@ export async function fetchAccountReach(
 }
 
 /**
+ * Fetch reach + clicks (all clicks = clicks_all) in a single API call per account.
+ * Using time_increment=all_days avoids double-counting across daily rows.
+ */
+export async function fetchAccountReachAndClicks(
+  accountIds: string[],
+  accessToken: string,
+  since: string,
+  until: string,
+): Promise<{ reach: number; clicks: number }> {
+  let totalReach = 0;
+  let totalClicks = 0;
+  const timeRange = encodeURIComponent(JSON.stringify({ since, until }));
+
+  for (const accountId of accountIds) {
+    const url =
+      `${FB_GRAPH_API_V25}/${accountId}/insights` +
+      `?fields=reach,clicks` +
+      `&time_range=${timeRange}` +
+      `&level=account` +
+      `&time_increment=all_days` +
+      `&access_token=${accessToken}`;
+
+    const res: {
+      data: {
+        data?: { reach?: string; clicks?: string }[];
+      };
+    } = await axios.get(url);
+
+    for (const item of res.data.data ?? []) {
+      totalReach += parseInt(String(item.reach ?? "0"), 10);
+      totalClicks += parseInt(String(item.clicks ?? "0"), 10);
+    }
+  }
+
+  return { reach: totalReach, clicks: totalClicks };
+}
+
+/**
  * Fetch total leads for a list of ad account IDs directly from Facebook Insights API.
  * - time_increment=all_days  → one row per account for the whole period (no daily summing / no overlap)
  * - action_attribution_windows=7d_click,1d_view → matches Ads Manager default attribution
@@ -175,14 +213,12 @@ export async function fetchAccountLeads(
         data?: { actions?: { action_type: string; value: string }[] }[];
       };
     } = await axios.get(url);
-    
+
     for (const item of res.data.data ?? []) {
       for (const action of item.actions ?? []) {
         // Sum pixel custom conversions (website) + messaging leads (DM)
         // These two together match Ads Manager "Results" column for this account
-        if (
-          action.action_type === "lead"
-        ) {
+        if (action.action_type === "lead") {
           total += parseFloat(action.value ?? "0") || 0;
         }
       }

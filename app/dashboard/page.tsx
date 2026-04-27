@@ -785,6 +785,7 @@ export default function DashboardPage() {
     try {
       const res = await fetch(`/api/dashboard?${params}`);
       const json = await res.json();
+      console.log("Data response:", json);
       if (!res.ok) {
         setError(json.error ?? "เกิดข้อผิดพลาด");
       } else {

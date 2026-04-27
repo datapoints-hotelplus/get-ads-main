@@ -3,6 +3,7 @@ import { getSupabase } from "@/lib/supabase";
 import {
   fetchAccountLeads,
   fetchAccountReach,
+  fetchAccountReachAndClicks,
   fetchAgeGenderBreakdown,
   fetchDeviceBreakdown,
 } from "@/lib/facebook";
@@ -663,7 +664,6 @@ export async function GET(request: NextRequest) {
         cost_per_like: parseFloat(cost_per_like.toFixed(2)),
       };
     }
-
     const totals = aggregate(rows);
     const prevTotals = aggregate(prevRows);
 
@@ -680,32 +680,54 @@ export async function GET(request: NextRequest) {
 
     const accessToken = process.env.FB_ACCESS_TOKEN ?? "";
     if (accessToken && accountIds.length > 0 && dateFrom && dateTo) {
-      const [reachCurrent, reachPrev, leadsCurrent, leadsPrev] =
+      const [statsCurrent, statsPrev, leadsCurrent, leadsPrev] =
         await Promise.all([
-          fetchAccountReach(accountIds, accessToken, dateFrom, dateTo),
+          fetchAccountReachAndClicks(accountIds, accessToken, dateFrom, dateTo),
           prevFrom
-            ? fetchAccountReach(accountIds, accessToken, prevFrom, prevTo)
-            : Promise.resolve(0),
+            ? fetchAccountReachAndClicks(
+                accountIds,
+                accessToken,
+                prevFrom,
+                prevTo,
+              )
+            : Promise.resolve({ reach: 0, clicks: 0 }),
           fetchAccountLeads(accountIds, accessToken, dateFrom, dateTo),
           prevFrom
             ? fetchAccountLeads(accountIds, accessToken, prevFrom, prevTo)
             : Promise.resolve(0),
         ]);
       // Use API reach for totals only (account-level unique reach)
-      // Campaign breakdown will use database reach to avoid overlap issues
-      totals.reach = reachCurrent;
-      prevTotals.reach = reachPrev;
-      // Use API leads: offsite_conversion.fb_pixel_custom (matches Ads Manager "Results")
+      totals.reach = statsCurrent.reach;
+      prevTotals.reach = statsPrev.reach;
+      // Use API clicks_all for accurate CTR
+      totals.clicks_all = statsCurrent.clicks;
+      prevTotals.clicks_all = statsPrev.clicks;
+      // Recompute CTR with API-sourced clicks_all
+      totals.ctr =
+        totals.impressions > 0
+          ? parseFloat(
+              ((totals.clicks_all / totals.impressions) * 100).toFixed(2),
+            )
+          : 0;
+      prevTotals.ctr =
+        prevTotals.impressions > 0
+          ? parseFloat(
+              ((prevTotals.clicks_all / prevTotals.impressions) * 100).toFixed(
+                2,
+              ),
+            )
+          : 0;
+      // Use API leads
       totals.leads = leadsCurrent;
       prevTotals.leads = leadsPrev;
       // Recompute frequency with updated reach
       totals.frequency =
-        reachCurrent > 0
-          ? parseFloat((totals.impressions / reachCurrent).toFixed(2))
+        statsCurrent.reach > 0
+          ? parseFloat((totals.impressions / statsCurrent.reach).toFixed(2))
           : 0;
       prevTotals.frequency =
-        reachPrev > 0
-          ? parseFloat((prevTotals.impressions / reachPrev).toFixed(2))
+        statsPrev.reach > 0
+          ? parseFloat((prevTotals.impressions / statsPrev.reach).toFixed(2))
           : 0;
       // Recompute cost_per_lead with updated leads
       totals.cost_per_lead =
