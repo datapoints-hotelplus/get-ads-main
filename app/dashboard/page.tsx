@@ -74,6 +74,26 @@ interface Totals {
   cost_per_like: number;
 }
 
+interface AdGroupRow {
+  campaign_name: string;
+  adset_name: string;
+  ad_name: string;
+  spend: number;
+  reach: number;
+  impressions: number;
+  clicks: number;
+  unique_clicks: number;
+  purchases: number;
+  revenue: number;
+  roas: number;
+  ctr: number;
+  cpc: number;
+  cost_per_purchase: number;
+  post_engagement: number;
+  cost_per_engagement: number;
+  cost_per_like: number;
+}
+
 interface GroupRow {
   campaign_name: string;
   adset_name: string;
@@ -612,6 +632,199 @@ function HeatmapTable({ rows }: { rows: GroupRow[] }) {
   );
 }
 
+// ─── Ad-level Heatmap Table ───────────────────────────────────────────────────
+
+function AdHeatmapTable({ rows }: { rows: AdGroupRow[] }) {
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: "spend", desc: true },
+  ]);
+
+  const colStats = useMemo(() => {
+    const keys = [
+      "impressions", "clicks", "unique_clicks", "reach", "spend",
+      "revenue", "roas", "ctr", "cpc", "post_engagement",
+      "cost_per_engagement", "cost_per_like",
+    ] as (keyof AdGroupRow)[];
+    const stats: Record<string, { min: number; max: number }> = {};
+    for (const k of keys) {
+      const vals = rows.map((r) => r[k] as number).filter(Number.isFinite);
+      stats[k] = {
+        min: vals.length ? Math.min(...vals) : 0,
+        max: vals.length ? Math.max(...vals) : 0,
+      };
+    }
+    return stats;
+  }, [rows]);
+
+  const columns = useMemo<ColumnDef<AdGroupRow>[]>(
+    () => [
+      {
+        id: "row_number",
+        header: "",
+        cell: ({ row, table }) => {
+          const pageIndex = table.getState().pagination.pageIndex;
+          const pageSize = table.getState().pagination.pageSize;
+          return (
+            <span className="text-gray-400 text-xs">
+              {pageIndex * pageSize + row.index + 1}.
+            </span>
+          );
+        },
+        size: 36,
+        enableSorting: false,
+      },
+      {
+        accessorKey: "ad_name",
+        header: "Ad",
+        cell: ({ getValue, row }) => (
+          <div className="flex flex-col leading-tight">
+            <span className="text-xs text-gray-700 font-medium truncate max-w-60">
+              {getValue<string>() || "—"}
+            </span>
+            <span className="text-xs text-gray-400 truncate max-w-60">
+              {row.original.adset_name}
+            </span>
+          </div>
+        ),
+        size: 260,
+      },
+      ...(
+        [
+          { key: "impressions",         label: "ครั้งแสดง",               fmt: (v: number) => fmtK(v) },
+          { key: "clicks",              label: "จำนวนคลิก",               fmt: (v: number) => fmtK(v) },
+          { key: "unique_clicks",       label: "คลิกไม่ซ้ำ",              fmt: (v: number) => fmtK(v) },
+          { key: "reach",               label: "ผู้เห็น",                  fmt: (v: number) => fmtK(v) },
+          { key: "spend",               label: "ยอดใช้จ่าย",              fmt: (v: number) => fmtK(v) },
+          { key: "revenue",             label: "ยอดขาย",                  fmt: (v: number) => fmtK(v) },
+          { key: "roas",                label: "ROAS",                    fmt: (v: number) => `${v.toFixed(2)}x` },
+          { key: "ctr",                 label: "CTR",                     fmt: (v: number) => `${v.toFixed(2)}%` },
+          { key: "cpc",                 label: "ต้นทุนต่อคลิก",           fmt: (v: number) => fmtK(v) },
+          { key: "post_engagement",     label: "การมีส่วนร่วม",           fmt: (v: number) => fmtK(v) },
+          { key: "cost_per_engagement", label: "ต้นทุนต่อการมีส่วนร่วม", fmt: (v: number) => fmtK(v) },
+          { key: "cost_per_like",       label: "ต้นทุนต่อการติดตาม",     fmt: (v: number) => fmtK(v) },
+        ] as const
+      ).map(({ key, label, fmt: fmtFn }) => ({
+        accessorKey: key,
+        header: label,
+        meta: {
+          getBg: (v: number) => {
+            const { min, max } = colStats[key] ?? { min: 0, max: 0 };
+            return heatCell(v, min, max, key);
+          },
+        },
+        cell: ({ getValue }: { getValue: () => unknown }) =>
+          fmtFn(getValue() as number),
+        size: 110,
+      })),
+    ],
+    [colStats],
+  );
+
+  const table = useReactTable({
+    data: rows,
+    columns,
+    state: { sorting },
+    onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    initialState: { pagination: { pageSize: 100 } },
+  });
+
+  const { pageIndex, pageSize } = table.getState().pagination;
+  const totalRows = rows.length;
+  const start = pageIndex * pageSize + 1;
+  const end = Math.min(start + pageSize - 1, totalRows);
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            {table.getHeaderGroups().map((hg) => (
+              <tr key={hg.id} className="border-b border-gray-200 bg-gray-50">
+                {hg.headers.map((header) => (
+                  <th
+                    key={header.id}
+                    style={{ width: header.getSize() }}
+                    className={`px-3 py-2 text-xs font-semibold text-gray-500 select-none whitespace-nowrap ${
+                      header.column.getCanSort()
+                        ? "cursor-pointer hover:text-gray-900"
+                        : ""
+                    } ${header.id === "ad_name" || header.id === "row_number" ? "text-left" : "text-right"}`}
+                    onClick={header.column.getToggleSortingHandler()}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(header.column.columnDef.header, header.getContext())}
+                      {header.column.getIsSorted() === "asc" && " ▲"}
+                      {header.column.getIsSorted() === "desc" && " ▼"}
+                    </span>
+                  </th>
+                ))}
+              </tr>
+            ))}
+          </thead>
+          <tbody>
+            {table.getRowModel().rows.map((row, idx) => (
+              <tr
+                key={row.id}
+                className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${
+                  idx % 2 === 1 ? "bg-gray-50/40" : ""
+                }`}
+              >
+                {row.getVisibleCells().map((cell) => {
+                  const meta = cell.column.columnDef.meta as
+                    | { getBg?: (v: number) => string | undefined }
+                    | undefined;
+                  const bg = meta?.getBg
+                    ? meta.getBg(cell.getValue() as number)
+                    : undefined;
+                  return (
+                    <td
+                      key={cell.id}
+                      className={`px-3 py-2 text-xs font-medium text-gray-900 ${
+                        cell.column.id === "ad_name" || cell.column.id === "row_number"
+                          ? "text-left"
+                          : "text-right"
+                      }`}
+                      style={bg ? { backgroundColor: bg } : undefined}
+                    >
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination */}
+      <div className="flex items-center justify-end gap-3 px-4 py-3 border-t border-gray-200 text-xs text-gray-500">
+        <span>
+          {start} - {end} / {totalRows.toLocaleString("th-TH")}
+        </span>
+        <button
+          onClick={() => table.previousPage()}
+          disabled={!table.getCanPreviousPage()}
+          className="px-2 py-1 border border-gray-200 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          ‹
+        </button>
+        <button
+          onClick={() => table.nextPage()}
+          disabled={!table.getCanNextPage()}
+          className="px-2 py-1 border border-gray-200 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          ›
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -668,9 +881,10 @@ export default function DashboardPage() {
     to: string;
   } | null>(null);
   const [rows, setRows] = useState<GroupRow[]>([]);
+  const [adRows, setAdRows] = useState<AdGroupRow[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [count, setCount] = useState(0); 
+  const [count, setCount] = useState(0);
 
   // Geo data state
   const [geoRegions, setGeoRegions] = useState<GeoRegion[]>([]);
@@ -793,6 +1007,7 @@ export default function DashboardPage() {
         setChanges(json.changes ?? null);
         setPrevPeriod(json.prevPeriod ?? null);
         setRows(json.rows);
+        setAdRows(json.ad_rows ?? []);
         setCount(json.count);
       }
     } catch (e) {
@@ -1283,7 +1498,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* ── Data Table ────────────────────────────────────────────────── */}
+            {/* ── Ad Set Table ──────────────────────────────────────────────── */}
             {rows.length > 0 ? (
               <div data-aos="fade-up" data-aos-delay="100">
                 <HeatmapTable rows={rows} />
@@ -1291,6 +1506,16 @@ export default function DashboardPage() {
             ) : (
               <div className="text-center py-16 text-gray-400 text-sm">
                 ไม่พบข้อมูลในช่วงเวลาที่เลือก
+              </div>
+            )}
+
+            {/* ── Ad Table ──────────────────────────────────────────────────── */}
+            {adRows.length > 0 && (
+              <div data-aos="fade-up" data-aos-delay="150">
+                <h2 className="text-base font-semibold text-gray-700 mb-2">
+                  ตาราง Ad ({adRows.length})
+                </h2>
+                <AdHeatmapTable rows={adRows} />
               </div>
             )}
           </>

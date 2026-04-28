@@ -1,6 +1,8 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: light; /* force light mode — no dark mode in this app */
+
   /* Primary Colors (CI) */
   --primary: #fdd52c;
   --primary-dark: #f0c919;

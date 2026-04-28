@@ -926,11 +926,81 @@ export async function GET(request: NextRequest) {
 
     groupRows.sort((a, b) => b.spend - a.spend);
 
+    // ── Group by campaign+adset+ad_name for ad-level table ───────────────────
+    type AdGroupRow = {
+      campaign_name: string;
+      adset_name: string;
+      ad_name: string;
+      spend: number;
+      reach: number;
+      impressions: number;
+      clicks: number;
+      unique_clicks: number;
+      clicks_all: number;
+      purchases: number;
+      revenue: number;
+      roas: number;
+      ctr: number;
+      cpc: number;
+      cost_per_purchase: number;
+      post_engagement: number;
+      cost_per_engagement: number;
+      cost_per_like: number;
+      page_likes: number;
+    };
+
+    const adGrouped = new Map<string, AdGroupRow>();
+    for (const r of rows) {
+      const key = `${r.campaign_name}|||${r.adset_name}|||${r.ad_name ?? ""}`;
+      if (!adGrouped.has(key)) {
+        adGrouped.set(key, {
+          campaign_name: r.campaign_name,
+          adset_name: r.adset_name,
+          ad_name: r.ad_name ?? "",
+          spend: 0, reach: 0, impressions: 0, clicks: 0,
+          unique_clicks: 0, clicks_all: 0, purchases: 0, revenue: 0,
+          roas: 0, ctr: 0, cpc: 0, cost_per_purchase: 0,
+          post_engagement: 0, cost_per_engagement: 0,
+          cost_per_like: 0, page_likes: 0,
+        });
+      }
+      const g = adGrouped.get(key)!;
+      g.spend += r.spend ?? 0;
+      g.reach += r.reach ?? 0;
+      g.impressions += r.impressions ?? 0;
+      g.clicks += r.inline_link_clicks ?? 0;
+      g.unique_clicks += r.unique_inline_link_clicks ?? 0;
+      g.clicks_all += r.clicks_all ?? 0;
+      g.purchases += r.purchases ?? 0;
+      g.revenue += r.purchase_value ?? 0;
+      g.post_engagement += r.post_engagement ?? 0;
+      g.page_likes += r.page_likes ?? 0;
+    }
+
+    const adRows: AdGroupRow[] = [...adGrouped.values()].map((g) => {
+      const reachShare =
+        totals.impressions > 0
+          ? parseFloat(((g.impressions / totals.impressions) * totals.reach).toFixed(0))
+          : 0;
+      return {
+        ...g,
+        reach: reachShare,
+        roas: g.spend > 0 ? parseFloat((g.revenue / g.spend).toFixed(2)) : 0,
+        ctr: g.impressions > 0 ? parseFloat(((g.clicks_all / g.impressions) * 100).toFixed(2)) : 0,
+        cpc: g.clicks > 0 ? parseFloat((g.spend / g.clicks).toFixed(2)) : 0,
+        cost_per_purchase: g.purchases > 0 ? parseFloat((g.spend / g.purchases).toFixed(2)) : 0,
+        cost_per_engagement: g.post_engagement > 0 ? parseFloat((g.spend / g.post_engagement).toFixed(2)) : 0,
+        cost_per_like: g.page_likes > 0 ? parseFloat((g.spend / g.page_likes).toFixed(2)) : 0,
+      };
+    });
+    adRows.sort((a, b) => b.spend - a.spend);
+
     return NextResponse.json({
       totals,
       changes,
       prevPeriod: prevFrom ? { from: prevFrom, to: prevTo } : null,
       rows: groupRows,
+      ad_rows: adRows,
       count: rows.length,
     });
   } catch (err) {
