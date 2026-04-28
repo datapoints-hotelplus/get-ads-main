@@ -348,6 +348,36 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ageGender, devices });
     }
 
+    // ── type === "fb_ad_insights" — ad-level reach+CTR from Facebook API ────────
+    if (type === "fb_ad_insights") {
+      const dateFrom = searchParams.get("dateFrom") ?? "";
+      const dateTo = searchParams.get("dateTo") ?? "";
+      const account = searchParams.get("account") ?? "";
+      const allowedNames = await getAllowedAccountNames();
+      const accessToken = process.env.FB_ACCESS_TOKEN ?? "";
+
+      if (!accessToken) {
+        return NextResponse.json({ error: "FB_ACCESS_TOKEN not set" }, { status: 500 });
+      }
+
+      let pageQuery = supabase.from("ads_allpage").select("account_id, account_name");
+      if (account) {
+        pageQuery = pageQuery.eq("account_name", account);
+      } else if (allowedNames !== null) {
+        pageQuery = pageQuery.in("account_name", allowedNames);
+      }
+      const { data: pages } = await pageQuery;
+      const accountIds = (pages ?? []).map((p) => p.account_id as string);
+
+      if (accountIds.length === 0) {
+        return NextResponse.json({ ads: [] });
+      }
+
+      const { fetchAdReach } = await import("@/lib/facebook");
+      const ads = await fetchAdReach(accountIds, accessToken, dateFrom, dateTo);
+      return NextResponse.json({ ads });
+    }
+
     // ── type === "geo" — region breakdown for GeoChart (reach from API, rest from DB) ──
     if (type === "geo") {
       const dateFrom = searchParams.get("dateFrom") ?? "";
@@ -527,6 +557,7 @@ export async function GET(request: NextRequest) {
       campaign_name: string;
       adset_name: string;
       ad_name: string;
+      ad_id: string;
       spend: number;
       reach: number;
       impressions: number;
@@ -549,7 +580,7 @@ export async function GET(request: NextRequest) {
     };
 
     const selectFields =
-      "date_start,date_stop,account_name,campaign_name,adset_name,ad_name," +
+      "date_start,date_stop,account_name,campaign_name,adset_name,ad_name,ad_id," +
       "spend,reach,impressions,inline_link_clicks,unique_inline_link_clicks,clicks_all," +
       "purchases,purchase_value,cpc,ctr,cpm,frequency," +
       "leads,messaging_conversations_started,post_shares,page_likes," +
@@ -926,11 +957,23 @@ export async function GET(request: NextRequest) {
 
     groupRows.sort((a, b) => b.spend - a.spend);
 
-    // ── Group by campaign+adset+ad_name for ad-level table ───────────────────
+    // ── Group by campaign+adset+ad_name (only when all 3 filters are set) ──────
+    if (!account || !campaign || !adset) {
+      return NextResponse.json({
+        totals,
+        changes,
+        prevPeriod: prevFrom ? { from: prevFrom, to: prevTo } : null,
+        rows: groupRows,
+        ad_rows: [],
+        count: rows.length,
+      });
+    }
+
     type AdGroupRow = {
       campaign_name: string;
       adset_name: string;
       ad_name: string;
+      ad_id: string;
       spend: number;
       reach: number;
       impressions: number;
@@ -957,6 +1000,7 @@ export async function GET(request: NextRequest) {
           campaign_name: r.campaign_name,
           adset_name: r.adset_name,
           ad_name: r.ad_name ?? "",
+          ad_id: r.ad_id ?? "",
           spend: 0, reach: 0, impressions: 0, clicks: 0,
           unique_clicks: 0, clicks_all: 0, purchases: 0, revenue: 0,
           roas: 0, ctr: 0, cpc: 0, cost_per_purchase: 0,

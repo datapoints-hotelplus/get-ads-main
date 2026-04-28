@@ -78,6 +78,7 @@ interface AdGroupRow {
   campaign_name: string;
   adset_name: string;
   ad_name: string;
+  ad_id: string;
   spend: number;
   reach: number;
   impressions: number;
@@ -92,6 +93,8 @@ interface AdGroupRow {
   post_engagement: number;
   cost_per_engagement: number;
   cost_per_like: number;
+  fb_reach?: number;
+  fb_ctr?: number;
 }
 
 interface GroupRow {
@@ -634,7 +637,7 @@ function HeatmapTable({ rows }: { rows: GroupRow[] }) {
 
 // ─── Ad-level Heatmap Table ───────────────────────────────────────────────────
 
-function AdHeatmapTable({ rows }: { rows: AdGroupRow[] }) {
+function AdHeatmapTable({ rows, hasFbData }: { rows: AdGroupRow[]; hasFbData: boolean }) {
   const [sorting, setSorting] = useState<SortingState>([
     { id: "spend", desc: true },
   ]);
@@ -644,6 +647,7 @@ function AdHeatmapTable({ rows }: { rows: AdGroupRow[] }) {
       "impressions", "clicks", "unique_clicks", "reach", "spend",
       "revenue", "roas", "ctr", "cpc", "post_engagement",
       "cost_per_engagement", "cost_per_like",
+      ...(hasFbData ? ["fb_reach", "fb_ctr"] : []),
     ] as (keyof AdGroupRow)[];
     const stats: Record<string, { min: number; max: number }> = {};
     for (const k of keys) {
@@ -654,7 +658,7 @@ function AdHeatmapTable({ rows }: { rows: AdGroupRow[] }) {
       };
     }
     return stats;
-  }, [rows]);
+  }, [rows, hasFbData]);
 
   const columns = useMemo<ColumnDef<AdGroupRow>[]>(
     () => [
@@ -716,8 +720,38 @@ function AdHeatmapTable({ rows }: { rows: AdGroupRow[] }) {
           fmtFn(getValue() as number),
         size: 110,
       })),
+      ...(hasFbData ? [
+        {
+          id: "fb_reach",
+          accessorKey: "fb_reach" as keyof AdGroupRow,
+          header: "FB Reach",
+          meta: {
+            getBg: (v: number) => {
+              const { min, max } = colStats["fb_reach"] ?? { min: 0, max: 0 };
+              return heatCell(v, min, max, "reach");
+            },
+          },
+          cell: ({ getValue }: { getValue: () => unknown }) =>
+            fmtK((getValue() as number) ?? 0),
+          size: 100,
+        },
+        {
+          id: "fb_ctr",
+          accessorKey: "fb_ctr" as keyof AdGroupRow,
+          header: "FB CTR",
+          meta: {
+            getBg: (v: number) => {
+              const { min, max } = colStats["fb_ctr"] ?? { min: 0, max: 0 };
+              return heatCell(v, min, max, "ctr");
+            },
+          },
+          cell: ({ getValue }: { getValue: () => unknown }) =>
+            `${((getValue() as number) ?? 0).toFixed(2)}%`,
+          size: 80,
+        },
+      ] : []),
     ],
-    [colStats],
+    [colStats, hasFbData],
   );
 
   const table = useReactTable({
@@ -882,6 +916,8 @@ export default function DashboardPage() {
   } | null>(null);
   const [rows, setRows] = useState<GroupRow[]>([]);
   const [adRows, setAdRows] = useState<AdGroupRow[]>([]);
+  const [fbAdLoading, setFbAdLoading] = useState(false);
+  const [fbAdLoaded, setFbAdLoaded] = useState(false);
   const [dataLoading, setDataLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [count, setCount] = useState(0);
@@ -989,6 +1025,7 @@ export default function DashboardPage() {
   const fetchData = useCallback(async () => {
     setDataLoading(true);
     setError(null);
+    setFbAdLoaded(false);
     const params = new URLSearchParams({ type: "data" });
     if (dateFrom) params.set("dateFrom", dateFrom);
     if (dateTo) params.set("dateTo", dateTo);
@@ -1007,7 +1044,7 @@ export default function DashboardPage() {
         setChanges(json.changes ?? null);
         setPrevPeriod(json.prevPeriod ?? null);
         setRows(json.rows);
-        setAdRows(json.ad_rows ?? []);
+        setAdRows(account && campaign && adset ? (json.ad_rows ?? []) : []);
         setCount(json.count);
       }
     } catch (e) {
@@ -1032,6 +1069,30 @@ export default function DashboardPage() {
   );
 
   // ── Fetch geo data ──────────────────────────────────────────────────────────
+  const fetchFbAdInsights = useCallback(async () => {
+    setFbAdLoading(true);
+    try {
+      const res = await fetch(`/api/dashboard?${buildFilterParams("fb_ad_insights")}`);
+      const json = await res.json();
+      if (!res.ok) return;
+      const fbMap = new Map<string, { reach: number; ctr: number }>();
+      for (const ad of json.ads ?? []) {
+        fbMap.set(ad.ad_id, { reach: ad.reach, ctr: ad.ctr });
+      }
+      setAdRows((prev) =>
+        prev.map((row) => {
+          const fb = fbMap.get(row.ad_id);
+          return fb ? { ...row, fb_reach: fb.reach, fb_ctr: fb.ctr } : row;
+        }),
+      );
+      setFbAdLoaded(true);
+    } catch {
+      /* ignore */
+    } finally {
+      setFbAdLoading(false);
+    }
+  }, [buildFilterParams]);
+
   const fetchGeo = useCallback(async () => {
     setGeoLoading(true);
     try {
@@ -1510,12 +1571,26 @@ export default function DashboardPage() {
             )}
 
             {/* ── Ad Table ──────────────────────────────────────────────────── */}
-            {adRows.length > 0 && (
+            {adRows.length > 0 && account && campaign && adset && (
               <div data-aos="fade-up" data-aos-delay="150">
-                <h2 className="text-base font-semibold text-gray-700 mb-2">
-                  ตาราง Ad ({adRows.length})
-                </h2>
-                <AdHeatmapTable rows={adRows} />
+                <div className="flex items-center justify-between mb-2">
+                  <h2 className="text-base font-semibold text-gray-700">
+                    ตาราง Ad ({adRows.length})
+                  </h2>
+                  <button
+                    onClick={fetchFbAdInsights}
+                    disabled={fbAdLoading || fbAdLoaded}
+                    className="text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed
+                      bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
+                  >
+                    {fbAdLoading
+                      ? "กำลังโหลด…"
+                      : fbAdLoaded
+                      ? "โหลด FB แล้ว ✓"
+                      : "Load Reach & CTR จาก Facebook"}
+                  </button>
+                </div>
+                <AdHeatmapTable rows={adRows} hasFbData={fbAdLoaded} />
               </div>
             )}
           </>
