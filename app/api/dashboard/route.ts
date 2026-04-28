@@ -982,7 +982,7 @@ export async function GET(request: NextRequest) {
         roas: g.spend > 0 ? parseFloat((g.revenue / g.spend).toFixed(2)) : 0,
         ctr:
           g.impressions > 0
-            ? parseFloat(((g.clicks / g.impressions) * 100).toFixed(2))
+            ? parseFloat(((g.clicks_all / g.impressions) * 100).toFixed(2))
             : 0,
         cpc: g.clicks > 0 ? parseFloat((g.spend / g.clicks).toFixed(2)) : 0,
         cost_per_purchase:
@@ -1090,7 +1090,7 @@ export async function GET(request: NextRequest) {
         roas: g.spend > 0 ? parseFloat((g.revenue / g.spend).toFixed(2)) : 0,
         ctr:
           g.impressions > 0
-            ? parseFloat(((g.clicks / g.impressions) * 100).toFixed(2))
+            ? parseFloat(((g.clicks_all / g.impressions) * 100).toFixed(2))
             : 0,
         cpc: g.clicks > 0 ? parseFloat((g.spend / g.clicks).toFixed(2)) : 0,
         cost_per_purchase:

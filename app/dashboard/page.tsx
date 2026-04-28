@@ -83,6 +83,7 @@ interface AdGroupRow {
   reach: number;
   impressions: number;
   clicks: number;
+  clicks_all: number;
   unique_clicks: number;
   purchases: number;
   revenue: number;
@@ -103,6 +104,7 @@ interface GroupRow {
   reach: number;
   impressions: number;
   clicks: number;
+  clicks_all: number;
   unique_clicks: number;
   purchases: number;
   revenue: number;
@@ -968,10 +970,6 @@ export default function DashboardPage() {
   } | null>(null);
   const [rows, setRows] = useState<GroupRow[]>([]);
   const [adRows, setAdRows] = useState<AdGroupRow[]>([]);
-  const [fbAdLoading, setFbAdLoading] = useState(false);
-  const [fbAdLoaded, setFbAdLoaded] = useState(false);
-  const [fbAdsetLoading, setFbAdsetLoading] = useState(false);
-  const [fbAdsetLoaded, setFbAdsetLoaded] = useState(false);
   const [dataLoading, setDataLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [count, setCount] = useState(0);
@@ -1085,8 +1083,6 @@ export default function DashboardPage() {
   const fetchData = useCallback(async () => {
     setDataLoading(true);
     setError(null);
-    setFbAdLoaded(false);
-    setFbAdsetLoaded(false);
     const params = new URLSearchParams({ type: "data" });
     if (dateFrom) params.set("dateFrom", dateFrom);
     if (dateTo) params.set("dateTo", dateTo);
@@ -1098,6 +1094,7 @@ export default function DashboardPage() {
       const res = await fetch(`/api/dashboard?${params}`);
       const json = await res.json();
       console.log("Data response:", json);
+      console.log("Rows from API:", json.rows);
       if (!res.ok) {
         setError(json.error ?? "เกิดข้อผิดพลาด");
       } else {
@@ -1130,95 +1127,7 @@ export default function DashboardPage() {
   );
 
   // ── Fetch geo data ──────────────────────────────────────────────────────────
-  const fetchFbAdInsights = useCallback(async () => {
-    setFbAdLoading(true);
-    try {
-      const res = await fetch(
-        `/api/dashboard?${buildFilterParams("fb_ad_insights")}`,
-      );
-      const json = await res.json();
-      if (!res.ok) return;
-      type FbAd = { reach: number; clicks: number; impressions: number };
-      const fbMap = new Map<string, FbAd>();
-      for (const ad of json.ads ?? []) {
-        fbMap.set(ad.ad_id, {
-          reach: ad.reach,
-          clicks: ad.clicks,
-          impressions: ad.impressions,
-        });
-      }
-
-      // Compute updated adRows and adset aggregation in one pass
-      const adsetMap = new Map<
-        string,
-        { clicks: number; impressions: number }
-      >();
-      setAdRows((prev) => {
-        const next = prev.map((row) => {
-          const fb = fbMap.get(row.ad_id);
-          if (!fb) return row;
-          const key = `${row.campaign_name}|||${row.adset_name}`;
-          const agg = adsetMap.get(key) ?? { clicks: 0, impressions: 0 };
-          adsetMap.set(key, {
-            clicks: agg.clicks + fb.clicks,
-            impressions: agg.impressions + fb.impressions,
-          });
-          const ctr =
-            fb.impressions > 0
-              ? parseFloat(((fb.clicks / fb.impressions) * 100).toFixed(2))
-              : 0;
-          return { ...row, fb_reach: fb.reach, ctr };
-        });
-        // Update top table CTR from aggregated adset data
-        setRows((prevRows) =>
-          prevRows.map((row) => {
-            const key = `${row.campaign_name}|||${row.adset_name}`;
-            const agg = adsetMap.get(key);
-            if (!agg || agg.impressions === 0) return row;
-            return {
-              ...row,
-              ctr: parseFloat(
-                ((agg.clicks / agg.impressions) * 100).toFixed(2),
-              ),
-            };
-          }),
-        );
-        return next;
-      });
-
-      setFbAdLoaded(true);
-    } catch {
-      /* ignore */
-    } finally {
-      setFbAdLoading(false);
-    }
-  }, [buildFilterParams]);
-
-  const fetchFbAdsetInsights = useCallback(async () => {
-    setFbAdsetLoading(true);
-    try {
-      const res = await fetch(
-        `/api/dashboard?${buildFilterParams("fb_adset_insights")}`,
-      );
-      const json = await res.json();
-      if (!res.ok) return;
-      const adsetCtrMap = new Map<string, number>();
-      for (const item of json.adsets ?? []) {
-        adsetCtrMap.set(item.adset_name, item.ctr);
-      }
-      setRows((prev) =>
-        prev.map((row) => {
-          const ctr = adsetCtrMap.get(row.adset_name);
-          return ctr !== undefined ? { ...row, ctr } : row;
-        }),
-      );
-      setFbAdsetLoaded(true);
-    } catch {
-      /* ignore */
-    } finally {
-      setFbAdsetLoading(false);
-    }
-  }, [buildFilterParams]);
+  // Note: CTR is now fetched from Supabase in fetchData - Facebook API CTR fetches disabled
 
   const fetchGeo = useCallback(async () => {
     setGeoLoading(true);
@@ -1273,34 +1182,22 @@ export default function DashboardPage() {
     loadOptions("", "");
   }, [loadOptions]);
 
-  // Auto-fetch FB ad insights when adRows populates (all 3 filters set)
-  useEffect(() => {
-    if (adRows.length > 0 && !fbAdLoaded && !fbAdLoading) {
-      fetchFbAdInsights();
-    }
-  }, [adRows.length, fbAdLoaded, fbAdLoading, fetchFbAdInsights]);
-
-  // Auto-fetch FB adset insights only when adset is NOT selected (fetchFbAdInsights handles it otherwise)
-  useEffect(() => {
-    if (
-      account &&
-      !adset &&
-      rows.length > 0 &&
-      !fbAdsetLoaded &&
-      !fbAdsetLoading
-    ) {
-      fetchFbAdsetInsights();
-    }
-  }, [
-    account,
-    adset,
-    rows.length,
-    fbAdsetLoaded,
-    fbAdsetLoading,
-    fetchFbAdsetInsights,
-  ]);
-
   // ── Handlers ────────────────────────────────────────────────────────────────
+  const handleDateChange = (type: "from" | "to", val: string) => {
+    if (type === "from") {
+      setDateFrom(val);
+    } else {
+      setDateTo(val);
+    }
+    // Reset all filters when date changes
+    setAccount("");
+    setCampaign("");
+    setAdset("");
+    setRows([]);
+    setAdRows([]);
+    setTotals(null);
+  };
+
   const handleAccountChange = (val: string) => {
     setAccount(val);
     setCampaign("");
@@ -1385,12 +1282,12 @@ export default function DashboardPage() {
               <DatePickerField
                 label="วันเริ่มต้น"
                 value={dateFrom}
-                onChange={setDateFrom}
+                onChange={(val) => handleDateChange("from", val)}
               />
               <DatePickerField
                 label="วันสิ้นสุด"
                 value={dateTo}
-                onChange={setDateTo}
+                onChange={(val) => handleDateChange("to", val)}
               />
 
               <div className="flex flex-col gap-1 min-w-44 flex-1">
@@ -1593,12 +1490,14 @@ export default function DashboardPage() {
                       sub="จำนวนแคมเปญในช่วงเวลา"
                       highlight={isHL("Campaign Count")}
                     />
-                    <MetricCard
-                      label="CTR"
-                      value={`${fmt(totals.ctr, 2)}%`}
-                      delta={changes?.ctr}
-                      highlight={isHL("CTR")}
-                    />
+                    {account && (
+                      <MetricCard
+                        label="CTR"
+                        value={`${fmt(totals.ctr, 2)}%`}
+                        delta={changes?.ctr}
+                        highlight={isHL("CTR")}
+                      />
+                    )}
                     <MetricCard
                       label="Leads"
                       value={fmtK(totals.leads)}
@@ -1714,7 +1613,7 @@ export default function DashboardPage() {
             </div>
 
             {/* ── Ad Set Table ──────────────────────────────────────────────── */}
-            {account && rows.length > 0 ? (
+            {rows.length > 0 ? (
               <div data-aos="fade-up" data-aos-delay="100">
                 <HeatmapTable rows={rows} />
               </div>
@@ -1725,17 +1624,14 @@ export default function DashboardPage() {
             ) : null}
 
             {/* ── Ad Table ──────────────────────────────────────────────────── */}
-            {adRows.length > 0 && account && campaign && adset && (
+            {adRows.length > 0 && (
               <div data-aos="fade-up" data-aos-delay="150">
                 <div className="flex items-center gap-2 mb-2">
                   <h2 className="text-base font-semibold text-gray-700">
                     ตาราง Ad ({adRows.length})
                   </h2>
-                  {fbAdLoading && (
-                    <span className="text-xs text-blue-500">กำลังโหลด FB…</span>
-                  )}
                 </div>
-                <AdHeatmapTable rows={adRows} hasFbData={fbAdLoaded} />
+                <AdHeatmapTable rows={adRows} hasFbData={false} />
               </div>
             )}
           </>
