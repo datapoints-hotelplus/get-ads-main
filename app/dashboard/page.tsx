@@ -528,7 +528,7 @@ function HeatmapTable({ rows }: { rows: GroupRow[] }) {
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-    initialState: { pagination: { pageSize: 100 } },
+    initialState: { pagination: { pageSize: 10 } },
   });
 
   const { pageIndex, pageSize } = table.getState().pagination;
@@ -728,7 +728,7 @@ function AdHeatmapTable({ rows }: { rows: AdGroupRow[] }) {
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-    initialState: { pagination: { pageSize: 100 } },
+    initialState: { pagination: { pageSize: 10 } },
   });
 
   const { pageIndex, pageSize } = table.getState().pagination;
