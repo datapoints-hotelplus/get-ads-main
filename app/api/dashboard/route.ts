@@ -348,6 +348,36 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ageGender, devices });
     }
 
+    // ── type === "fb_adset_insights" — adset-level CTR from Facebook API ────────
+    if (type === "fb_adset_insights") {
+      const dateFrom = searchParams.get("dateFrom") ?? "";
+      const dateTo = searchParams.get("dateTo") ?? "";
+      const account = searchParams.get("account") ?? "";
+      const allowedNames = await getAllowedAccountNames();
+      const accessToken = process.env.FB_ACCESS_TOKEN ?? "";
+
+      if (!accessToken) {
+        return NextResponse.json({ error: "FB_ACCESS_TOKEN not set" }, { status: 500 });
+      }
+
+      let pageQuery = supabase.from("ads_allpage").select("account_id, account_name");
+      if (account) {
+        pageQuery = pageQuery.eq("account_name", account);
+      } else if (allowedNames !== null) {
+        pageQuery = pageQuery.in("account_name", allowedNames);
+      }
+      const { data: pages } = await pageQuery;
+      const accountIds = (pages ?? []).map((p) => p.account_id as string);
+
+      if (accountIds.length === 0) {
+        return NextResponse.json({ adsets: [] });
+      }
+
+      const { fetchAdsetInsights } = await import("@/lib/facebook");
+      const adsets = await fetchAdsetInsights(accountIds, accessToken, dateFrom, dateTo);
+      return NextResponse.json({ adsets });
+    }
+
     // ── type === "fb_ad_insights" — ad-level reach+CTR from Facebook API ────────
     if (type === "fb_ad_insights") {
       const dateFrom = searchParams.get("dateFrom") ?? "";

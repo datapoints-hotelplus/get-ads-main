@@ -919,6 +919,8 @@ export default function DashboardPage() {
   const [adRows, setAdRows] = useState<AdGroupRow[]>([]);
   const [fbAdLoading, setFbAdLoading] = useState(false);
   const [fbAdLoaded, setFbAdLoaded] = useState(false);
+  const [fbAdsetLoading, setFbAdsetLoading] = useState(false);
+  const [fbAdsetLoaded, setFbAdsetLoaded] = useState(false);
   const [dataLoading, setDataLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [count, setCount] = useState(0);
@@ -1027,6 +1029,7 @@ export default function DashboardPage() {
     setDataLoading(true);
     setError(null);
     setFbAdLoaded(false);
+    setFbAdsetLoaded(false);
     const params = new URLSearchParams({ type: "data" });
     if (dateFrom) params.set("dateFrom", dateFrom);
     if (dateTo) params.set("dateTo", dateTo);
@@ -1076,28 +1079,77 @@ export default function DashboardPage() {
       const res = await fetch(`/api/dashboard?${buildFilterParams("fb_ad_insights")}`);
       const json = await res.json();
       if (!res.ok) return;
-      const fbMap = new Map<string, { reach: number; clicks_all: number; impressions: number; ctr: number }>();
+      type FbAd = { reach: number; clicks_all: number; impressions: number };
+      const fbMap = new Map<string, FbAd>();
       for (const ad of json.ads ?? []) {
         fbMap.set(ad.ad_id, {
           reach: ad.reach,
           clicks_all: ad.clicks_all,
           impressions: ad.impressions,
-          ctr: ad.impressions > 0
-            ? parseFloat(((ad.clicks_all / ad.impressions) * 100).toFixed(2))
-            : 0,
         });
       }
-      setAdRows((prev) =>
-        prev.map((row) => {
+
+      // Compute updated adRows and adset aggregation in one pass
+      const adsetMap = new Map<string, { clicks_all: number; impressions: number }>();
+      setAdRows((prev) => {
+        const next = prev.map((row) => {
           const fb = fbMap.get(row.ad_id);
-          return fb ? { ...row, fb_reach: fb.reach, ctr: fb.ctr } : row;
-        }),
-      );
+          if (!fb) return row;
+          const key = `${row.campaign_name}|||${row.adset_name}`;
+          const agg = adsetMap.get(key) ?? { clicks_all: 0, impressions: 0 };
+          adsetMap.set(key, {
+            clicks_all: agg.clicks_all + fb.clicks_all,
+            impressions: agg.impressions + fb.impressions,
+          });
+          const ctr = fb.impressions > 0
+            ? parseFloat(((fb.clicks_all / fb.impressions) * 100).toFixed(2))
+            : 0;
+          return { ...row, fb_reach: fb.reach, ctr };
+        });
+        // Update top table CTR from aggregated adset data
+        setRows((prevRows) =>
+          prevRows.map((row) => {
+            const key = `${row.campaign_name}|||${row.adset_name}`;
+            const agg = adsetMap.get(key);
+            if (!agg || agg.impressions === 0) return row;
+            return {
+              ...row,
+              ctr: parseFloat(((agg.clicks_all / agg.impressions) * 100).toFixed(2)),
+            };
+          }),
+        );
+        return next;
+      });
+
       setFbAdLoaded(true);
     } catch {
       /* ignore */
     } finally {
       setFbAdLoading(false);
+    }
+  }, [buildFilterParams]);
+
+  const fetchFbAdsetInsights = useCallback(async () => {
+    setFbAdsetLoading(true);
+    try {
+      const res = await fetch(`/api/dashboard?${buildFilterParams("fb_adset_insights")}`);
+      const json = await res.json();
+      if (!res.ok) return;
+      const adsetCtrMap = new Map<string, number>();
+      for (const item of json.adsets ?? []) {
+        adsetCtrMap.set(item.adset_name, item.ctr);
+      }
+      setRows((prev) =>
+        prev.map((row) => {
+          const ctr = adsetCtrMap.get(row.adset_name);
+          return ctr !== undefined ? { ...row, ctr } : row;
+        }),
+      );
+      setFbAdsetLoaded(true);
+    } catch {
+      /* ignore */
+    } finally {
+      setFbAdsetLoading(false);
     }
   }, [buildFilterParams]);
 
@@ -1160,6 +1212,13 @@ export default function DashboardPage() {
       fetchFbAdInsights();
     }
   }, [adRows.length, fbAdLoaded, fbAdLoading, fetchFbAdInsights]);
+
+  // Auto-fetch FB adset insights when rows populate and account is selected
+  useEffect(() => {
+    if (account && rows.length > 0 && !fbAdsetLoaded && !fbAdsetLoading) {
+      fetchFbAdsetInsights();
+    }
+  }, [account, rows.length, fbAdsetLoaded, fbAdsetLoading, fetchFbAdsetInsights]);
 
   // ── Handlers ────────────────────────────────────────────────────────────────
   const handleAccountChange = (val: string) => {
@@ -1575,15 +1634,15 @@ export default function DashboardPage() {
             </div>
 
             {/* ── Ad Set Table ──────────────────────────────────────────────── */}
-            {rows.length > 0 ? (
+            {account && rows.length > 0 ? (
               <div data-aos="fade-up" data-aos-delay="100">
                 <HeatmapTable rows={rows} />
               </div>
-            ) : (
+            ) : account ? (
               <div className="text-center py-16 text-gray-400 text-sm">
                 ไม่พบข้อมูลในช่วงเวลาที่เลือก
               </div>
-            )}
+            ) : null}
 
             {/* ── Ad Table ──────────────────────────────────────────────────── */}
             {adRows.length > 0 && account && campaign && adset && (

@@ -390,6 +390,49 @@ export async function fetchCampaignReach(
  * Fetch reach broken down by ad for a list of ad account IDs.
  * Returns a Map<ad_id, { ad_id, ad_name, reach }>.
  */
+export async function fetchAdsetInsights(
+  accountIds: string[],
+  accessToken: string,
+  since: string,
+  until: string,
+): Promise<{ adset_name: string; clicks_all: number; impressions: number; ctr: number }[]> {
+  const result = new Map<string, { clicks_all: number; impressions: number }>();
+  const timeRange = encodeURIComponent(JSON.stringify({ since, until }));
+
+  for (const accountId of accountIds) {
+    let url: string | null =
+      `${FB_GRAPH_API_V25}/${accountId}/insights?fields=adset_name,clicks,impressions` +
+      `&time_range=${timeRange}&level=adset&time_increment=all_days&access_token=${accessToken}`;
+
+    while (url) {
+      const res: {
+        data: {
+          data?: { adset_name?: string; clicks?: string; impressions?: string }[];
+          paging?: { next?: string };
+        };
+      } = await axios.get(url);
+      for (const item of res.data.data ?? []) {
+        const name = item.adset_name ?? "";
+        const clicks = parseInt(String(item.clicks ?? "0"), 10);
+        const impressions = parseInt(String(item.impressions ?? "0"), 10);
+        const existing = result.get(name) ?? { clicks_all: 0, impressions: 0 };
+        result.set(name, {
+          clicks_all: existing.clicks_all + clicks,
+          impressions: existing.impressions + impressions,
+        });
+      }
+      url = res.data.paging?.next ?? null;
+    }
+  }
+
+  return Array.from(result.entries()).map(([adset_name, { clicks_all, impressions }]) => ({
+    adset_name,
+    clicks_all,
+    impressions,
+    ctr: impressions > 0 ? parseFloat(((clicks_all / impressions) * 100).toFixed(2)) : 0,
+  }));
+}
+
 export async function fetchAdReach(
   accountIds: string[],
   accessToken: string,
