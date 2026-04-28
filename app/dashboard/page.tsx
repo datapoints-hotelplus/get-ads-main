@@ -94,7 +94,6 @@ interface AdGroupRow {
   cost_per_engagement: number;
   cost_per_like: number;
   fb_reach?: number;
-  fb_ctr?: number;
 }
 
 interface GroupRow {
@@ -400,6 +399,7 @@ function heatCell(value: number, min: number, max: number, col: string) {
 }
 
 function HeatmapTable({ rows }: { rows: GroupRow[] }) {
+  "use no memo";
   const [sorting, setSorting] = useState<SortingState>([
     { id: "spend", desc: true },
   ]);
@@ -638,6 +638,7 @@ function HeatmapTable({ rows }: { rows: GroupRow[] }) {
 // ─── Ad-level Heatmap Table ───────────────────────────────────────────────────
 
 function AdHeatmapTable({ rows, hasFbData }: { rows: AdGroupRow[]; hasFbData: boolean }) {
+  "use no memo";
   const [sorting, setSorting] = useState<SortingState>([
     { id: "spend", desc: true },
   ]);
@@ -1075,14 +1076,21 @@ export default function DashboardPage() {
       const res = await fetch(`/api/dashboard?${buildFilterParams("fb_ad_insights")}`);
       const json = await res.json();
       if (!res.ok) return;
-      const fbMap = new Map<string, { reach: number; ctr: number }>();
+      const fbMap = new Map<string, { reach: number; clicks_all: number; impressions: number; ctr: number }>();
       for (const ad of json.ads ?? []) {
-        fbMap.set(ad.ad_id, { reach: ad.reach, ctr: ad.ctr });
+        fbMap.set(ad.ad_id, {
+          reach: ad.reach,
+          clicks_all: ad.clicks_all,
+          impressions: ad.impressions,
+          ctr: ad.impressions > 0
+            ? parseFloat(((ad.clicks_all / ad.impressions) * 100).toFixed(2))
+            : 0,
+        });
       }
       setAdRows((prev) =>
         prev.map((row) => {
           const fb = fbMap.get(row.ad_id);
-          return fb ? { ...row, fb_reach: fb.reach, fb_ctr: fb.ctr } : row;
+          return fb ? { ...row, fb_reach: fb.reach, ctr: fb.ctr } : row;
         }),
       );
       setFbAdLoaded(true);
@@ -1145,6 +1153,13 @@ export default function DashboardPage() {
   useEffect(() => {
     loadOptions("", "");
   }, [loadOptions]);
+
+  // Auto-fetch FB ad insights when adRows populates (all 3 filters set)
+  useEffect(() => {
+    if (adRows.length > 0 && !fbAdLoaded && !fbAdLoading) {
+      fetchFbAdInsights();
+    }
+  }, [adRows.length, fbAdLoaded, fbAdLoading, fetchFbAdInsights]);
 
   // ── Handlers ────────────────────────────────────────────────────────────────
   const handleAccountChange = (val: string) => {
@@ -1573,22 +1588,13 @@ export default function DashboardPage() {
             {/* ── Ad Table ──────────────────────────────────────────────────── */}
             {adRows.length > 0 && account && campaign && adset && (
               <div data-aos="fade-up" data-aos-delay="150">
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2 mb-2">
                   <h2 className="text-base font-semibold text-gray-700">
                     ตาราง Ad ({adRows.length})
                   </h2>
-                  <button
-                    onClick={fetchFbAdInsights}
-                    disabled={fbAdLoading || fbAdLoaded}
-                    className="text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed
-                      bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
-                  >
-                    {fbAdLoading
-                      ? "กำลังโหลด…"
-                      : fbAdLoaded
-                      ? "โหลด FB แล้ว ✓"
-                      : "Load Reach & CTR จาก Facebook"}
-                  </button>
+                  {fbAdLoading && (
+                    <span className="text-xs text-blue-500">กำลังโหลด FB…</span>
+                  )}
                 </div>
                 <AdHeatmapTable rows={adRows} hasFbData={fbAdLoaded} />
               </div>

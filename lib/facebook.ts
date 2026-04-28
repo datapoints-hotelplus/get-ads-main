@@ -400,7 +400,8 @@ export async function fetchAdReach(
     ad_id: string;
     ad_name: string;
     reach: number;
-    clicks: number;
+    clicks_all: number;
+    impressions: number;
     ctr: number;
   }[]
 > {
@@ -454,12 +455,11 @@ export async function fetchAdReach(
   }
 
   return Array.from(result.values())
-    .map(({ impressions, ...entry }) => ({
+    .map(({ clicks, impressions, ...entry }) => ({
       ...entry,
-      ctr:
-        impressions > 0
-          ? parseFloat(((entry.clicks / impressions) * 100).toFixed(2))
-          : 0,
+      clicks_all: clicks,
+      impressions,
+      ctr: impressions > 0 ? parseFloat(((clicks / impressions) * 100).toFixed(2)) : 0,
     }))
     .sort((a, b) => b.reach - a.reach);
 }
