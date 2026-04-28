@@ -357,10 +357,15 @@ export async function GET(request: NextRequest) {
       const accessToken = process.env.FB_ACCESS_TOKEN ?? "";
 
       if (!accessToken) {
-        return NextResponse.json({ error: "FB_ACCESS_TOKEN not set" }, { status: 500 });
+        return NextResponse.json(
+          { error: "FB_ACCESS_TOKEN not set" },
+          { status: 500 },
+        );
       }
 
-      let pageQuery = supabase.from("ads_allpage").select("account_id, account_name");
+      let pageQuery = supabase
+        .from("ads_allpage")
+        .select("account_id, account_name");
       if (account) {
         pageQuery = pageQuery.eq("account_name", account);
       } else if (allowedNames !== null) {
@@ -374,7 +379,12 @@ export async function GET(request: NextRequest) {
       }
 
       const { fetchAdsetInsights } = await import("@/lib/facebook");
-      const adsets = await fetchAdsetInsights(accountIds, accessToken, dateFrom, dateTo);
+      const adsets = await fetchAdsetInsights(
+        accountIds,
+        accessToken,
+        dateFrom,
+        dateTo,
+      );
       return NextResponse.json({ adsets });
     }
 
@@ -387,10 +397,15 @@ export async function GET(request: NextRequest) {
       const accessToken = process.env.FB_ACCESS_TOKEN ?? "";
 
       if (!accessToken) {
-        return NextResponse.json({ error: "FB_ACCESS_TOKEN not set" }, { status: 500 });
+        return NextResponse.json(
+          { error: "FB_ACCESS_TOKEN not set" },
+          { status: 500 },
+        );
       }
 
-      let pageQuery = supabase.from("ads_allpage").select("account_id, account_name");
+      let pageQuery = supabase
+        .from("ads_allpage")
+        .select("account_id, account_name");
       if (account) {
         pageQuery = pageQuery.eq("account_name", account);
       } else if (allowedNames !== null) {
@@ -967,7 +982,7 @@ export async function GET(request: NextRequest) {
         roas: g.spend > 0 ? parseFloat((g.revenue / g.spend).toFixed(2)) : 0,
         ctr:
           g.impressions > 0
-            ? parseFloat(((g.clicks_all / g.impressions) * 100).toFixed(2))
+            ? parseFloat(((g.clicks / g.impressions) * 100).toFixed(2))
             : 0,
         cpc: g.clicks > 0 ? parseFloat((g.spend / g.clicks).toFixed(2)) : 0,
         cost_per_purchase:
@@ -1031,11 +1046,22 @@ export async function GET(request: NextRequest) {
           adset_name: r.adset_name,
           ad_name: r.ad_name ?? "",
           ad_id: r.ad_id ?? "",
-          spend: 0, reach: 0, impressions: 0, clicks: 0,
-          unique_clicks: 0, clicks_all: 0, purchases: 0, revenue: 0,
-          roas: 0, ctr: 0, cpc: 0, cost_per_purchase: 0,
-          post_engagement: 0, cost_per_engagement: 0,
-          cost_per_like: 0, page_likes: 0,
+          spend: 0,
+          reach: 0,
+          impressions: 0,
+          clicks: 0,
+          unique_clicks: 0,
+          clicks_all: 0,
+          purchases: 0,
+          revenue: 0,
+          roas: 0,
+          ctr: 0,
+          cpc: 0,
+          cost_per_purchase: 0,
+          post_engagement: 0,
+          cost_per_engagement: 0,
+          cost_per_like: 0,
+          page_likes: 0,
         });
       }
       const g = adGrouped.get(key)!;
@@ -1054,17 +1080,29 @@ export async function GET(request: NextRequest) {
     const adRows: AdGroupRow[] = [...adGrouped.values()].map((g) => {
       const reachShare =
         totals.impressions > 0
-          ? parseFloat(((g.impressions / totals.impressions) * totals.reach).toFixed(0))
+          ? parseFloat(
+              ((g.impressions / totals.impressions) * totals.reach).toFixed(0),
+            )
           : 0;
       return {
         ...g,
         reach: reachShare,
         roas: g.spend > 0 ? parseFloat((g.revenue / g.spend).toFixed(2)) : 0,
-        ctr: g.impressions > 0 ? parseFloat(((g.clicks_all / g.impressions) * 100).toFixed(2)) : 0,
+        ctr:
+          g.impressions > 0
+            ? parseFloat(((g.clicks / g.impressions) * 100).toFixed(2))
+            : 0,
         cpc: g.clicks > 0 ? parseFloat((g.spend / g.clicks).toFixed(2)) : 0,
-        cost_per_purchase: g.purchases > 0 ? parseFloat((g.spend / g.purchases).toFixed(2)) : 0,
-        cost_per_engagement: g.post_engagement > 0 ? parseFloat((g.spend / g.post_engagement).toFixed(2)) : 0,
-        cost_per_like: g.page_likes > 0 ? parseFloat((g.spend / g.page_likes).toFixed(2)) : 0,
+        cost_per_purchase:
+          g.purchases > 0 ? parseFloat((g.spend / g.purchases).toFixed(2)) : 0,
+        cost_per_engagement:
+          g.post_engagement > 0
+            ? parseFloat((g.spend / g.post_engagement).toFixed(2))
+            : 0,
+        cost_per_like:
+          g.page_likes > 0
+            ? parseFloat((g.spend / g.page_likes).toFixed(2))
+            : 0,
       };
     });
     adRows.sort((a, b) => b.spend - a.spend);

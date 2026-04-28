@@ -637,7 +637,13 @@ function HeatmapTable({ rows }: { rows: GroupRow[] }) {
 
 // ─── Ad-level Heatmap Table ───────────────────────────────────────────────────
 
-function AdHeatmapTable({ rows, hasFbData }: { rows: AdGroupRow[]; hasFbData: boolean }) {
+function AdHeatmapTable({
+  rows,
+  hasFbData,
+}: {
+  rows: AdGroupRow[];
+  hasFbData: boolean;
+}) {
   "use no memo";
   const [sorting, setSorting] = useState<SortingState>([
     { id: "spend", desc: true },
@@ -645,9 +651,18 @@ function AdHeatmapTable({ rows, hasFbData }: { rows: AdGroupRow[]; hasFbData: bo
 
   const colStats = useMemo(() => {
     const keys = [
-      "impressions", "clicks", "unique_clicks", "reach", "spend",
-      "revenue", "roas", "ctr", "cpc", "post_engagement",
-      "cost_per_engagement", "cost_per_like",
+      "impressions",
+      "clicks",
+      "unique_clicks",
+      "reach",
+      "spend",
+      "revenue",
+      "roas",
+      "ctr",
+      "cpc",
+      "post_engagement",
+      "cost_per_engagement",
+      "cost_per_like",
       ...(hasFbData ? ["fb_reach", "fb_ctr"] : []),
     ] as (keyof AdGroupRow)[];
     const stats: Record<string, { min: number; max: number }> = {};
@@ -695,18 +710,42 @@ function AdHeatmapTable({ rows, hasFbData }: { rows: AdGroupRow[]; hasFbData: bo
       },
       ...(
         [
-          { key: "impressions",         label: "ครั้งแสดง",               fmt: (v: number) => fmtK(v) },
-          { key: "clicks",              label: "จำนวนคลิก",               fmt: (v: number) => fmtK(v) },
-          { key: "unique_clicks",       label: "คลิกไม่ซ้ำ",              fmt: (v: number) => fmtK(v) },
-          { key: "reach",               label: "ผู้เห็น",                  fmt: (v: number) => fmtK(v) },
-          { key: "spend",               label: "ยอดใช้จ่าย",              fmt: (v: number) => fmtK(v) },
-          { key: "revenue",             label: "ยอดขาย",                  fmt: (v: number) => fmtK(v) },
-          { key: "roas",                label: "ROAS",                    fmt: (v: number) => `${v.toFixed(2)}x` },
-          { key: "ctr",                 label: "CTR",                     fmt: (v: number) => `${v.toFixed(2)}%` },
-          { key: "cpc",                 label: "ต้นทุนต่อคลิก",           fmt: (v: number) => fmtK(v) },
-          { key: "post_engagement",     label: "การมีส่วนร่วม",           fmt: (v: number) => fmtK(v) },
-          { key: "cost_per_engagement", label: "ต้นทุนต่อการมีส่วนร่วม", fmt: (v: number) => fmtK(v) },
-          { key: "cost_per_like",       label: "ต้นทุนต่อการติดตาม",     fmt: (v: number) => fmtK(v) },
+          {
+            key: "impressions",
+            label: "ครั้งแสดง",
+            fmt: (v: number) => fmtK(v),
+          },
+          { key: "clicks", label: "จำนวนคลิก", fmt: (v: number) => fmtK(v) },
+          {
+            key: "unique_clicks",
+            label: "คลิกไม่ซ้ำ",
+            fmt: (v: number) => fmtK(v),
+          },
+          { key: "reach", label: "ผู้เห็น", fmt: (v: number) => fmtK(v) },
+          { key: "spend", label: "ยอดใช้จ่าย", fmt: (v: number) => fmtK(v) },
+          { key: "revenue", label: "ยอดขาย", fmt: (v: number) => fmtK(v) },
+          {
+            key: "roas",
+            label: "ROAS",
+            fmt: (v: number) => `${v.toFixed(2)}x`,
+          },
+          { key: "ctr", label: "CTR", fmt: (v: number) => `${v.toFixed(2)}%` },
+          { key: "cpc", label: "ต้นทุนต่อคลิก", fmt: (v: number) => fmtK(v) },
+          {
+            key: "post_engagement",
+            label: "การมีส่วนร่วม",
+            fmt: (v: number) => fmtK(v),
+          },
+          {
+            key: "cost_per_engagement",
+            label: "ต้นทุนต่อการมีส่วนร่วม",
+            fmt: (v: number) => fmtK(v),
+          },
+          {
+            key: "cost_per_like",
+            label: "ต้นทุนต่อการติดตาม",
+            fmt: (v: number) => fmtK(v),
+          },
         ] as const
       ).map(({ key, label, fmt: fmtFn }) => ({
         accessorKey: key,
@@ -721,36 +760,41 @@ function AdHeatmapTable({ rows, hasFbData }: { rows: AdGroupRow[]; hasFbData: bo
           fmtFn(getValue() as number),
         size: 110,
       })),
-      ...(hasFbData ? [
-        {
-          id: "fb_reach",
-          accessorKey: "fb_reach" as keyof AdGroupRow,
-          header: "FB Reach",
-          meta: {
-            getBg: (v: number) => {
-              const { min, max } = colStats["fb_reach"] ?? { min: 0, max: 0 };
-              return heatCell(v, min, max, "reach");
+      ...(hasFbData
+        ? [
+            {
+              id: "fb_reach",
+              accessorKey: "fb_reach" as keyof AdGroupRow,
+              header: "FB Reach",
+              meta: {
+                getBg: (v: number) => {
+                  const { min, max } = colStats["fb_reach"] ?? {
+                    min: 0,
+                    max: 0,
+                  };
+                  return heatCell(v, min, max, "reach");
+                },
+              },
+              cell: ({ getValue }: { getValue: () => unknown }) =>
+                fmtK((getValue() as number) ?? 0),
+              size: 100,
             },
-          },
-          cell: ({ getValue }: { getValue: () => unknown }) =>
-            fmtK((getValue() as number) ?? 0),
-          size: 100,
-        },
-        {
-          id: "fb_ctr",
-          accessorKey: "fb_ctr" as keyof AdGroupRow,
-          header: "FB CTR",
-          meta: {
-            getBg: (v: number) => {
-              const { min, max } = colStats["fb_ctr"] ?? { min: 0, max: 0 };
-              return heatCell(v, min, max, "ctr");
+            {
+              id: "fb_ctr",
+              accessorKey: "fb_ctr" as keyof AdGroupRow,
+              header: "FB CTR",
+              meta: {
+                getBg: (v: number) => {
+                  const { min, max } = colStats["fb_ctr"] ?? { min: 0, max: 0 };
+                  return heatCell(v, min, max, "ctr");
+                },
+              },
+              cell: ({ getValue }: { getValue: () => unknown }) =>
+                `${((getValue() as number) ?? 0).toFixed(2)}%`,
+              size: 80,
             },
-          },
-          cell: ({ getValue }: { getValue: () => unknown }) =>
-            `${((getValue() as number) ?? 0).toFixed(2)}%`,
-          size: 80,
-        },
-      ] : []),
+          ]
+        : []),
     ],
     [colStats, hasFbData],
   );
@@ -792,7 +836,10 @@ function AdHeatmapTable({ rows, hasFbData }: { rows: AdGroupRow[]; hasFbData: bo
                     <span className="inline-flex items-center gap-1">
                       {header.isPlaceholder
                         ? null
-                        : flexRender(header.column.columnDef.header, header.getContext())}
+                        : flexRender(
+                            header.column.columnDef.header,
+                            header.getContext(),
+                          )}
                       {header.column.getIsSorted() === "asc" && " ▲"}
                       {header.column.getIsSorted() === "desc" && " ▼"}
                     </span>
@@ -820,13 +867,17 @@ function AdHeatmapTable({ rows, hasFbData }: { rows: AdGroupRow[]; hasFbData: bo
                     <td
                       key={cell.id}
                       className={`px-3 py-2 text-xs font-medium text-gray-900 ${
-                        cell.column.id === "ad_name" || cell.column.id === "row_number"
+                        cell.column.id === "ad_name" ||
+                        cell.column.id === "row_number"
                           ? "text-left"
                           : "text-right"
                       }`}
                       style={bg ? { backgroundColor: bg } : undefined}
                     >
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext(),
+                      )}
                     </td>
                   );
                 })}
@@ -947,7 +998,13 @@ export default function DashboardPage() {
     if (upper.startsWith("AWN"))
       return ["reach", "cpm", "impressions", "spend"];
     if (upper.startsWith("ENG"))
-      return ["post_engagement", "cost_per_engagement", "post_shares", "spend", "ctr"];
+      return [
+        "post_engagement",
+        "cost_per_engagement",
+        "post_shares",
+        "spend",
+        "ctr",
+      ];
     if (upper.startsWith("PL"))
       return ["page_likes", "cost_per_like", "reach", "spend"];
     return [];
@@ -1076,34 +1133,40 @@ export default function DashboardPage() {
   const fetchFbAdInsights = useCallback(async () => {
     setFbAdLoading(true);
     try {
-      const res = await fetch(`/api/dashboard?${buildFilterParams("fb_ad_insights")}`);
+      const res = await fetch(
+        `/api/dashboard?${buildFilterParams("fb_ad_insights")}`,
+      );
       const json = await res.json();
       if (!res.ok) return;
-      type FbAd = { reach: number; clicks_all: number; impressions: number };
+      type FbAd = { reach: number; clicks: number; impressions: number };
       const fbMap = new Map<string, FbAd>();
       for (const ad of json.ads ?? []) {
         fbMap.set(ad.ad_id, {
           reach: ad.reach,
-          clicks_all: ad.clicks_all,
+          clicks: ad.clicks,
           impressions: ad.impressions,
         });
       }
 
       // Compute updated adRows and adset aggregation in one pass
-      const adsetMap = new Map<string, { clicks_all: number; impressions: number }>();
+      const adsetMap = new Map<
+        string,
+        { clicks: number; impressions: number }
+      >();
       setAdRows((prev) => {
         const next = prev.map((row) => {
           const fb = fbMap.get(row.ad_id);
           if (!fb) return row;
           const key = `${row.campaign_name}|||${row.adset_name}`;
-          const agg = adsetMap.get(key) ?? { clicks_all: 0, impressions: 0 };
+          const agg = adsetMap.get(key) ?? { clicks: 0, impressions: 0 };
           adsetMap.set(key, {
-            clicks_all: agg.clicks_all + fb.clicks_all,
+            clicks: agg.clicks + fb.clicks,
             impressions: agg.impressions + fb.impressions,
           });
-          const ctr = fb.impressions > 0
-            ? parseFloat(((fb.clicks_all / fb.impressions) * 100).toFixed(2))
-            : 0;
+          const ctr =
+            fb.impressions > 0
+              ? parseFloat(((fb.clicks / fb.impressions) * 100).toFixed(2))
+              : 0;
           return { ...row, fb_reach: fb.reach, ctr };
         });
         // Update top table CTR from aggregated adset data
@@ -1114,7 +1177,9 @@ export default function DashboardPage() {
             if (!agg || agg.impressions === 0) return row;
             return {
               ...row,
-              ctr: parseFloat(((agg.clicks_all / agg.impressions) * 100).toFixed(2)),
+              ctr: parseFloat(
+                ((agg.clicks / agg.impressions) * 100).toFixed(2),
+              ),
             };
           }),
         );
@@ -1132,7 +1197,9 @@ export default function DashboardPage() {
   const fetchFbAdsetInsights = useCallback(async () => {
     setFbAdsetLoading(true);
     try {
-      const res = await fetch(`/api/dashboard?${buildFilterParams("fb_adset_insights")}`);
+      const res = await fetch(
+        `/api/dashboard?${buildFilterParams("fb_adset_insights")}`,
+      );
       const json = await res.json();
       if (!res.ok) return;
       const adsetCtrMap = new Map<string, number>();
@@ -1213,12 +1280,25 @@ export default function DashboardPage() {
     }
   }, [adRows.length, fbAdLoaded, fbAdLoading, fetchFbAdInsights]);
 
-  // Auto-fetch FB adset insights when rows populate and account is selected
+  // Auto-fetch FB adset insights only when adset is NOT selected (fetchFbAdInsights handles it otherwise)
   useEffect(() => {
-    if (account && rows.length > 0 && !fbAdsetLoaded && !fbAdsetLoading) {
+    if (
+      account &&
+      !adset &&
+      rows.length > 0 &&
+      !fbAdsetLoaded &&
+      !fbAdsetLoading
+    ) {
       fetchFbAdsetInsights();
     }
-  }, [account, rows.length, fbAdsetLoaded, fbAdsetLoading, fetchFbAdsetInsights]);
+  }, [
+    account,
+    adset,
+    rows.length,
+    fbAdsetLoaded,
+    fbAdsetLoading,
+    fetchFbAdsetInsights,
+  ]);
 
   // ── Handlers ────────────────────────────────────────────────────────────────
   const handleAccountChange = (val: string) => {

@@ -395,19 +395,25 @@ export async function fetchAdsetInsights(
   accessToken: string,
   since: string,
   until: string,
-): Promise<{ adset_name: string; clicks_all: number; impressions: number; ctr: number }[]> {
+): Promise<
+  { adset_name: string; clicks_all: number; impressions: number; ctr: number }[]
+> {
   const result = new Map<string, { clicks_all: number; impressions: number }>();
   const timeRange = encodeURIComponent(JSON.stringify({ since, until }));
 
   for (const accountId of accountIds) {
     let url: string | null =
       `${FB_GRAPH_API_V25}/${accountId}/insights?fields=adset_name,clicks,impressions` +
-      `&time_range=${timeRange}&level=adset&time_increment=all_days&access_token=${accessToken}`;
+      `&time_range=${timeRange}&level=ad&time_increment=all_days&access_token=${accessToken}`;
 
     while (url) {
       const res: {
         data: {
-          data?: { adset_name?: string; clicks?: string; impressions?: string }[];
+          data?: {
+            adset_name?: string;
+            clicks?: string;
+            impressions?: string;
+          }[];
           paging?: { next?: string };
         };
       } = await axios.get(url);
@@ -425,12 +431,17 @@ export async function fetchAdsetInsights(
     }
   }
 
-  return Array.from(result.entries()).map(([adset_name, { clicks_all, impressions }]) => ({
-    adset_name,
-    clicks_all,
-    impressions,
-    ctr: impressions > 0 ? parseFloat(((clicks_all / impressions) * 100).toFixed(2)) : 0,
-  }));
+  return Array.from(result.entries()).map(
+    ([adset_name, { clicks_all, impressions }]) => ({
+      adset_name,
+      clicks_all,
+      impressions,
+      ctr:
+        impressions > 0
+          ? parseFloat(((clicks_all / impressions) * 100).toFixed(2))
+          : 0,
+    }),
+  );
 }
 
 export async function fetchAdReach(
@@ -443,7 +454,7 @@ export async function fetchAdReach(
     ad_id: string;
     ad_name: string;
     reach: number;
-    clicks_all: number;
+    clicks: number;
     impressions: number;
     ctr: number;
   }[]
@@ -500,9 +511,12 @@ export async function fetchAdReach(
   return Array.from(result.values())
     .map(({ clicks, impressions, ...entry }) => ({
       ...entry,
-      clicks_all: clicks,
+      clicks,
       impressions,
-      ctr: impressions > 0 ? parseFloat(((clicks / impressions) * 100).toFixed(2)) : 0,
+      ctr:
+        impressions > 0
+          ? parseFloat(((clicks / impressions) * 100).toFixed(2))
+          : 0,
     }))
     .sort((a, b) => b.reach - a.reach);
 }
