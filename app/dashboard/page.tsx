@@ -15,6 +15,131 @@ import ReactSelect from "react-select";
 import FrequencyGauge from "../FrequencyGauge";
 import ThaiGeoChart from "../ThaiGeoChart";
 
+// ─── Checkbox Filter Component ────────────────────────────────────────────────
+
+interface CheckboxFilterProps {
+  label: string;
+  options: string[];
+  selected: string[];
+  onChange: (selected: string[]) => void;
+  disabled?: boolean;
+}
+
+function CheckboxFilter({
+  label,
+  options,
+  selected,
+  onChange,
+  disabled = false,
+}: CheckboxFilterProps) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false);
+      }
+    };
+
+    if (open) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () =>
+        document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [open]);
+
+  const handleToggle = (value: string) => {
+    if (selected.includes(value)) {
+      onChange(selected.filter((v) => v !== value));
+    } else {
+      onChange([...selected, value]);
+    }
+  };
+
+  const handleClear = () => {
+    onChange([]);
+  };
+
+  return (
+    <div
+      ref={containerRef}
+      className="flex flex-col gap-1 min-w-44 flex-1 relative"
+    >
+      <label className="text-xs font-medium text-secondary/70">{label}</label>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        disabled={disabled}
+        className="flex items-center justify-between min-h-[38px] px-3 py-2 rounded-lg border border-gray-300 hover:border-gray-400 disabled:bg-gray-200 disabled:cursor-not-allowed bg-white text-sm text-gray-800"
+      >
+        <span className="truncate">
+          {selected.length === 0
+            ? "-- ทั้งหมด --"
+            : `${selected.length} รายการ`}
+        </span>
+        <svg
+          className={`w-4 h-4 ml-2 transition-transform flex-shrink-0 ${
+            open ? "rotate-180" : ""
+          }`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M19 14l-7 7m0 0l-7-7m7 7V3"
+          />
+        </svg>
+      </button>
+
+      {/* Popover */}
+      {open && (
+        <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-300 rounded-lg shadow-lg z-50">
+          <div className="max-h-64 overflow-y-auto p-2">
+            {options.length === 0 ? (
+              <div className="text-xs text-gray-500 px-2 py-2 text-center">
+                ไม่มีตัวเลือก
+              </div>
+            ) : (
+              options.map((opt) => (
+                <label
+                  key={opt}
+                  className="flex items-center gap-2 px-2 py-2 hover:bg-gray-100 rounded cursor-pointer text-sm text-gray-700"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(opt)}
+                    onChange={() => handleToggle(opt)}
+                    className="w-4 h-4 cursor-pointer"
+                  />
+                  <span className="flex-1 truncate">{opt}</span>
+                </label>
+              ))
+            )}
+          </div>
+          {selected.length > 0 && (
+            <div className="border-t border-gray-200 p-2 flex gap-2">
+              <button
+                type="button"
+                onClick={handleClear}
+                className="flex-1 text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 px-2 py-1 rounded transition-colors"
+              >
+                ล้างการเลือก
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface GeoRegion {
@@ -919,8 +1044,8 @@ export default function DashboardPage() {
   // Filter state
   const [dateFrom, setDateFrom] = useState(firstOfMonth()); // ISO yyyy-mm-dd
   const [dateTo, setDateTo] = useState(today()); // ISO yyyy-mm-dd
-  const [account, setAccount] = useState("");
-  const [campaign, setCampaign] = useState("");
+  const [accounts, setAccounts] = useState<string[]>([]);
+  const [campaigns, setCampaigns] = useState<string[]>([]);
   const [adset, setAdset] = useState("");
 
   // Shared styles for react-select dropdowns
@@ -949,6 +1074,17 @@ export default function DashboardPage() {
           : "#ffffff",
     }),
     singleValue: (base: object) => ({ ...base, color: "#111827" }),
+    multiValue: (base: object) => ({
+      ...base,
+      backgroundColor: "#e5e7eb",
+      borderRadius: "0.25rem",
+    }),
+    multiValueLabel: (base: object) => ({ ...base, color: "#111827", fontSize: "0.8125rem" }),
+    multiValueRemove: (base: object) => ({
+      ...base,
+      color: "#6b7280",
+      "&:hover": { backgroundColor: "#d1d5db", color: "#111827" },
+    }),
     placeholder: (base: object) => ({ ...base, color: "#9ca3af" }),
     input: (base: object) => ({ ...base, color: "#111827" }),
   };
@@ -987,10 +1123,10 @@ export default function DashboardPage() {
   >([]);
   const [demoLoading, setDemoLoading] = useState(false);
 
-  // Highlight metrics based on campaign name prefix
+  // Highlight metrics based on campaign name prefix (use first selected campaign)
   const highlightMetrics = useMemo<string[]>(() => {
-    if (!campaign) return [];
-    const upper = campaign.toUpperCase();
+    if (campaigns.length !== 1) return [];
+    const upper = campaigns[0].toUpperCase();
     if (upper.startsWith("MES"))
       return ["messages", "cost_per_message", "ctr", "clicks", "spend"];
     if (upper.startsWith("AWN"))
@@ -1006,7 +1142,7 @@ export default function DashboardPage() {
     if (upper.startsWith("PL"))
       return ["page_likes", "cost_per_like", "reach", "spend"];
     return [];
-  }, [campaign]);
+  }, [campaigns]);
 
   // Time-series data state (CPM vs Impressions)
   const [timeSeries, setTimeSeries] = useState<TimeSeriesPoint[]>([]);
@@ -1055,13 +1191,13 @@ export default function DashboardPage() {
     });
   }, []);
 
-  // ── Load options (cascading) whenever account/campaign changes ──────────────
+  // ── Load options (cascading) whenever accounts/campaigns changes ─────────────
   const loadOptions = useCallback(
-    async (acc: string, camp: string) => {
+    async (accs: string[], camps: string[]) => {
       setOptLoading(true);
       const params = new URLSearchParams({ type: "options" });
-      if (acc) params.set("account", acc);
-      if (camp) params.set("campaign", camp);
+      accs.forEach((a) => params.append("account", a));
+      camps.forEach((c) => params.append("campaign", c));
       if (dateFrom) params.set("dateFrom", dateFrom);
       if (dateTo) params.set("dateTo", dateTo);
       try {
@@ -1076,8 +1212,8 @@ export default function DashboardPage() {
   );
 
   useEffect(() => {
-    loadOptions(account, campaign);
-  }, [account, campaign, loadOptions]);
+    loadOptions(accounts, campaigns);
+  }, [accounts, campaigns, loadOptions]);
 
   // ── Fetch dashboard data ────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
@@ -1086,15 +1222,13 @@ export default function DashboardPage() {
     const params = new URLSearchParams({ type: "data" });
     if (dateFrom) params.set("dateFrom", dateFrom);
     if (dateTo) params.set("dateTo", dateTo);
-    if (account) params.set("account", account);
-    if (campaign) params.set("campaign", campaign);
+    accounts.forEach((a) => params.append("account", a));
+    campaigns.forEach((c) => params.append("campaign", c));
     if (adset) params.set("adset", adset);
 
     try {
       const res = await fetch(`/api/dashboard?${params}`);
       const json = await res.json();
-      console.log("Data response:", json);
-      console.log("Rows from API:", json.rows);
       if (!res.ok) {
         setError(json.error ?? "เกิดข้อผิดพลาด");
       } else {
@@ -1102,7 +1236,11 @@ export default function DashboardPage() {
         setChanges(json.changes ?? null);
         setPrevPeriod(json.prevPeriod ?? null);
         setRows(json.rows);
-        setAdRows(account && campaign && adset ? (json.ad_rows ?? []) : []);
+        setAdRows(
+          accounts.length > 0 && campaigns.length > 0 && adset
+            ? (json.ad_rows ?? [])
+            : [],
+        );
         setCount(json.count);
       }
     } catch (e) {
@@ -1110,7 +1248,7 @@ export default function DashboardPage() {
     } finally {
       setDataLoading(false);
     }
-  }, [dateFrom, dateTo, account, campaign, adset]);
+  }, [dateFrom, dateTo, accounts, campaigns, adset]);
 
   // ── Build filter params helper ──────────────────────────────────────────────
   const buildFilterParams = useCallback(
@@ -1118,12 +1256,12 @@ export default function DashboardPage() {
       const params = new URLSearchParams({ type });
       if (dateFrom) params.set("dateFrom", dateFrom);
       if (dateTo) params.set("dateTo", dateTo);
-      if (account) params.set("account", account);
-      if (campaign) params.set("campaign", campaign);
+      accounts.forEach((a) => params.append("account", a));
+      campaigns.forEach((c) => params.append("campaign", c));
       if (adset) params.set("adset", adset);
       return params;
     },
-    [dateFrom, dateTo, account, campaign, adset],
+    [dateFrom, dateTo, accounts, campaigns, adset],
   );
 
   // ── Fetch geo data ──────────────────────────────────────────────────────────
@@ -1179,7 +1317,7 @@ export default function DashboardPage() {
 
   // Load options on mount
   useEffect(() => {
-    loadOptions("", "");
+    loadOptions([], []);
   }, [loadOptions]);
 
   // ── Handlers ────────────────────────────────────────────────────────────────
@@ -1190,22 +1328,22 @@ export default function DashboardPage() {
       setDateTo(val);
     }
     // Reset all filters when date changes
-    setAccount("");
-    setCampaign("");
+    setAccounts([]);
+    setCampaigns([]);
     setAdset("");
     setRows([]);
     setAdRows([]);
     setTotals(null);
   };
 
-  const handleAccountChange = (val: string) => {
-    setAccount(val);
-    setCampaign("");
+  const handleAccountChange = (vals: string[]) => {
+    setAccounts(vals);
+    setCampaigns([]);
     setAdset("");
   };
 
-  const handleCampaignChange = (val: string) => {
-    setCampaign(val);
+  const handleCampaignChange = (vals: string[]) => {
+    setCampaigns(vals);
     setAdset("");
   };
 
@@ -1290,44 +1428,21 @@ export default function DashboardPage() {
                 onChange={(val) => handleDateChange("to", val)}
               />
 
-              <div className="flex flex-col gap-1 min-w-44 flex-1">
-                <label className="text-xs font-medium text-secondary/70">
-                  Account
-                </label>
-                <ReactSelect
-                  value={account ? { value: account, label: account } : null}
-                  onChange={(opt) => handleAccountChange(opt ? opt.value : "")}
-                  isDisabled={optLoading}
-                  placeholder="-- ทั้งหมด --"
-                  isClearable
-                  options={options.accounts.map((a) => ({
-                    value: a,
-                    label: a,
-                  }))}
-                  classNamePrefix="rs"
-                  styles={selectStyles}
-                />
-              </div>
+              <CheckboxFilter
+                label="Account"
+                options={options.accounts}
+                selected={accounts}
+                onChange={handleAccountChange}
+                disabled={optLoading}
+              />
 
-              {/* Campaign */}
-              <div className="flex flex-col gap-1 min-w-44 flex-1">
-                <label className="text-xs font-medium text-secondary/70">
-                  Campaign
-                </label>
-                <ReactSelect
-                  value={campaign ? { value: campaign, label: campaign } : null}
-                  onChange={(opt) => handleCampaignChange(opt ? opt.value : "")}
-                  isDisabled={optLoading}
-                  placeholder="-- ทั้งหมด --"
-                  isClearable
-                  options={options.campaigns.map((c) => ({
-                    value: c,
-                    label: c,
-                  }))}
-                  classNamePrefix="rs"
-                  styles={selectStyles}
-                />
-              </div>
+              <CheckboxFilter
+                label="Campaign"
+                options={options.campaigns}
+                selected={campaigns}
+                onChange={handleCampaignChange}
+                disabled={optLoading}
+              />
 
               {/* Adset */}
               <div className="flex flex-col gap-1 min-w-44 flex-1">
@@ -1361,8 +1476,8 @@ export default function DashboardPage() {
                   onClick={() => {
                     setDateFrom(firstOfMonth());
                     setDateTo(today());
-                    setAccount("");
-                    setCampaign("");
+                    setAccounts([]);
+                    setCampaigns([]);
                     setAdset("");
                   }}
                   className="bg-secondary hover:bg-secondary-light text-white text-sm px-4 py-2 rounded-lg transition-colors"
@@ -1443,6 +1558,14 @@ export default function DashboardPage() {
                     data-aos="fade-up"
                   >
                     <MetricCard
+                      label="Campaign Count"
+                      value={String(
+                        new Set(rows.map((r) => r.campaign_name)).size,
+                      )}
+                      sub="จำนวนแคมเปญในช่วงเวลา"
+                      highlight={isHL("Campaign Count")}
+                    />
+                    <MetricCard
                       label="Impressions"
                       value={fmtK(totals.impressions)}
                       delta={changes?.impressions}
@@ -1461,19 +1584,12 @@ export default function DashboardPage() {
                       highlight={isHL("Unique Link Clicks")}
                     />
                     <MetricCard
-                      label={account ? "Reach" : "Reach (ทุก Account)"}
+                      label={accounts.length > 0 ? "Reach" : "Reach (ทุก Account)"}
                       value={fmtK(totals.reach)}
                       delta={changes?.reach}
                       highlight={isHL(
-                        account ? "Reach" : "Reach (ทุก Account)",
+                        accounts.length > 0 ? "Reach" : "Reach (ทุก Account)",
                       )}
-                    />
-                    <MetricCard
-                      label="Spend"
-                      value={`฿${fmtK(totals.spend)}`}
-                      delta={changes?.spend}
-                      invertColor
-                      highlight={isHL("Spend")}
                     />
                     <MetricCard
                       label="CPM"
@@ -1482,15 +1598,7 @@ export default function DashboardPage() {
                       invertColor
                       highlight={isHL("CPM")}
                     />
-                    <MetricCard
-                      label="Campaign Count"
-                      value={String(
-                        new Set(rows.map((r) => r.campaign_name)).size,
-                      )}
-                      sub="จำนวนแคมเปญในช่วงเวลา"
-                      highlight={isHL("Campaign Count")}
-                    />
-                    {account && (
+                    {accounts.length > 0 && (
                       <MetricCard
                         label="CTR"
                         value={`${fmt(totals.ctr, 2)}%`}
@@ -1572,6 +1680,13 @@ export default function DashboardPage() {
                       invertColor
                       highlight={isHL("Cost / Like")}
                     />
+                    <MetricCard
+                      label="Spend"
+                      value={`฿${fmtK(totals.spend)}`}
+                      delta={changes?.spend}
+                      invertColor
+                      highlight={isHL("Spend")}
+                    />
                   </div>
                 );
               })()}
@@ -1617,7 +1732,7 @@ export default function DashboardPage() {
               <div data-aos="fade-up" data-aos-delay="100">
                 <HeatmapTable rows={rows} />
               </div>
-            ) : account ? (
+            ) : accounts.length > 0 ? (
               <div className="text-center py-16 text-gray-400 text-sm">
                 ไม่พบข้อมูลในช่วงเวลาที่เลือก
               </div>

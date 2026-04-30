@@ -51,12 +51,13 @@ export async function GET(request: NextRequest) {
     }
 
     if (type === "highlights") {
-      const campaign = searchParams.get("campaign") ?? "";
+      const campaigns = searchParams.getAll("campaign");
       let q = supabase
         .from("ads_campaign_highlights")
         .select("campaign_name, metric_key")
         .order("campaign_name");
-      if (campaign) q = q.eq("campaign_name", campaign);
+      if (campaigns.length === 1) q = q.eq("campaign_name", campaigns[0]);
+      else if (campaigns.length > 1) q = q.in("campaign_name", campaigns);
 
       const { data, error: hErr } = await q;
       if (hErr) throw hErr;
@@ -71,8 +72,8 @@ export async function GET(request: NextRequest) {
 
     if (type === "options") {
       // Return distinct filter values (cascading)
-      const account = searchParams.get("account") ?? "";
-      const campaign = searchParams.get("campaign") ?? "";
+      const selectedAccounts = searchParams.getAll("account");
+      const selectedCampaigns = searchParams.getAll("campaign");
       const dateFrom = searchParams.get("dateFrom") ?? "";
       const dateTo = searchParams.get("dateTo") ?? "";
 
@@ -101,7 +102,7 @@ export async function GET(request: NextRequest) {
       let q = supabase
         .from("ads_rawdata")
         .select("campaign_name,adset_name,spend");
-      if (account) q = q.eq("account_name", account);
+      if (selectedAccounts.length > 0) q = q.in("account_name", selectedAccounts);
       else if (allowedNames !== null) q = q.in("account_name", allowedNames);
       if (dateFrom) q = q.gte("date_start", dateFrom);
       if (dateTo) q = q.lte("date_start", dateTo);
@@ -123,10 +124,13 @@ export async function GET(request: NextRequest) {
         .filter(Boolean)
         .sort();
 
-      // Adsets: if campaign filter active, only show adsets under that campaign
-      const adsetSource = campaign
-        ? (pairsData ?? []).filter((r) => r.campaign_name === campaign)
-        : (pairsData ?? []);
+      // Adsets: filter to selected campaigns if any
+      const adsetSource =
+        selectedCampaigns.length > 0
+          ? (pairsData ?? []).filter((r) =>
+              selectedCampaigns.includes(r.campaign_name),
+            )
+          : (pairsData ?? []);
       const adsets = [
         ...new Set(adsetSource.map((r) => r.adset_name as string)),
       ]
@@ -140,16 +144,16 @@ export async function GET(request: NextRequest) {
     async function getFilteredAdIds(
       dateFrom: string,
       dateTo: string,
-      account: string,
-      campaign: string,
+      accounts: string[],
+      campaigns: string[],
       adset: string,
       allowedNames: string[] | null,
     ): Promise<string[] | null> {
-      if (!account && !campaign && !adset && allowedNames === null) return null;
+      if (accounts.length === 0 && campaigns.length === 0 && !adset && allowedNames === null) return null;
       let q = supabase.from("ads_rawdata").select("ad_id");
-      if (account) q = q.eq("account_name", account);
+      if (accounts.length > 0) q = q.in("account_name", accounts);
       else if (allowedNames !== null) q = q.in("account_name", allowedNames);
-      if (campaign) q = q.eq("campaign_name", campaign);
+      if (campaigns.length > 0) q = q.in("campaign_name", campaigns);
       if (adset) q = q.eq("adset_name", adset);
       if (dateFrom) q = q.gte("date_start", dateFrom);
       if (dateTo) q = q.lte("date_start", dateTo);
@@ -161,8 +165,8 @@ export async function GET(request: NextRequest) {
     if (type === "timeseries") {
       const dateFrom = searchParams.get("dateFrom") ?? "";
       const dateTo = searchParams.get("dateTo") ?? "";
-      const account = searchParams.get("account") ?? "";
-      const campaign = searchParams.get("campaign") ?? "";
+      const accounts = searchParams.getAll("account");
+      const campaigns = searchParams.getAll("campaign");
       const adset = searchParams.get("adset") ?? "";
 
       const allowedNames = await getAllowedAccountNames();
@@ -178,9 +182,9 @@ export async function GET(request: NextRequest) {
         .order("date_start", { ascending: true });
       if (dateFrom) q = q.gte("date_start", dateFrom);
       if (dateTo) q = q.lte("date_start", dateTo);
-      if (account) q = q.eq("account_name", account);
+      if (accounts.length > 0) q = q.in("account_name", accounts);
       else if (allowedNames !== null) q = q.in("account_name", allowedNames);
-      if (campaign) q = q.eq("campaign_name", campaign);
+      if (campaigns.length > 0) q = q.in("campaign_name", campaigns);
       if (adset) q = q.eq("adset_name", adset);
 
       const { data: tsData, error: tsErr } = await q.limit(50000);
@@ -246,8 +250,8 @@ export async function GET(request: NextRequest) {
         let pageQuery = supabase
           .from("ads_allpage")
           .select("account_id, account_name");
-        if (account) {
-          pageQuery = pageQuery.eq("account_name", account);
+        if (accounts.length > 0) {
+          pageQuery = pageQuery.in("account_name", accounts);
         } else if (allowedNames !== null) {
           pageQuery = pageQuery.in("account_name", allowedNames);
         }
@@ -317,7 +321,7 @@ export async function GET(request: NextRequest) {
     if (type === "demographics") {
       const dateFrom = searchParams.get("dateFrom") ?? "";
       const dateTo = searchParams.get("dateTo") ?? "";
-      const account = searchParams.get("account") ?? "";
+      const accounts = searchParams.getAll("account");
 
       const allowedNames = await getAllowedAccountNames();
       if (allowedNames !== null && allowedNames.length === 0) {
@@ -328,7 +332,7 @@ export async function GET(request: NextRequest) {
       let pageQuery = supabase
         .from("ads_allpage")
         .select("account_id, account_name");
-      if (account) pageQuery = pageQuery.eq("account_name", account);
+      if (accounts.length > 0) pageQuery = pageQuery.in("account_name", accounts);
       else if (allowedNames !== null)
         pageQuery = pageQuery.in("account_name", allowedNames);
 
@@ -352,7 +356,7 @@ export async function GET(request: NextRequest) {
     if (type === "fb_adset_insights") {
       const dateFrom = searchParams.get("dateFrom") ?? "";
       const dateTo = searchParams.get("dateTo") ?? "";
-      const account = searchParams.get("account") ?? "";
+      const accounts = searchParams.getAll("account");
       const allowedNames = await getAllowedAccountNames();
       const accessToken = process.env.FB_ACCESS_TOKEN ?? "";
 
@@ -366,8 +370,8 @@ export async function GET(request: NextRequest) {
       let pageQuery = supabase
         .from("ads_allpage")
         .select("account_id, account_name");
-      if (account) {
-        pageQuery = pageQuery.eq("account_name", account);
+      if (accounts.length > 0) {
+        pageQuery = pageQuery.in("account_name", accounts);
       } else if (allowedNames !== null) {
         pageQuery = pageQuery.in("account_name", allowedNames);
       }
@@ -392,7 +396,7 @@ export async function GET(request: NextRequest) {
     if (type === "fb_ad_insights") {
       const dateFrom = searchParams.get("dateFrom") ?? "";
       const dateTo = searchParams.get("dateTo") ?? "";
-      const account = searchParams.get("account") ?? "";
+      const accounts = searchParams.getAll("account");
       const allowedNames = await getAllowedAccountNames();
       const accessToken = process.env.FB_ACCESS_TOKEN ?? "";
 
@@ -406,8 +410,8 @@ export async function GET(request: NextRequest) {
       let pageQuery = supabase
         .from("ads_allpage")
         .select("account_id, account_name");
-      if (account) {
-        pageQuery = pageQuery.eq("account_name", account);
+      if (accounts.length > 0) {
+        pageQuery = pageQuery.in("account_name", accounts);
       } else if (allowedNames !== null) {
         pageQuery = pageQuery.in("account_name", allowedNames);
       }
@@ -427,8 +431,8 @@ export async function GET(request: NextRequest) {
     if (type === "geo") {
       const dateFrom = searchParams.get("dateFrom") ?? "";
       const dateTo = searchParams.get("dateTo") ?? "";
-      const account = searchParams.get("account") ?? "";
-      const campaign = searchParams.get("campaign") ?? "";
+      const accounts = searchParams.getAll("account");
+      const campaigns = searchParams.getAll("campaign");
       const adset = searchParams.get("adset") ?? "";
 
       // If no dates provided, return empty regions
@@ -444,8 +448,8 @@ export async function GET(request: NextRequest) {
       const adIdFilter = await getFilteredAdIds(
         dateFrom,
         dateTo,
-        account,
-        campaign,
+        accounts,
+        campaigns,
         adset,
         allowedNames,
       );
@@ -514,8 +518,8 @@ export async function GET(request: NextRequest) {
         let pageQuery = supabase
           .from("ads_allpage")
           .select("account_id, account_name");
-        if (account) {
-          pageQuery = pageQuery.eq("account_name", account);
+        if (accounts.length > 0) {
+          pageQuery = pageQuery.in("account_name", accounts);
         } else if (allowedNames !== null) {
           pageQuery = pageQuery.in("account_name", allowedNames);
         }
@@ -563,9 +567,12 @@ export async function GET(request: NextRequest) {
     // type === "data" — aggregate rows with filters
     const dateFrom = searchParams.get("dateFrom") ?? "";
     const dateTo = searchParams.get("dateTo") ?? "";
-    const account = searchParams.get("account") ?? "";
-    const campaign = searchParams.get("campaign") ?? "";
+    const accounts = searchParams.getAll("account");
+    const campaigns = searchParams.getAll("campaign");
     const adset = searchParams.get("adset") ?? "";
+    // single-value aliases used in a few downstream spots
+    const account = accounts[0] ?? "";
+    const campaign = campaigns[0] ?? "";
 
     // Resolve allowed accounts for user (null = admin, can see all)
     const allowedNames = await getAllowedAccountNames();
@@ -642,12 +649,12 @@ export async function GET(request: NextRequest) {
           .order("date_start", { ascending: false });
         if (from) q = q.gte("date_start", from);
         if (to) q = q.lte("date_start", to);
-        if (account) {
-          q = q.eq("account_name", account);
+        if (accounts.length > 0) {
+          q = q.in("account_name", accounts);
         } else if (allowedNames !== null) {
           q = q.in("account_name", allowedNames);
         }
-        if (campaign) q = q.eq("campaign_name", campaign);
+        if (campaigns.length > 0) q = q.in("campaign_name", campaigns);
         if (adset) q = q.eq("adset_name", adset);
         q = q.range(offset, offset + CHUNK - 1);
         const { data, error } = await q;
@@ -749,15 +756,16 @@ export async function GET(request: NextRequest) {
       account_id: string;
       account_name: string;
     }[];
-    const filteredPages = account
-      ? allPages.filter((p) => p.account_name === account)
-      : allPages;
+    const filteredPages =
+      accounts.length > 0
+        ? allPages.filter((p) => accounts.includes(p.account_name))
+        : allPages;
     const accountIds = filteredPages.map((p) => p.account_id);
 
     const accessToken = process.env.FB_ACCESS_TOKEN ?? "";
     if (accessToken && accountIds.length > 0 && dateFrom && dateTo) {
       const apiFilter = {
-        campaignName: campaign || undefined,
+        campaignNames: campaigns.length > 0 ? campaigns : undefined,
         adsetName: adset || undefined,
       };
       const [statsCurrent, statsPrev, leadsCurrent, leadsPrev] =
@@ -800,19 +808,20 @@ export async function GET(request: NextRequest) {
       prevTotals.reach = statsPrev.reach;
       totals.clicks_all = statsCurrent.clicks;
       prevTotals.clicks_all = statsPrev.clicks;
-      // CTR: both clicks and impressions from API (consistent source)
+      // Recompute CTR using updated clicks_all (from API) with Supabase impressions
+      // so card and table rows share the same denominator and stay in sync.
       totals.ctr =
-        statsCurrent.impressions > 0
+        totals.impressions > 0
           ? parseFloat(
-              ((statsCurrent.clicks / statsCurrent.impressions) * 100).toFixed(
-                2,
-              ),
+              ((totals.clicks_all / totals.impressions) * 100).toFixed(2),
             )
           : 0;
       prevTotals.ctr =
-        statsPrev.impressions > 0
+        prevTotals.impressions > 0
           ? parseFloat(
-              ((statsPrev.clicks / statsPrev.impressions) * 100).toFixed(2),
+              ((prevTotals.clicks_all / prevTotals.impressions) * 100).toFixed(
+                2,
+              ),
             )
           : 0;
       // Use API leads
@@ -1117,6 +1126,9 @@ export async function GET(request: NextRequest) {
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Server error";
-    return NextResponse.json({ error: msg }, { status: 500 });
+    const stack = err instanceof Error ? err.stack : "";
+    console.error("Dashboard API error:", msg);
+    console.error("Stack:", stack);
+    return NextResponse.json({ error: msg, stack }, { status: 500 });
   }
 }

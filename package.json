@@ -27,6 +27,7 @@
     "react-dom": "19.2.4",
     "react-google-charts": "^5.2.1",
     "react-select": "^5.10.2",
+    "recharts": "^3.8.1",
     "topojson-client": "^3.1.0"
   },
   "devDependencies": {

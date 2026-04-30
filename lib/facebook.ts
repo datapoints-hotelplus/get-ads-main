@@ -154,37 +154,34 @@ export async function fetchAccountReachAndClicks(
   accessToken: string,
   since: string,
   until: string,
-  options?: { campaignName?: string; adsetName?: string },
+  options?: { campaignNames?: string[]; adsetName?: string },
 ): Promise<{ reach: number; clicks: number; impressions: number }> {
   let totalReach = 0;
   let totalClicks = 0;
   let totalImpressions = 0;
   const timeRange = encodeURIComponent(JSON.stringify({ since, until }));
 
-  // Determine level and filtering based on filter options
+  const campaignNames = options?.campaignNames ?? [];
   let level = "account";
   let filteringParam = "";
   if (options?.adsetName) {
     level = "adset";
+    const filters: { field: string; operator: string; value: unknown }[] = [
+      { field: "adset.name", operator: "EQUAL", value: options.adsetName },
+    ];
+    if (campaignNames.length === 1) {
+      filters.push({ field: "campaign.name", operator: "EQUAL", value: campaignNames[0] });
+    } else if (campaignNames.length > 1) {
+      filters.push({ field: "campaign.name", operator: "IN", value: campaignNames });
+    }
     filteringParam =
-      "&filtering=" +
-      encodeURIComponent(
-        JSON.stringify([
-          { field: "adset.name", operator: "EQUAL", value: options.adsetName },
-        ]),
-      );
-  } else if (options?.campaignName) {
+      "&filtering=" + encodeURIComponent(JSON.stringify(filters));
+  } else if (campaignNames.length === 1) {
     level = "campaign";
     filteringParam =
       "&filtering=" +
       encodeURIComponent(
-        JSON.stringify([
-          {
-            field: "campaign.name",
-            operator: "EQUAL",
-            value: options.campaignName,
-          },
-        ]),
+        JSON.stringify([{ field: "campaign.name", operator: "EQUAL", value: campaignNames[0] }]),
       );
   }
 
@@ -230,34 +227,32 @@ export async function fetchAccountLeads(
   accessToken: string,
   since: string,
   until: string,
-  options?: { campaignName?: string; adsetName?: string },
+  options?: { campaignNames?: string[]; adsetName?: string },
 ): Promise<number> {
   let total = 0;
   const timeRange = encodeURIComponent(JSON.stringify({ since, until }));
 
+  const campaignNames = options?.campaignNames ?? [];
   let level = "account";
   let filteringParam = "";
   if (options?.adsetName) {
     level = "adset";
+    const filters: { field: string; operator: string; value: unknown }[] = [
+      { field: "adset.name", operator: "EQUAL", value: options.adsetName },
+    ];
+    if (campaignNames.length === 1) {
+      filters.push({ field: "campaign.name", operator: "EQUAL", value: campaignNames[0] });
+    } else if (campaignNames.length > 1) {
+      filters.push({ field: "campaign.name", operator: "IN", value: campaignNames });
+    }
     filteringParam =
-      "&filtering=" +
-      encodeURIComponent(
-        JSON.stringify([
-          { field: "adset.name", operator: "EQUAL", value: options.adsetName },
-        ]),
-      );
-  } else if (options?.campaignName) {
+      "&filtering=" + encodeURIComponent(JSON.stringify(filters));
+  } else if (campaignNames.length === 1) {
     level = "campaign";
     filteringParam =
       "&filtering=" +
       encodeURIComponent(
-        JSON.stringify([
-          {
-            field: "campaign.name",
-            operator: "EQUAL",
-            value: options.campaignName,
-          },
-        ]),
+        JSON.stringify([{ field: "campaign.name", operator: "EQUAL", value: campaignNames[0] }]),
       );
   }
 

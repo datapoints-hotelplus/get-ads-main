@@ -27,6 +27,20 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // ── TikTok routes (/tiktok/* and /api/tiktok/*) — admin only ────────────
+  const isTikTokPage = pathname.startsWith("/tiktok");
+  const isTikTokApi = pathname.startsWith("/api/tiktok");
+
+  if (isTikTokPage || isTikTokApi) {
+    if (!session || session.role !== "admin") {
+      if (isTikTokPage) {
+        return NextResponse.redirect(new URL("/admin/login", req.url));
+      }
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    return NextResponse.next();
+  }
+
   // ── User-facing routes (dashboard, summary, sync and their APIs) ────────
   const isUserPage = pathname.startsWith("/dashboard");
   const isUserApi =
@@ -72,5 +86,9 @@ export const config = {
     "/api/ads-summary",
     "/api/ads-summary/:path*",
     "/api/user/log",
+    "/tiktok",
+    "/tiktok/:path*",
+    "/api/tiktok",
+    "/api/tiktok/:path*",
   ],
 };
