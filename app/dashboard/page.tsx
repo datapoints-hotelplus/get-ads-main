@@ -1640,14 +1640,12 @@ export default function DashboardPage() {
                       invertColor
                       highlight={isHL("CPM")}
                     />
-                    {accounts.length > 0 && (
                       <MetricCard
                         label="CTR"
                         value={`${fmt(totals.ctr, 2)}%`}
                         delta={changes?.ctr}
                         highlight={isHL("CTR")}
                       />
-                    )}
                     <MetricCard
                       label="Leads"
                       value={fmtK(totals.leads)}
