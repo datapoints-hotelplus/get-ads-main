@@ -33,7 +33,13 @@ function CheckboxFilter({
   disabled = false,
 }: CheckboxFilterProps) {
   const [open, setOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const filteredOptions = options.filter((opt) =>
+    opt.toLowerCase().includes(searchTerm.toLowerCase()),
+  );
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -101,13 +107,24 @@ function CheckboxFilter({
       {/* Popover */}
       {open && (
         <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-300 rounded-lg shadow-lg z-50">
+          <div className="p-2 border-b border-gray-200">
+            <input
+              ref={searchInputRef}
+              type="text"
+              placeholder="ค้นหา..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              autoFocus
+              className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-400"
+            />
+          </div>
           <div className="max-h-64 overflow-y-auto p-2">
-            {options.length === 0 ? (
+            {filteredOptions.length === 0 ? (
               <div className="text-xs text-gray-500 px-2 py-2 text-center">
-                ไม่มีตัวเลือก
+                {options.length === 0 ? "ไม่มีตัวเลือก" : "ไม่พบผลลัพธ์"}
               </div>
             ) : (
-              options.map((opt) => (
+              filteredOptions.map((opt) => (
                 <label
                   key={opt}
                   className="flex items-center gap-2 px-2 py-2 hover:bg-gray-100 rounded cursor-pointer text-sm text-gray-700"
@@ -525,7 +542,13 @@ function heatCell(value: number, min: number, max: number, col: string) {
   return `rgba(${rgb},${(t * 0.55 + 0.05).toFixed(2)})`;
 }
 
-function HeatmapTable({ rows }: { rows: GroupRow[] }) {
+function HeatmapTable({
+  rows,
+  hideSpend = false,
+}: {
+  rows: GroupRow[];
+  hideSpend?: boolean;
+}) {
   "use no memo";
   const [sorting, setSorting] = useState<SortingState>([
     { id: "spend", desc: true },
@@ -608,7 +631,15 @@ function HeatmapTable({ rows }: { rows: GroupRow[] }) {
             fmt: (v: number) => fmtK(v),
           },
           { key: "reach", label: "ผู้เห็น", fmt: (v: number) => fmtK(v) },
-          { key: "spend", label: "ยอดใช้จ่าย", fmt: (v: number) => fmtK(v) },
+          ...(hideSpend
+            ? []
+            : [
+                {
+                  key: "spend",
+                  label: "ยอดใช้จ่าย",
+                  fmt: (v: number) => fmtK(v),
+                },
+              ]),
           { key: "revenue", label: "ยอดขาย", fmt: (v: number) => fmtK(v) },
           {
             key: "roas",
@@ -647,7 +678,7 @@ function HeatmapTable({ rows }: { rows: GroupRow[] }) {
         size: 110,
       })),
     ],
-    [colStats],
+    [colStats, hideSpend],
   );
 
   const table = useReactTable({
@@ -767,9 +798,11 @@ function HeatmapTable({ rows }: { rows: GroupRow[] }) {
 function AdHeatmapTable({
   rows,
   hasFbData,
+  hideSpend = false,
 }: {
   rows: AdGroupRow[];
   hasFbData: boolean;
+  hideSpend?: boolean;
 }) {
   "use no memo";
   const [sorting, setSorting] = useState<SortingState>([
@@ -849,7 +882,15 @@ function AdHeatmapTable({
             fmt: (v: number) => fmtK(v),
           },
           { key: "reach", label: "ผู้เห็น", fmt: (v: number) => fmtK(v) },
-          { key: "spend", label: "ยอดใช้จ่าย", fmt: (v: number) => fmtK(v) },
+          ...(hideSpend
+            ? []
+            : [
+                {
+                  key: "spend",
+                  label: "ยอดใช้จ่าย",
+                  fmt: (v: number) => fmtK(v),
+                },
+              ]),
           { key: "revenue", label: "ยอดขาย", fmt: (v: number) => fmtK(v) },
           {
             key: "roas",
@@ -923,7 +964,7 @@ function AdHeatmapTable({
           ]
         : []),
     ],
-    [colStats, hasFbData],
+    [colStats, hasFbData, hideSpend],
   );
 
   const table = useReactTable({
@@ -1153,6 +1194,7 @@ export default function DashboardPage() {
     id: string;
     username: string;
     display_name: string;
+    role?: string;
   } | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
@@ -1680,13 +1722,15 @@ export default function DashboardPage() {
                       invertColor
                       highlight={isHL("Cost / Like")}
                     />
-                    <MetricCard
-                      label="Spend"
-                      value={`฿${fmtK(totals.spend)}`}
-                      delta={changes?.spend}
-                      invertColor
-                      highlight={isHL("Spend")}
-                    />
+                    {currentUser?.role === "admin" && (
+                      <MetricCard
+                        label="Spend"
+                        value={`฿${fmtK(totals.spend)}`}
+                        delta={changes?.spend}
+                        invertColor
+                        highlight={isHL("Spend")}
+                      />
+                    )}
                   </div>
                 );
               })()}
@@ -1730,7 +1774,7 @@ export default function DashboardPage() {
             {/* ── Ad Set Table ──────────────────────────────────────────────── */}
             {rows.length > 0 ? (
               <div data-aos="fade-up" data-aos-delay="100">
-                <HeatmapTable rows={rows} />
+                <HeatmapTable rows={rows} hideSpend={currentUser?.role !== "admin"} />
               </div>
             ) : accounts.length > 0 ? (
               <div className="text-center py-16 text-gray-400 text-sm">
@@ -1746,7 +1790,11 @@ export default function DashboardPage() {
                     ตาราง Ad ({adRows.length})
                   </h2>
                 </div>
-                <AdHeatmapTable rows={adRows} hasFbData={false} />
+                <AdHeatmapTable
+                  rows={adRows}
+                  hasFbData={false}
+                  hideSpend={currentUser?.role !== "admin"}
+                />
               </div>
             )}
           </>
