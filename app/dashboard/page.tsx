@@ -551,7 +551,7 @@ function HeatmapTable({
 }) {
   "use no memo";
   const [sorting, setSorting] = useState<SortingState>([
-    { id: "spend", desc: true },
+    { id: hideSpend ? "impressions" : "spend", desc: true },
   ]);
 
   // Pre-compute column min/max for heatmap
@@ -806,7 +806,7 @@ function AdHeatmapTable({
 }) {
   "use no memo";
   const [sorting, setSorting] = useState<SortingState>([
-    { id: "spend", desc: true },
+    { id: hideSpend ? "impressions" : "spend", desc: true },
   ]);
 
   const colStats = useMemo(() => {
