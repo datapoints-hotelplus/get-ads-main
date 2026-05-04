@@ -115,7 +115,7 @@ function CheckboxFilter({
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               autoFocus
-              className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-400"
+              className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-400 text-black"
             />
           </div>
           <div className="max-h-64 overflow-y-auto p-2">
