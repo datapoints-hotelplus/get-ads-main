@@ -2323,22 +2323,24 @@ export default function DashboardPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {geoRegions.map((r, i) => (
-                          <tr
-                            key={r.region}
-                            className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}
-                          >
-                            <td className="px-4 py-1.5 text-gray-400">
-                              {i + 1}.
-                            </td>
-                            <td className="px-4 py-1.5 text-gray-900">
-                              {r.region}
-                            </td>
-                            <td className="px-4 py-1.5 text-right text-gray-900 font-medium">
-                              {r.inline_link_clicks.toLocaleString("th-TH")}
-                            </td>
-                          </tr>
-                        ))}
+                        {geoRegions
+                          .sort((a, b) => b.inline_link_clicks - a.inline_link_clicks)
+                          .map((r, i) => (
+                            <tr
+                              key={r.region}
+                              className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}
+                            >
+                              <td className="px-4 py-1.5 text-gray-400">
+                                {i + 1}.
+                              </td>
+                              <td className="px-4 py-1.5 text-gray-900">
+                                {r.region}
+                              </td>
+                              <td className="px-4 py-1.5 text-right text-gray-900 font-medium">
+                                {r.inline_link_clicks.toLocaleString("th-TH")}
+                              </td>
+                            </tr>
+                          ))}
                       </tbody>
                     </table>
                   </div>

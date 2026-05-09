@@ -102,7 +102,8 @@ export async function GET(request: NextRequest) {
       let q = supabase
         .from("ads_rawdata")
         .select("campaign_name,adset_name,spend");
-      if (selectedAccounts.length > 0) q = q.in("account_name", selectedAccounts);
+      if (selectedAccounts.length > 0)
+        q = q.in("account_name", selectedAccounts);
       else if (allowedNames !== null) q = q.in("account_name", allowedNames);
       if (dateFrom) q = q.gte("date_start", dateFrom);
       if (dateTo) q = q.lte("date_start", dateTo);
@@ -149,7 +150,13 @@ export async function GET(request: NextRequest) {
       adset: string,
       allowedNames: string[] | null,
     ): Promise<string[] | null> {
-      if (accounts.length === 0 && campaigns.length === 0 && !adset && allowedNames === null) return null;
+      if (
+        accounts.length === 0 &&
+        campaigns.length === 0 &&
+        !adset &&
+        allowedNames === null
+      )
+        return null;
       let q = supabase.from("ads_rawdata").select("ad_id");
       if (accounts.length > 0) q = q.in("account_name", accounts);
       else if (allowedNames !== null) q = q.in("account_name", allowedNames);
@@ -332,7 +339,8 @@ export async function GET(request: NextRequest) {
       let pageQuery = supabase
         .from("ads_allpage")
         .select("account_id, account_name");
-      if (accounts.length > 0) pageQuery = pageQuery.in("account_name", accounts);
+      if (accounts.length > 0)
+        pageQuery = pageQuery.in("account_name", accounts);
       else if (allowedNames !== null)
         pageQuery = pageQuery.in("account_name", allowedNames);
 
@@ -806,8 +814,19 @@ export async function GET(request: NextRequest) {
       // Use API reach + clicks (account-level, same as reach — consistent regardless of campaign/adset filter)
       totals.reach = statsCurrent.reach;
       prevTotals.reach = statsPrev.reach;
-      totals.clicks_all = statsCurrent.clicks;
-      prevTotals.clicks_all = statsPrev.clicks;
+      // Use API clicks if available, otherwise fall back to inline_link_clicks
+      totals.clicks_all =
+        statsCurrent.clicks > 0
+          ? statsCurrent.clicks
+          : totals.clicks_all > 0
+            ? totals.clicks_all
+            : totals.clicks;
+      prevTotals.clicks_all =
+        statsPrev.clicks > 0
+          ? statsPrev.clicks
+          : prevTotals.clicks_all > 0
+            ? prevTotals.clicks_all
+            : prevTotals.clicks;
       // Recompute CTR using updated clicks_all (from API) with Supabase impressions
       // so card and table rows share the same denominator and stay in sync.
       totals.ctr =
@@ -844,6 +863,29 @@ export async function GET(request: NextRequest) {
       prevTotals.cost_per_lead =
         leadsPrev > 0
           ? parseFloat((prevTotals.spend / leadsPrev).toFixed(2))
+          : 0;
+    }
+
+    // Fallback: if clicks_all is still 0 (API block was skipped or API returned 0),
+    // use inline_link_clicks so the card is never blank when we have click data.
+    if (totals.clicks_all === 0 && totals.clicks > 0) {
+      totals.clicks_all = totals.clicks;
+      totals.ctr =
+        totals.impressions > 0
+          ? parseFloat(
+              ((totals.clicks_all / totals.impressions) * 100).toFixed(2),
+            )
+          : 0;
+    }
+    if (prevTotals.clicks_all === 0 && prevTotals.clicks > 0) {
+      prevTotals.clicks_all = prevTotals.clicks;
+      prevTotals.ctr =
+        prevTotals.impressions > 0
+          ? parseFloat(
+              ((prevTotals.clicks_all / prevTotals.impressions) * 100).toFixed(
+                2,
+              ),
+            )
           : 0;
     }
 
