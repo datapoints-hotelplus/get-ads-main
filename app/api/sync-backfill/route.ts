@@ -23,6 +23,7 @@ const BASE_FIELDS = [
   "clicks",
   "actions",
   "action_values",
+  "conversion_values",
   "date_start",
   "date_stop",
 ].join(",");
@@ -50,6 +51,7 @@ const RAWDATA_FIELDS = [
   "cpc",
   "actions",
   "action_values",
+  "conversion_values",
   "video_p25_watched_actions",
   "video_p50_watched_actions",
   "video_p75_watched_actions",
@@ -83,12 +85,29 @@ function num(v: unknown): number {
 }
 
 function findAction(arr: FBAction[] | undefined, type: string): number {
-  return num(arr?.find((a) => a.action_type === type)?.value);
+  if (!arr) return 0;
+  const variants =
+    type === "purchase"
+      ? ["purchase", "offsite_conversion.fb_pixel_purchase"]
+      : [type];
+  for (const variant of variants) {
+    const found = arr.find((a) => a.action_type === variant);
+    if (found) return num(found.value);
+  }
+  return 0;
 }
 
 function findVideoAction(arr: unknown, type: string): number {
   if (!Array.isArray(arr)) return 0;
-  return num((arr as FBAction[]).find((a) => a.action_type === type)?.value);
+  const variants =
+    type === "purchase"
+      ? ["purchase", "offsite_conversion.fb_pixel_purchase"]
+      : [type];
+  for (const variant of variants) {
+    const found = (arr as FBAction[]).find((a) => a.action_type === variant);
+    if (found) return num(found.value);
+  }
+  return 0;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -112,7 +131,13 @@ function dedupe(
 function toRawdata(item: FBItem) {
   const spend = num(item.spend);
   const purchases = findAction(item.actions, "purchase");
-  const purchase_value = findAction(item.action_values, "purchase");
+  const purchase_value =
+    findAction(item.action_values, "purchase") ||
+    findAction(
+      ((item as unknown) as { conversion_values?: FBAction[] })
+        .conversion_values,
+      "purchase",
+    );
   const clicks = parseInt(String(item.inline_link_clicks ?? "0"), 10);
   const clicks_all = parseInt(String(item.clicks ?? "0"), 10);
   const impressions = parseInt(String(item.impressions ?? "0"), 10);

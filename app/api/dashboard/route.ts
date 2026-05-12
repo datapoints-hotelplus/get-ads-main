@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 import {
   fetchAccountLeads,
+  fetchAccountPurchaseRoas,
   fetchAccountReach,
   fetchAccountReachAndClicks,
+  fetchAdPurchases,
+  fetchAdsetPurchases,
   fetchAgeGenderBreakdown,
   fetchDeviceBreakdown,
 } from "@/lib/facebook";
@@ -550,7 +553,7 @@ export async function GET(request: NextRequest) {
 
       // Allocate total reach proportionally to each region based on impressions
       let totalRegionImpressions = 0;
-      for (const [_, data] of regionMap.entries()) {
+      for (const [, data] of regionMap.entries()) {
         totalRegionImpressions += data.impressions ?? 0;
       }
 
@@ -771,46 +774,83 @@ export async function GET(request: NextRequest) {
     const accountIds = filteredPages.map((p) => p.account_id);
 
     const accessToken = process.env.FB_ACCESS_TOKEN ?? "";
+    // Purchase map from Facebook API (overrides DB purchase_value)
+    // Key: "campaign_name|||adset_name" → { purchases, purchase_value, spend }
+    let fbPurchases = new Map<
+      string,
+      { purchases: number; purchase_value: number; spend: number }
+    >();
+
     if (accessToken && accountIds.length > 0 && dateFrom && dateTo) {
       const apiFilter = {
         campaignNames: campaigns.length > 0 ? campaigns : undefined,
         adsetName: adset || undefined,
       };
-      const [statsCurrent, statsPrev, leadsCurrent, leadsPrev] =
-        await Promise.all([
-          fetchAccountReachAndClicks(
-            accountIds,
-            accessToken,
-            dateFrom,
-            dateTo,
-            apiFilter,
-          ),
-          prevFrom
-            ? fetchAccountReachAndClicks(
-                accountIds,
-                accessToken,
-                prevFrom,
-                prevTo,
-                apiFilter,
+      const [
+        statsCurrent,
+        statsPrev,
+        leadsCurrent,
+        leadsPrev,
+        purchasesMap,
+        accountPurchase,
+      ] = await Promise.all([
+        fetchAccountReachAndClicks(
+          accountIds,
+          accessToken,
+          dateFrom,
+          dateTo,
+          apiFilter,
+        ),
+        prevFrom
+          ? fetchAccountReachAndClicks(
+              accountIds,
+              accessToken,
+              prevFrom,
+              prevTo,
+              apiFilter,
+            )
+          : Promise.resolve({ reach: 0, clicks: 0, impressions: 0 }),
+        fetchAccountLeads(accountIds, accessToken, dateFrom, dateTo, apiFilter),
+        prevFrom
+          ? fetchAccountLeads(
+              accountIds,
+              accessToken,
+              prevFrom,
+              prevTo,
+              apiFilter,
+            )
+          : Promise.resolve(0),
+        fetchAdsetPurchases(accountIds, accessToken, dateFrom, dateTo).catch(
+          () =>
+            new Map<
+              string,
+              { purchases: number; purchase_value: number; spend: number }
+            >(),
+        ),
+        fetchAccountPurchaseRoas(
+          accountIds,
+          accessToken,
+          dateFrom,
+          dateTo,
+          apiFilter,
+        ).catch(() => ({ purchase_value: 0, purchases: 0, spend: 0 })),
+      ]);
+      fbPurchases = purchasesMap;
+
+      // Override totals with FB account-level data (matches Facebook Ads Manager exactly)
+      if (accountPurchase.purchase_value > 0 && accountPurchase.spend > 0) {
+        totals.revenue = accountPurchase.purchase_value;
+        totals.purchases = accountPurchase.purchases;
+        totals.roas = parseFloat(
+          (accountPurchase.purchase_value / accountPurchase.spend).toFixed(2),
+        );
+        totals.cost_per_purchase =
+          accountPurchase.purchases > 0
+            ? parseFloat(
+                (accountPurchase.spend / accountPurchase.purchases).toFixed(2),
               )
-            : Promise.resolve({ reach: 0, clicks: 0, impressions: 0 }),
-          fetchAccountLeads(
-            accountIds,
-            accessToken,
-            dateFrom,
-            dateTo,
-            apiFilter,
-          ),
-          prevFrom
-            ? fetchAccountLeads(
-                accountIds,
-                accessToken,
-                prevFrom,
-                prevTo,
-                apiFilter,
-              )
-            : Promise.resolve(0),
-        ]);
+            : 0;
+      }
       // Use API reach + clicks (account-level, same as reach — consistent regardless of campaign/adset filter)
       totals.reach = statsCurrent.reach;
       prevTotals.reach = statsPrev.reach;
@@ -1027,17 +1067,26 @@ export async function GET(request: NextRequest) {
         reachShare > 0
           ? parseFloat((g.impressions / reachShare).toFixed(2))
           : 0;
+
+      // Override revenue/purchases from FB API if available
+      const fbKey = `${g.campaign_name}|||${g.adset_name}`;
+      const fb = fbPurchases.get(fbKey);
+      const revenue = fb && fb.purchase_value > 0 ? fb.purchase_value : g.revenue;
+      const purchases = fb && fb.purchases > 0 ? fb.purchases : g.purchases;
+
       return {
         ...g,
         reach: reachShare,
-        roas: g.spend > 0 ? parseFloat((g.revenue / g.spend).toFixed(2)) : 0,
+        revenue,
+        purchases,
+        roas: g.spend > 0 ? parseFloat((revenue / g.spend).toFixed(2)) : 0,
         ctr:
           g.impressions > 0
             ? parseFloat(((g.clicks_all / g.impressions) * 100).toFixed(2))
             : 0,
         cpc: g.clicks > 0 ? parseFloat((g.spend / g.clicks).toFixed(2)) : 0,
         cost_per_purchase:
-          g.purchases > 0 ? parseFloat((g.spend / g.purchases).toFixed(2)) : 0,
+          purchases > 0 ? parseFloat((g.spend / purchases).toFixed(2)) : 0,
         frequency,
         post_engagement: g.post_engagement,
         cost_per_engagement:
@@ -1128,6 +1177,39 @@ export async function GET(request: NextRequest) {
       g.page_likes += r.page_likes ?? 0;
     }
 
+    // Fetch per-ad purchase data from Facebook (filtered to current campaign+adset)
+    const fbAdPurchases =
+      accessToken && accountIds.length > 0 && dateFrom && dateTo
+        ? await fetchAdPurchases(
+            accountIds,
+            accessToken,
+            dateFrom,
+            dateTo,
+            { campaignNames: [campaign], adsetName: adset },
+          ).catch(
+            () =>
+              new Map<
+                string,
+                {
+                  ad_id: string;
+                  ad_name: string;
+                  purchases: number;
+                  purchase_value: number;
+                  spend: number;
+                }
+              >(),
+          )
+        : new Map<
+            string,
+            {
+              ad_id: string;
+              ad_name: string;
+              purchases: number;
+              purchase_value: number;
+              spend: number;
+            }
+          >();
+
     const adRows: AdGroupRow[] = [...adGrouped.values()].map((g) => {
       const reachShare =
         totals.impressions > 0
@@ -1135,17 +1217,27 @@ export async function GET(request: NextRequest) {
               ((g.impressions / totals.impressions) * totals.reach).toFixed(0),
             )
           : 0;
+
+      // Override revenue/purchases from FB API per-ad data
+      const fbAd = fbAdPurchases.get(g.ad_id);
+      const revenue =
+        fbAd && fbAd.purchase_value > 0 ? fbAd.purchase_value : g.revenue;
+      const purchases =
+        fbAd && fbAd.purchases > 0 ? fbAd.purchases : g.purchases;
+
       return {
         ...g,
         reach: reachShare,
-        roas: g.spend > 0 ? parseFloat((g.revenue / g.spend).toFixed(2)) : 0,
+        revenue,
+        purchases,
+        roas: g.spend > 0 ? parseFloat((revenue / g.spend).toFixed(2)) : 0,
         ctr:
           g.impressions > 0
             ? parseFloat(((g.clicks_all / g.impressions) * 100).toFixed(2))
             : 0,
         cpc: g.clicks > 0 ? parseFloat((g.spend / g.clicks).toFixed(2)) : 0,
         cost_per_purchase:
-          g.purchases > 0 ? parseFloat((g.spend / g.purchases).toFixed(2)) : 0,
+          purchases > 0 ? parseFloat((g.spend / purchases).toFixed(2)) : 0,
         cost_per_engagement:
           g.post_engagement > 0
             ? parseFloat((g.spend / g.post_engagement).toFixed(2))

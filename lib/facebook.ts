@@ -637,17 +637,40 @@ export async function fetchRegionData(
         const region = item.region ?? "Unknown";
         const purchases = (() => {
           if (!Array.isArray(item.actions)) return 0;
-          const action = item.actions.find(
-            (a: any) => a.action_type === "purchase",
-          );
-          return action ? parseInt(String(action.value ?? "0"), 10) : 0;
+          const variants = ["purchase"];
+          for (const variant of variants) {
+            const action = item.actions.find(
+              (a: any) => a.action_type === variant,
+            );
+            if (action) return parseInt(String(action.value ?? "0"), 10);
+          }
+          return 0;
         })();
         const purchase_value = (() => {
-          if (!Array.isArray(item.action_values)) return 0;
-          const action = item.action_values.find(
-            (a: any) => a.action_type === "purchase",
-          );
-          return action ? parseFloat(String(action.value ?? "0")) : 0;
+          const variants = [
+            "purchase",
+            "offsite_conversion.fb_pixel_purchase",
+          ];
+          // Try action_values first
+          if (Array.isArray(item.action_values)) {
+            for (const variant of variants) {
+              const action = item.action_values.find(
+                (a: any) => a.action_type === variant,
+              );
+              if (action) return parseFloat(String(action.value ?? "0"));
+            }
+          }
+          // Fallback to conversion_values
+          const conversionValues = (item as any).conversion_values;
+          if (Array.isArray(conversionValues)) {
+            for (const variant of variants) {
+              const action = conversionValues.find(
+                (a: any) => a.action_type === variant,
+              );
+              if (action) return parseFloat(String(action.value ?? "0"));
+            }
+          }
+          return 0;
         })();
 
         const existing = map.get(region) ?? {
@@ -679,4 +702,389 @@ export async function fetchRegionData(
     region,
     ...data,
   }));
+}
+
+/**
+ * Fetch raw spend and purchase_value components from Facebook API.
+ * ROAS is calculated downstream as purchase_value / spend.
+ *
+ * Aggregation level is chosen automatically based on filter:
+ *   - adset filter set    → level=adset
+ *   - 1+ campaign filters → level=campaign
+ *   - no filter           → level=account
+ */
+export async function fetchAccountPurchaseRoas(
+  accountIds: string[],
+  accessToken: string,
+  since: string,
+  until: string,
+  options?: { campaignNames?: string[]; adsetName?: string },
+): Promise<{ purchase_value: number; purchases: number; spend: number }> {
+  const totals = { purchase_value: 0, purchases: 0, spend: 0 };
+  const timeRange = encodeURIComponent(JSON.stringify({ since, until }));
+
+  const PURCHASE_VARIANTS = [
+    "omni_purchase",
+    "purchase",
+    "offsite_conversion.fb_pixel_purchase",
+    "onsite_web_purchase",
+    "web_in_store_purchase",
+  ];
+
+  function pick(
+    arr: { action_type: string; value: string }[] | undefined,
+  ): number {
+    if (!Array.isArray(arr)) return 0;
+    for (const v of PURCHASE_VARIANTS) {
+      const a = arr.find((x) => x.action_type === v);
+      if (a) return parseFloat(String(a.value ?? "0"));
+    }
+    return 0;
+  }
+
+  const campaignNames = options?.campaignNames ?? [];
+  let level = "account";
+  let filteringParam = "";
+  if (options?.adsetName) {
+    level = "adset";
+    const filters: { field: string; operator: string; value: unknown }[] = [
+      { field: "adset.name", operator: "EQUAL", value: options.adsetName },
+    ];
+    if (campaignNames.length === 1) {
+      filters.push({
+        field: "campaign.name",
+        operator: "EQUAL",
+        value: campaignNames[0],
+      });
+    } else if (campaignNames.length > 1) {
+      filters.push({
+        field: "campaign.name",
+        operator: "IN",
+        value: campaignNames,
+      });
+    }
+    filteringParam =
+      "&filtering=" + encodeURIComponent(JSON.stringify(filters));
+  } else if (campaignNames.length === 1) {
+    level = "campaign";
+    filteringParam =
+      "&filtering=" +
+      encodeURIComponent(
+        JSON.stringify([
+          {
+            field: "campaign.name",
+            operator: "EQUAL",
+            value: campaignNames[0],
+          },
+        ]),
+      );
+  } else if (campaignNames.length > 1) {
+    level = "campaign";
+    filteringParam =
+      "&filtering=" +
+      encodeURIComponent(
+        JSON.stringify([
+          { field: "campaign.name", operator: "IN", value: campaignNames },
+        ]),
+      );
+  }
+
+  for (const accountId of accountIds) {
+    const url =
+      `${FB_GRAPH_API_V25}/${accountId}/insights?` +
+      `fields=spend,actions,action_values,conversion_values` +
+      `&time_range=${timeRange}&level=${level}` +
+      `&use_unified_attribution_setting=true` +
+      filteringParam +
+      `&access_token=${accessToken}`;
+
+    try {
+      const res: {
+        data: {
+          data?: {
+            spend?: string;
+            actions?: { action_type: string; value: string }[];
+            action_values?: { action_type: string; value: string }[];
+            conversion_values?: { action_type: string; value: string }[];
+          }[];
+        };
+      } = await axios.get(url, { timeout: 30000 });
+
+      for (const item of res.data.data ?? []) {
+        const spend = parseFloat(String(item.spend ?? "0"));
+        totals.spend += spend;
+
+        const purchases = (() => {
+          if (!Array.isArray(item.actions)) return 0;
+          for (const v of PURCHASE_VARIANTS) {
+            const a = item.actions.find((x) => x.action_type === v);
+            if (a) return parseInt(String(a.value ?? "0"), 10);
+          }
+          return 0;
+        })();
+        totals.purchases += purchases;
+
+        // Get purchase_value (revenue) directly — calculate ROAS later as revenue/spend
+        const purchase_value =
+          pick(item.action_values) || pick(item.conversion_values);
+        totals.purchase_value += purchase_value;
+      }
+    } catch (e) {
+      console.error(`fetchAccountPurchaseRoas error for ${accountId}:`, e);
+    }
+  }
+
+  return totals;
+}
+
+/**
+ * Fetch raw spend & purchase_value components per ad from Facebook API.
+ * ROAS is calculated downstream as purchase_value / spend.
+ * Returns Map keyed by ad_id with purchase data.
+ */
+export async function fetchAdPurchases(
+  accountIds: string[],
+  accessToken: string,
+  since: string,
+  until: string,
+  options?: { campaignNames?: string[]; adsetName?: string },
+): Promise<
+  Map<
+    string,
+    {
+      ad_id: string;
+      ad_name: string;
+      purchases: number;
+      purchase_value: number;
+      spend: number;
+    }
+  >
+> {
+  const result = new Map<
+    string,
+    {
+      ad_id: string;
+      ad_name: string;
+      purchases: number;
+      purchase_value: number;
+      spend: number;
+    }
+  >();
+  const timeRange = encodeURIComponent(JSON.stringify({ since, until }));
+
+  const PURCHASE_VARIANTS = [
+    "omni_purchase",
+    "purchase",
+    "offsite_conversion.fb_pixel_purchase",
+    "onsite_web_purchase",
+    "web_in_store_purchase",
+  ];
+
+  function pick(
+    arr: { action_type: string; value: string }[] | undefined,
+  ): number {
+    if (!Array.isArray(arr)) return 0;
+    for (const v of PURCHASE_VARIANTS) {
+      const a = arr.find((x) => x.action_type === v);
+      if (a) return parseFloat(String(a.value ?? "0"));
+    }
+    return 0;
+  }
+
+  const campaignNames = options?.campaignNames ?? [];
+  let filteringParam = "";
+  const filters: { field: string; operator: string; value: unknown }[] = [];
+  if (options?.adsetName) {
+    filters.push({
+      field: "adset.name",
+      operator: "EQUAL",
+      value: options.adsetName,
+    });
+  }
+  if (campaignNames.length === 1) {
+    filters.push({
+      field: "campaign.name",
+      operator: "EQUAL",
+      value: campaignNames[0],
+    });
+  } else if (campaignNames.length > 1) {
+    filters.push({
+      field: "campaign.name",
+      operator: "IN",
+      value: campaignNames,
+    });
+  }
+  if (filters.length > 0) {
+    filteringParam =
+      "&filtering=" + encodeURIComponent(JSON.stringify(filters));
+  }
+
+  for (const accountId of accountIds) {
+    let url: string | null =
+      `${FB_GRAPH_API_V25}/${accountId}/insights?` +
+      `fields=ad_id,ad_name,spend,actions,action_values,conversion_values` +
+      `&time_range=${timeRange}&level=ad&limit=500` +
+      `&use_unified_attribution_setting=true` +
+      filteringParam +
+      `&access_token=${accessToken}`;
+
+    while (url) {
+      try {
+        const res: {
+          data: {
+            data?: {
+              ad_id?: string;
+              ad_name?: string;
+              spend?: string;
+              actions?: { action_type: string; value: string }[];
+              action_values?: { action_type: string; value: string }[];
+              conversion_values?: { action_type: string; value: string }[];
+            }[];
+            paging?: { next?: string };
+          };
+        } = await axios.get(url, { timeout: 30000 });
+
+        for (const item of res.data.data ?? []) {
+          const ad_id = String(item.ad_id ?? "");
+          if (!ad_id) continue;
+          const spend = parseFloat(String(item.spend ?? "0"));
+          const purchases = (() => {
+            if (!Array.isArray(item.actions)) return 0;
+            for (const v of PURCHASE_VARIANTS) {
+              const a = item.actions.find((x) => x.action_type === v);
+              if (a) return parseInt(String(a.value ?? "0"), 10);
+            }
+            return 0;
+          })();
+          const purchase_value =
+            pick(item.action_values) || pick(item.conversion_values);
+
+          const existing = result.get(ad_id) ?? {
+            ad_id,
+            ad_name: String(item.ad_name ?? ""),
+            purchases: 0,
+            purchase_value: 0,
+            spend: 0,
+          };
+          result.set(ad_id, {
+            ad_id,
+            ad_name: existing.ad_name || String(item.ad_name ?? ""),
+            purchases: existing.purchases + purchases,
+            purchase_value: existing.purchase_value + purchase_value,
+            spend: existing.spend + spend,
+          });
+        }
+
+        url = res.data.paging?.next ?? null;
+      } catch (e) {
+        console.error(`fetchAdPurchases error for ${accountId}:`, e);
+        url = null;
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Fetch raw spend & purchase_value components by campaign + adset from Facebook API.
+ * ROAS is calculated downstream as purchase_value / spend.
+ * Returns Map keyed by "campaign_name|||adset_name".
+ */
+export async function fetchAdsetPurchases(
+  accountIds: string[],
+  accessToken: string,
+  since: string,
+  until: string,
+): Promise<
+  Map<string, { purchases: number; purchase_value: number; spend: number }>
+> {
+  const result = new Map<
+    string,
+    { purchases: number; purchase_value: number; spend: number }
+  >();
+  const timeRange = encodeURIComponent(JSON.stringify({ since, until }));
+
+  const PURCHASE_VARIANTS = [
+    "omni_purchase",
+    "purchase",
+    "offsite_conversion.fb_pixel_purchase",
+    "onsite_web_purchase",
+    "web_in_store_purchase",
+  ];
+
+  function extractByVariant(
+    arr: { action_type: string; value: string }[] | undefined,
+  ): number {
+    if (!Array.isArray(arr)) return 0;
+    for (const variant of PURCHASE_VARIANTS) {
+      const a = arr.find((x) => x.action_type === variant);
+      if (a) return parseFloat(String(a.value ?? "0"));
+    }
+    return 0;
+  }
+
+  for (const accountId of accountIds) {
+    let url: string | null =
+      `${FB_GRAPH_API_V25}/${accountId}/insights?` +
+      `fields=campaign_name,adset_name,spend,actions,action_values,conversion_values` +
+      `&time_range=${timeRange}&level=adset&limit=500` +
+      `&use_unified_attribution_setting=true` +
+      `&access_token=${accessToken}`;
+
+    while (url) {
+      try {
+        const res: {
+          data: {
+            data?: {
+              campaign_name?: string;
+              adset_name?: string;
+              spend?: string;
+              actions?: { action_type: string; value: string }[];
+              action_values?: { action_type: string; value: string }[];
+              conversion_values?: { action_type: string; value: string }[];
+            }[];
+            paging?: { next?: string };
+          };
+        } = await axios.get(url, { timeout: 30000 });
+
+        for (const item of res.data.data ?? []) {
+          const key = `${item.campaign_name ?? ""}|||${item.adset_name ?? ""}`;
+          const spend = parseFloat(String(item.spend ?? "0"));
+          const purchases = (() => {
+            if (!Array.isArray(item.actions)) return 0;
+            for (const v of PURCHASE_VARIANTS) {
+              const a = item.actions.find((x) => x.action_type === v);
+              if (a) return parseInt(String(a.value ?? "0"), 10);
+            }
+            return 0;
+          })();
+
+          // Get purchase_value (revenue) directly from action_values
+          // ROAS will be calculated downstream as revenue/spend
+          const purchase_value =
+            extractByVariant(item.action_values) ||
+            extractByVariant(item.conversion_values);
+
+          const existing = result.get(key) ?? {
+            purchases: 0,
+            purchase_value: 0,
+            spend: 0,
+          };
+          result.set(key, {
+            purchases: existing.purchases + purchases,
+            purchase_value: existing.purchase_value + purchase_value,
+            spend: existing.spend + spend,
+          });
+        }
+
+        url = res.data.paging?.next ?? null;
+      } catch (e) {
+        console.error(`fetchAdsetPurchases error for ${accountId}:`, e);
+        url = null;
+      }
+    }
+  }
+
+  return result;
 }

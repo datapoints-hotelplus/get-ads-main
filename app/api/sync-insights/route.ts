@@ -13,7 +13,7 @@ type FBItem = { actions?: FBAction[]; action_values?: FBAction[] } & Record<stri
 
 const BASE_FIELDS = [
   "ad_id", "ad_name", "spend", "reach", "impressions",
-  "actions", "action_values", "date_start", "date_stop",
+  "actions", "action_values", "conversion_values", "date_start", "date_stop",
 ].join(",");
 
 const MASTER_FIELDS = [
@@ -88,7 +88,16 @@ function num(v: unknown): number {
 }
 
 function findAction(arr: FBAction[] | undefined, type: string): number {
-  return num(arr?.find((a) => a.action_type === type)?.value);
+  if (!arr) return 0;
+  const variants =
+    type === "purchase"
+      ? ["purchase", "offsite_conversion.fb_pixel_purchase"]
+      : [type];
+  for (const variant of variants) {
+    const found = arr.find((a) => a.action_type === variant);
+    if (found) return num(found.value);
+  }
+  return 0;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -102,7 +111,13 @@ function makeKey(row: SheetRow, keyIdx: readonly number[]): string {
 function parseToRow(item: FBItem, sheetKey: SheetKey): SheetRow {
   const spend = num(item.spend);
   const purchases = findAction(item.actions, "purchase");
-  const purchase_value = findAction(item.action_values, "purchase");
+  const purchase_value =
+    findAction(item.action_values, "purchase") ||
+    findAction(
+      ((item as unknown) as { conversion_values?: FBAction[] })
+        .conversion_values,
+      "purchase",
+    );
   const roas = spend > 0 ? parseFloat((purchase_value / spend).toFixed(4)) : 0;
   const cost_per_result = purchases > 0 ? parseFloat((spend / purchases).toFixed(4)) : 0;
 

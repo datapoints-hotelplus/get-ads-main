@@ -55,12 +55,27 @@ export async function GET(request: NextRequest) {
       const clicks_all = parseInt(item.inline_link_clicks ?? "0", 10);
       const impressions = parseInt(item.impressions ?? "0", 10);
 
-      const purchaseAction = (item.actions as any[] | undefined)?.find(
-        (a) => a.action_type === "purchase",
-      );
-      const purchaseValueAction = (
-        item.action_values as any[] | undefined
-      )?.find((a) => a.action_type === "purchase");
+      const purchaseAction = (() => {
+        const arr = item.actions as any[] | undefined;
+        if (!arr) return undefined;
+        const variants = ["purchase"];
+        for (const variant of variants) {
+          const found = arr.find((a) => a.action_type === variant);
+          if (found) return found;
+        }
+      })();
+      const purchaseValueAction = (() => {
+        const arr = item.action_values as any[] | undefined;
+        if (!arr) return undefined;
+        const variants = [
+          "purchase",
+          "offsite_conversion.fb_pixel_purchase",
+        ];
+        for (const variant of variants) {
+          const found = arr.find((a) => a.action_type === variant);
+          if (found) return found;
+        }
+      })();
 
       const purchases = parseFloat(purchaseAction?.value ?? "0");
       const revenue = parseFloat(purchaseValueAction?.value ?? "0");

@@ -20,9 +20,13 @@ interface RawInsight {
 }
 
 function extractPurchase(actions: RawInsight["actions"]) {
-  return parseFloat(
-    actions?.find((a) => a.action_type === "purchase")?.value ?? "0",
-  );
+  if (!actions) return 0;
+  const variants = ["purchase", "offsite_conversion.fb_pixel_purchase"];
+  for (const variant of variants) {
+    const found = actions.find((a) => a.action_type === variant);
+    if (found) return parseFloat(found.value ?? "0");
+  }
+  return 0;
 }
 
 export async function GET(request: NextRequest) {
