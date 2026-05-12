@@ -1082,9 +1082,16 @@ function AdHeatmapTable({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  // Filter state
-  const [dateFrom, setDateFrom] = useState(firstOfMonth()); // ISO yyyy-mm-dd
-  const [dateTo, setDateTo] = useState(today()); // ISO yyyy-mm-dd
+  // Filter state — start empty to avoid SSR/client hydration mismatch
+  // (new Date() differs between server and client), set in useEffect below
+  const [dateFrom, setDateFrom] = useState(""); // ISO yyyy-mm-dd
+  const [dateTo, setDateTo] = useState(""); // ISO yyyy-mm-dd
+
+  useEffect(() => {
+    if (!dateFrom) setDateFrom(firstOfMonth());
+    if (!dateTo) setDateTo(today());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [accounts, setAccounts] = useState<string[]>([]);
   const [campaigns, setCampaigns] = useState<string[]>([]);
   const [adset, setAdset] = useState("");
