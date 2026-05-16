@@ -23,6 +23,7 @@ interface CheckboxFilterProps {
   selected: string[];
   onChange: (selected: string[]) => void;
   disabled?: boolean;
+  placeholder?: string;
 }
 
 function CheckboxFilter({
@@ -31,6 +32,7 @@ function CheckboxFilter({
   selected,
   onChange,
   disabled = false,
+  placeholder = "-- ทั้งหมด --",
 }: CheckboxFilterProps) {
   const [open, setOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -84,7 +86,7 @@ function CheckboxFilter({
       >
         <span className="truncate">
           {selected.length === 0
-            ? "-- ทั้งหมด --"
+            ? placeholder
             : `${selected.length} รายการ`}
         </span>
         <svg
@@ -1393,8 +1395,16 @@ export default function DashboardPage() {
 
   const handleCampaignChange = (vals: string[]) => {
     setCampaigns(vals);
+    // Ad Set can only be filtered when 0 or 1 campaign is selected
     setAdset("");
   };
+
+  // Safety: clear adset if user somehow ends up with multiple campaigns
+  useEffect(() => {
+    if (campaigns.length > 1 && adset) {
+      setAdset("");
+    }
+  }, [campaigns.length, adset]);
 
   const handleApply = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1483,6 +1493,7 @@ export default function DashboardPage() {
                 selected={accounts}
                 onChange={handleAccountChange}
                 disabled={optLoading}
+                placeholder="-- เลือก Account --"
               />
 
               <CheckboxFilter
@@ -1493,15 +1504,26 @@ export default function DashboardPage() {
                 disabled={optLoading}
               />
 
-              {/* Adset */}
+              {/* Adset — disabled when multiple campaigns selected (must be "all" then) */}
               <div className="flex flex-col gap-1 min-w-44 flex-1">
                 <label className="text-xs font-medium text-secondary/70">
                   Ad Set
+                  {campaigns.length > 1 && (
+                    <span className="ml-1 text-gray-400">
+                      (เลือก Campaign 1 รายการเพื่อกรอง Ad Set)
+                    </span>
+                  )}
                 </label>
                 <ReactSelect
-                  value={adset ? { value: adset, label: adset } : null}
+                  value={
+                    campaigns.length > 1
+                      ? null
+                      : adset
+                        ? { value: adset, label: adset }
+                        : null
+                  }
                   onChange={(opt) => setAdset(opt ? opt.value : "")}
-                  isDisabled={optLoading}
+                  isDisabled={optLoading || campaigns.length > 1}
                   placeholder="-- ทั้งหมด --"
                   isClearable
                   options={options.adsets.map((s) => ({ value: s, label: s }))}
@@ -1514,8 +1536,13 @@ export default function DashboardPage() {
               <div className="flex items-center gap-2">
                 <button
                   type="submit"
-                  disabled={dataLoading}
-                  className="bg-secondary hover:bg-secondary-light disabled:bg-gray-400 text-white text-sm font-semibold px-6 py-2 rounded-lg transition-colors"
+                  disabled={dataLoading || accounts.length === 0}
+                  className="bg-secondary hover:bg-secondary-light disabled:bg-gray-400 disabled:cursor-not-allowed text-white text-sm font-semibold px-6 py-2 rounded-lg transition-colors"
+                  title={
+                    accounts.length === 0
+                      ? "กรุณาเลือก Account อย่างน้อย 1 รายการ"
+                      : ""
+                  }
                 >
                   {dataLoading ? "กำลังโหลด…" : "ค้นหา"}
                 </button>
