@@ -14,6 +14,7 @@ import { Chart } from "react-google-charts";
 import ReactSelect from "react-select";
 import FrequencyGauge from "../FrequencyGauge";
 import ThaiGeoChart from "../ThaiGeoChart";
+import ErrorBoundary from "../ErrorBoundary";
 
 // ─── Checkbox Filter Component ────────────────────────────────────────────────
 
@@ -488,7 +489,7 @@ function MetricCard({
           }`}
         >
           {isPositive ? "▲" : isNeutral ? "●" : "▼"}
-          {Math.abs(delta!).toFixed(1)}%
+          {Math.abs(delta ?? 0).toFixed(1)}%
           <span className="text-gray-300 font-normal ml-1">vs prev</span>
         </p>
       )}
@@ -642,28 +643,28 @@ function HeatmapTable({
                   fmt: (v: number) => fmtK(v),
                 },
               ]),
-          { key: "revenue", label: "ยอดขาย", fmt: (v: number) => fmtK(v) },
+          { key: "revenue", label: "ยอดขาย", fmt: (v: number) => fmtK(v ?? 0) },
           {
             key: "roas",
             label: "ROAS",
-            fmt: (v: number) => `${v.toFixed(2)}x`,
+            fmt: (v: number) => `${(v ?? 0).toFixed(2)}x`,
           },
-          { key: "ctr", label: "CTR", fmt: (v: number) => `${v.toFixed(2)}%` },
-          { key: "cpc", label: "ต้นทุนต่อคลิก", fmt: (v: number) => fmtK(v) },
+          { key: "ctr", label: "CTR", fmt: (v: number) => `${(v ?? 0).toFixed(2)}%` },
+          { key: "cpc", label: "ต้นทุนต่อคลิก", fmt: (v: number) => fmtK(v ?? 0) },
           {
             key: "post_engagement",
             label: "การมีส่วนร่วม",
-            fmt: (v: number) => fmtK(v),
+            fmt: (v: number) => fmtK(v ?? 0),
           },
           {
             key: "cost_per_engagement",
             label: "ต้นทุนต่อการมีส่วนร่วม",
-            fmt: (v: number) => fmtK(v),
+            fmt: (v: number) => fmtK(v ?? 0),
           },
           {
             key: "cost_per_like",
             label: "ต้นทุนต่อการติดตาม",
-            fmt: (v: number) => fmtK(v),
+            fmt: (v: number) => fmtK(v ?? 0),
           },
         ] as const
       ).map(({ key, label, fmt: fmtFn }) => ({
@@ -672,11 +673,11 @@ function HeatmapTable({
         meta: {
           getBg: (v: number) => {
             const { min, max } = colStats[key] ?? { min: 0, max: 0 };
-            return heatCell(v, min, max, key);
+            return heatCell(v ?? 0, min, max, key);
           },
         },
         cell: ({ getValue }: { getValue: () => unknown }) =>
-          fmtFn(getValue() as number),
+          fmtFn((getValue() as number | undefined) ?? 0),
         size: 110,
       })),
     ],
@@ -890,31 +891,31 @@ function AdHeatmapTable({
                 {
                   key: "spend",
                   label: "ยอดใช้จ่าย",
-                  fmt: (v: number) => fmtK(v),
+                  fmt: (v: number) => fmtK(v ?? 0),
                 },
               ]),
-          { key: "revenue", label: "ยอดขาย", fmt: (v: number) => fmtK(v) },
+          { key: "revenue", label: "ยอดขาย", fmt: (v: number) => fmtK(v ?? 0) },
           {
             key: "roas",
             label: "ROAS",
-            fmt: (v: number) => `${v.toFixed(2)}x`,
+            fmt: (v: number) => `${(v ?? 0).toFixed(2)}x`,
           },
-          { key: "ctr", label: "CTR", fmt: (v: number) => `${v.toFixed(2)}%` },
-          { key: "cpc", label: "ต้นทุนต่อคลิก", fmt: (v: number) => fmtK(v) },
+          { key: "ctr", label: "CTR", fmt: (v: number) => `${(v ?? 0).toFixed(2)}%` },
+          { key: "cpc", label: "ต้นทุนต่อคลิก", fmt: (v: number) => fmtK(v ?? 0) },
           {
             key: "post_engagement",
             label: "การมีส่วนร่วม",
-            fmt: (v: number) => fmtK(v),
+            fmt: (v: number) => fmtK(v ?? 0),
           },
           {
             key: "cost_per_engagement",
             label: "ต้นทุนต่อการมีส่วนร่วม",
-            fmt: (v: number) => fmtK(v),
+            fmt: (v: number) => fmtK(v ?? 0),
           },
           {
             key: "cost_per_like",
             label: "ต้นทุนต่อการติดตาม",
-            fmt: (v: number) => fmtK(v),
+            fmt: (v: number) => fmtK(v ?? 0),
           },
         ] as const
       ).map(({ key, label, fmt: fmtFn }) => ({
@@ -923,11 +924,11 @@ function AdHeatmapTable({
         meta: {
           getBg: (v: number) => {
             const { min, max } = colStats[key] ?? { min: 0, max: 0 };
-            return heatCell(v, min, max, key);
+            return heatCell(v ?? 0, min, max, key);
           },
         },
         cell: ({ getValue }: { getValue: () => unknown }) =>
-          fmtFn(getValue() as number),
+          fmtFn((getValue() as number | undefined) ?? 0),
         size: 110,
       })),
       ...(hasFbData
@@ -1790,10 +1791,18 @@ export default function DashboardPage() {
                     </span>
                   </div>
                   <div className="h-[160px] relative">
-                    <FrequencyGauge
-                      frequency={totals.frequency}
-                      delta={changes?.frequency}
-                    />
+                    <ErrorBoundary
+                      fallback={
+                        <div className="h-full flex items-center justify-center text-xs text-gray-400">
+                          ไม่สามารถแสดง Frequency Gauge
+                        </div>
+                      }
+                    >
+                      <FrequencyGauge
+                        frequency={totals.frequency}
+                        delta={changes?.frequency}
+                      />
+                    </ErrorBoundary>
                   </div>
                   <div className="flex justify-between text-xs text-gray-400 font-medium px-2 -mt-1">
                     <span>0</span>
@@ -1950,15 +1959,15 @@ export default function DashboardPage() {
                         "คลิกไม่ซ้ำ",
                         "ต้นทุนต่อคลิก",
                         { role: "annotation" },
-                        `เฉลี่ย (${avgCpc.toFixed(2)})`,
+                        `เฉลี่ย (${(avgCpc ?? 0).toFixed(2)})`,
                       ],
                       ...timeSeries.map((p) => [
-                        p.date,
-                        p.inline_link_clicks,
-                        p.unique_inline_link_clicks,
-                        p.cpc,
+                        p.date ?? "",
+                        p.inline_link_clicks ?? 0,
+                        p.unique_inline_link_clicks ?? 0,
+                        p.cpc ?? 0,
                         null,
-                        parseFloat(avgCpc.toFixed(2)),
+                        parseFloat((avgCpc ?? 0).toFixed(2)),
                       ]),
                     ]}
                     options={{

@@ -1068,34 +1068,39 @@ export async function GET(request: NextRequest) {
           ? parseFloat((g.impressions / reachShare).toFixed(2))
           : 0;
 
-      // Override revenue/purchases from FB API if available
+      // Override revenue/purchases/spend from FB API if available.
+      // IMPORTANT: use same source for both numerator and denominator so ROAS
+      // doesn't go to 0 when FB has revenue but DB spend hasn't synced yet.
       const fbKey = `${g.campaign_name}|||${g.adset_name}`;
       const fb = fbPurchases.get(fbKey);
-      const revenue = fb && fb.purchase_value > 0 ? fb.purchase_value : g.revenue;
-      const purchases = fb && fb.purchases > 0 ? fb.purchases : g.purchases;
+      const useFb = !!(fb && fb.purchase_value > 0 && fb.spend > 0);
+      const revenue = useFb ? fb!.purchase_value : g.revenue;
+      const purchases = useFb && fb!.purchases > 0 ? fb!.purchases : g.purchases;
+      const spend = useFb ? fb!.spend : g.spend;
 
       return {
         ...g,
         reach: reachShare,
+        spend,
         revenue,
         purchases,
-        roas: g.spend > 0 ? parseFloat((revenue / g.spend).toFixed(2)) : 0,
+        roas: spend > 0 ? parseFloat((revenue / spend).toFixed(2)) : 0,
         ctr:
           g.impressions > 0
             ? parseFloat(((g.clicks_all / g.impressions) * 100).toFixed(2))
             : 0,
-        cpc: g.clicks > 0 ? parseFloat((g.spend / g.clicks).toFixed(2)) : 0,
+        cpc: g.clicks > 0 ? parseFloat((spend / g.clicks).toFixed(2)) : 0,
         cost_per_purchase:
-          purchases > 0 ? parseFloat((g.spend / purchases).toFixed(2)) : 0,
+          purchases > 0 ? parseFloat((spend / purchases).toFixed(2)) : 0,
         frequency,
         post_engagement: g.post_engagement,
         cost_per_engagement:
           g.post_engagement > 0
-            ? parseFloat((g.spend / g.post_engagement).toFixed(2))
+            ? parseFloat((spend / g.post_engagement).toFixed(2))
             : 0,
         cost_per_like:
           g.page_likes > 0
-            ? parseFloat((g.spend / g.page_likes).toFixed(2))
+            ? parseFloat((spend / g.page_likes).toFixed(2))
             : 0,
       };
     });
@@ -1218,33 +1223,37 @@ export async function GET(request: NextRequest) {
             )
           : 0;
 
-      // Override revenue/purchases from FB API per-ad data
+      // Override revenue/purchases/spend from FB API per-ad data.
+      // Use FB's spend together with FB's revenue so ROAS stays correct
+      // even when DB spend hasn't synced.
       const fbAd = fbAdPurchases.get(g.ad_id);
-      const revenue =
-        fbAd && fbAd.purchase_value > 0 ? fbAd.purchase_value : g.revenue;
+      const useFb = !!(fbAd && fbAd.purchase_value > 0 && fbAd.spend > 0);
+      const revenue = useFb ? fbAd!.purchase_value : g.revenue;
       const purchases =
-        fbAd && fbAd.purchases > 0 ? fbAd.purchases : g.purchases;
+        useFb && fbAd!.purchases > 0 ? fbAd!.purchases : g.purchases;
+      const spend = useFb ? fbAd!.spend : g.spend;
 
       return {
         ...g,
         reach: reachShare,
+        spend,
         revenue,
         purchases,
-        roas: g.spend > 0 ? parseFloat((revenue / g.spend).toFixed(2)) : 0,
+        roas: spend > 0 ? parseFloat((revenue / spend).toFixed(2)) : 0,
         ctr:
           g.impressions > 0
             ? parseFloat(((g.clicks_all / g.impressions) * 100).toFixed(2))
             : 0,
-        cpc: g.clicks > 0 ? parseFloat((g.spend / g.clicks).toFixed(2)) : 0,
+        cpc: g.clicks > 0 ? parseFloat((spend / g.clicks).toFixed(2)) : 0,
         cost_per_purchase:
-          purchases > 0 ? parseFloat((g.spend / purchases).toFixed(2)) : 0,
+          purchases > 0 ? parseFloat((spend / purchases).toFixed(2)) : 0,
         cost_per_engagement:
           g.post_engagement > 0
-            ? parseFloat((g.spend / g.post_engagement).toFixed(2))
+            ? parseFloat((spend / g.post_engagement).toFixed(2))
             : 0,
         cost_per_like:
           g.page_likes > 0
-            ? parseFloat((g.spend / g.page_likes).toFixed(2))
+            ? parseFloat((spend / g.page_likes).toFixed(2))
             : 0,
       };
     });

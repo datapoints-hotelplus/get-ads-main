@@ -10,10 +10,11 @@ const gaugeCenterText = {
   id: "gaugeCenterText",
   afterDraw(chart: ChartJS<"doughnut">) {
     const { ctx, chartArea } = chart;
+    if (!chartArea) return;
     const cx = (chartArea.left + chartArea.right) / 2;
     const cy = (chartArea.top + chartArea.bottom) / 2 + 10;
-    const raw = (chart.config as any)._frequency as number;
-    const delta = (chart.config as any)._delta as number | null;
+    const raw = ((chart.config as any)._frequency as number | undefined) ?? 0;
+    const delta = (chart.config as any)._delta as number | null | undefined;
 
     ctx.save();
     ctx.textAlign = "center";
@@ -27,13 +28,17 @@ const gaugeCenterText = {
     // Value
     ctx.fillStyle = "#111827";
     ctx.font = "bold 26px system-ui, sans-serif";
-    ctx.fillText(raw.toFixed(2), cx, cy);
+    ctx.fillText((raw ?? 0).toFixed(2), cx, cy);
 
     // Delta %
-    if (delta !== null && delta !== undefined) {
+    if (delta !== null && delta !== undefined && Number.isFinite(delta)) {
       ctx.fillStyle = delta > 0 ? "#ec1501" : delta < 0 ? "#10b981" : "#9ca3af";
       ctx.font = "500 11px system-ui, sans-serif";
-      ctx.fillText(`${delta > 0 ? "+" : ""}${delta.toFixed(2)}%`, cx, cy + 20);
+      ctx.fillText(
+        `${delta > 0 ? "+" : ""}${(delta ?? 0).toFixed(2)}%`,
+        cx,
+        cy + 20,
+      );
     }
     ctx.restore();
   },
@@ -46,16 +51,18 @@ interface Props {
 
 export default function FrequencyGauge({ frequency, delta }: Props) {
   const chartRef = useRef<ChartJS<"doughnut"> | null>(null);
+  const safeFrequency = Number.isFinite(frequency) ? frequency : 0;
+  const safeDelta = Number.isFinite(delta as number) ? (delta as number) : null;
 
   useEffect(() => {
     if (chartRef.current) {
-      (chartRef.current.config as any)._frequency = frequency;
-      (chartRef.current.config as any)._delta = delta ?? null;
+      (chartRef.current.config as any)._frequency = safeFrequency;
+      (chartRef.current.config as any)._delta = safeDelta;
       chartRef.current.update();
     }
-  }, [frequency, delta]);
+  }, [safeFrequency, safeDelta]);
 
-  const val = Math.min(frequency, 8);
+  const val = Math.min(safeFrequency, 8);
   const remaining = 8 - val;
 
   return (
