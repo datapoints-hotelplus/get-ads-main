@@ -4,6 +4,7 @@ import axios from "axios";
 import { google } from "googleapis";
 import { JWT } from "google-auth-library";
 import { getSupabase } from "@/lib/supabase";
+import { getFacebookAccessToken } from "@/lib/facebook-token";
 
 const FB_GRAPH_API = "https://graph.facebook.com/v25.0";
 
@@ -410,7 +411,7 @@ async function getAccountIds(): Promise<{ name: string; id: string }[]> {
 }
 
 export async function POST() {
-  const accessToken = process.env.FB_ACCESS_TOKEN;
+  const accessToken = await getFacebookAccessToken();
   if (!accessToken) {
     return NextResponse.json(
       { error: "Missing FB_ACCESS_TOKEN" },

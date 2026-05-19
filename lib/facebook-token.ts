@@ -1,0 +1,153 @@
+import axios, { AxiosError } from "axios";
+import { getSupabase } from "./supabase";
+
+const FB_GRAPH_API = "https://graph.facebook.com/v25.0";
+
+// In-process cache so a refreshed token is reused within the same warm instance.
+let cachedToken: string | null = null;
+let cachedAt = 0;
+const CACHE_TTL_MS = 60_000; // re-read from DB every minute
+
+interface FBError {
+  message?: string;
+  type?: string;
+  code?: number;
+  error_subcode?: number;
+  fbtrace_id?: string;
+}
+
+/**
+ * Returns the current Facebook access token.
+ * Reads from Supabase first (latest refreshed), falls back to FB_ACCESS_TOKEN env.
+ */
+export async function getFacebookAccessToken(): Promise<string> {
+  const now = Date.now();
+  if (cachedToken && now - cachedAt < CACHE_TTL_MS) return cachedToken;
+
+  try {
+    const supabase = getSupabase();
+    const { data } = await supabase
+      .from("fb_token_store")
+      .select("access_token")
+      .eq("id", 1)
+      .single();
+    if (data?.access_token) {
+      cachedToken = data.access_token as string;
+      cachedAt = now;
+      return cachedToken;
+    }
+  } catch {
+    // Table missing or query failed — fall through to env.
+  }
+
+  const envToken = process.env.FB_ACCESS_TOKEN ?? "";
+  cachedToken = envToken;
+  cachedAt = now;
+  return envToken;
+}
+
+/**
+ * Exchange the current token for a new long-lived one (60 days).
+ * Persists the new token to Supabase.
+ * Requires FB_APP_ID and FB_APP_SECRET to be set.
+ *
+ * Throws if the current token is already too expired to exchange.
+ */
+export async function refreshFacebookToken(): Promise<{
+  access_token: string;
+  expires_in?: number;
+}> {
+  const appId = process.env.FB_APP_ID;
+  const appSecret = process.env.FB_APP_SECRET;
+  if (!appId || !appSecret) {
+    throw new Error(
+      "Cannot refresh Facebook token: FB_APP_ID or FB_APP_SECRET is missing",
+    );
+  }
+
+  const currentToken = await getFacebookAccessToken();
+
+  const res = await axios.get(`${FB_GRAPH_API}/oauth/access_token`, {
+    params: {
+      grant_type: "fb_exchange_token",
+      client_id: appId,
+      client_secret: appSecret,
+      fb_exchange_token: currentToken,
+    },
+    timeout: 15_000,
+  });
+
+  const newToken = res.data.access_token as string | undefined;
+  const expiresIn = res.data.expires_in as number | undefined;
+  if (!newToken) {
+    throw new Error("Facebook did not return a new access_token");
+  }
+
+  const expiresAt = expiresIn
+    ? new Date(Date.now() + expiresIn * 1000).toISOString()
+    : null;
+
+  // Persist to DB (upsert id=1)
+  try {
+    const supabase = getSupabase();
+    await supabase.from("fb_token_store").upsert(
+      {
+        id: 1,
+        access_token: newToken,
+        expires_at: expiresAt,
+        refreshed_at: new Date().toISOString(),
+      },
+      { onConflict: "id" },
+    );
+  } catch (e) {
+    console.error("[fb-token] Failed to persist refreshed token:", e);
+  }
+
+  cachedToken = newToken;
+  cachedAt = Date.now();
+
+  return { access_token: newToken, expires_in: expiresIn };
+}
+
+/**
+ * Detect if an axios error is caused by an expired/invalid Facebook token.
+ * Facebook returns OAuthException with code 190 when the token is bad.
+ */
+export function isFacebookAuthError(err: unknown): boolean {
+  const e = err as AxiosError<{ error?: FBError }>;
+  const fbError = e?.response?.data?.error;
+  if (!fbError) return false;
+  return (
+    fbError.code === 190 ||
+    fbError.code === 102 ||
+    fbError.type === "OAuthException"
+  );
+}
+
+/**
+ * Run a Facebook API call. If it fails with an auth error (code 190),
+ * try to refresh the token once, then retry the call with the new token.
+ *
+ * @param fn Receives the current token; should perform one HTTP request.
+ */
+export async function withFacebookTokenRefresh<T>(
+  fn: (token: string) => Promise<T>,
+): Promise<T> {
+  let token = await getFacebookAccessToken();
+  try {
+    return await fn(token);
+  } catch (err) {
+    if (!isFacebookAuthError(err)) throw err;
+    console.warn(
+      "[fb-token] Detected expired/invalid token, attempting refresh…",
+    );
+    try {
+      const refreshed = await refreshFacebookToken();
+      token = refreshed.access_token;
+    } catch (refreshErr) {
+      console.error("[fb-token] Refresh failed:", refreshErr);
+      throw err; // surface original error
+    }
+    return await fn(token);
+  }
+}

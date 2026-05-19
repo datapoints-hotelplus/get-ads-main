@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import axios from "axios";
 import { getSupabase } from "@/lib/supabase";
+import { getFacebookAccessToken } from "@/lib/facebook-token";
 
 const FB_GRAPH_API = "https://graph.facebook.com/v25.0";
 
@@ -16,7 +17,7 @@ type FBItem = {
 
 // GET /api/debug-roas?accountName=<name>&dateFrom=YYYY-MM-DD&dateTo=YYYY-MM-DD
 export async function GET(request: NextRequest) {
-  const accessToken = process.env.FB_ACCESS_TOKEN;
+  const accessToken = await getFacebookAccessToken();
   if (!accessToken) {
     return NextResponse.json(
       { error: "Missing FB_ACCESS_TOKEN" },

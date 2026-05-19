@@ -2,6 +2,11 @@
 import { NextResponse } from "next/server";
 import axios from "axios";
 import { getSupabase } from "@/lib/supabase";
+import {
+  getFacebookAccessToken,
+  isFacebookAuthError,
+  refreshFacebookToken,
+} from "@/lib/facebook-token";
 
 const FB_GRAPH_API = "https://graph.facebook.com/v25.0";
 
@@ -448,13 +453,34 @@ export type SyncSummaryItem = {
   error?: string;
 };
 
+/** Run fetchRange; on FB auth error (token expired) refresh once and retry. */
+async function fetchRangeWithRetry(
+  accountId: string,
+  tokenRef: { current: string },
+  since: string,
+  until: string,
+  sheetKey: SheetKey,
+): Promise<FBItem[]> {
+  try {
+    return await fetchRange(accountId, tokenRef.current, since, until, sheetKey);
+  } catch (err) {
+    if (!isFacebookAuthError(err)) throw err;
+    console.warn(
+      `[sync-7days] FB token rejected for ${accountId}; refreshing…`,
+    );
+    const refreshed = await refreshFacebookToken();
+    tokenRef.current = refreshed.access_token;
+    return await fetchRange(accountId, tokenRef.current, since, until, sheetKey);
+  }
+}
+
 export async function runSync(
   since: string,
   until: string,
   label = "sync",
 ): Promise<{ since: string; until: string; accounts: SyncSummaryItem[] }> {
-  const accessToken = process.env.FB_ACCESS_TOKEN;
-  if (!accessToken) throw new Error("Missing FB_ACCESS_TOKEN");
+  // Mutable ref so a mid-run refresh propagates to subsequent fetchRange calls.
+  const tokenRef = { current: await getFacebookAccessToken() };
 
   const accounts = await getAccountIds();
   if (accounts.length === 0) throw new Error("ไม่พบ Active Account");
@@ -476,10 +502,10 @@ export async function runSync(
 
     try {
       const [rawItems, geoItems, demoItems, deviceItems] = await Promise.all([
-        fetchRange(account.id, accessToken, since, until, "rawdata"),
-        fetchRange(account.id, accessToken, since, until, "geo"),
-        fetchRange(account.id, accessToken, since, until, "demographic"),
-        fetchRange(account.id, accessToken, since, until, "device"),
+        fetchRangeWithRetry(account.id, tokenRef, since, until, "rawdata"),
+        fetchRangeWithRetry(account.id, tokenRef, since, until, "geo"),
+        fetchRangeWithRetry(account.id, tokenRef, since, until, "demographic"),
+        fetchRangeWithRetry(account.id, tokenRef, since, until, "device"),
       ]);
 
       await Promise.all([

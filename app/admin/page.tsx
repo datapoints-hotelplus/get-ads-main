@@ -181,6 +181,12 @@ export default function AdminPage() {
             Sync Panel
           </button>
           <button
+            onClick={() => router.push("/admin/config")}
+            className="text-sm text-secondary/80 hover:text-secondary font-medium"
+          >
+            ⚙️ Config
+          </button>
+          <button
             onClick={() => router.push("/admin/docs")}
             className="text-sm text-secondary/80 hover:text-secondary font-medium"
           >

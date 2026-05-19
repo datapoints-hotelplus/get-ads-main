@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import axios from "axios";
 import { google } from "googleapis";
 import { JWT } from "google-auth-library";
+import { getFacebookAccessToken } from "@/lib/facebook-token";
 
 const FB_GRAPH_API = "https://graph.facebook.com/v25.0";
 
@@ -314,7 +315,7 @@ function getSpreadsheetId(sheetKey: SheetKey, mainId: string): string {
 }
 
 export async function POST(request: Request) {
-  const accessToken = process.env.FB_ACCESS_TOKEN;
+  const accessToken = await getFacebookAccessToken();
   const spreadsheetId = process.env.GOOGLE_SHEETS_ID;
 
   const url = new URL(request.url);

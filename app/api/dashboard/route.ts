@@ -10,6 +10,7 @@ import {
   fetchAgeGenderBreakdown,
   fetchDeviceBreakdown,
 } from "@/lib/facebook";
+import { getFacebookAccessToken } from "@/lib/facebook-token";
 
 // GET /api/dashboard?type=options
 // GET /api/dashboard?type=data&dateFrom=&dateTo=&account=&campaign=&adset=
@@ -268,7 +269,7 @@ export async function GET(request: NextRequest) {
         const { data: pageData } = await pageQuery;
         const accountIds = (pageData ?? []).map((r) => r.account_id as string);
 
-        const accessToken = process.env.FB_ACCESS_TOKEN ?? "";
+        const accessToken = await getFacebookAccessToken();
         if (accessToken && accountIds.length > 0 && dateFrom && dateTo) {
           totalReachFromAPI = await fetchAccountReach(
             accountIds,
@@ -350,7 +351,7 @@ export async function GET(request: NextRequest) {
       const { data: pageData } = await pageQuery;
       const accountIds = (pageData ?? []).map((r) => r.account_id as string);
 
-      const accessToken = process.env.FB_ACCESS_TOKEN ?? "";
+      const accessToken = await getFacebookAccessToken();
       if (!accessToken || accountIds.length === 0 || !dateFrom || !dateTo) {
         return NextResponse.json({ ageGender: [], devices: [] });
       }
@@ -369,7 +370,7 @@ export async function GET(request: NextRequest) {
       const dateTo = searchParams.get("dateTo") ?? "";
       const accounts = searchParams.getAll("account");
       const allowedNames = await getAllowedAccountNames();
-      const accessToken = process.env.FB_ACCESS_TOKEN ?? "";
+      const accessToken = await getFacebookAccessToken();
 
       if (!accessToken) {
         return NextResponse.json(
@@ -409,7 +410,7 @@ export async function GET(request: NextRequest) {
       const dateTo = searchParams.get("dateTo") ?? "";
       const accounts = searchParams.getAll("account");
       const allowedNames = await getAllowedAccountNames();
-      const accessToken = process.env.FB_ACCESS_TOKEN ?? "";
+      const accessToken = await getFacebookAccessToken();
 
       if (!accessToken) {
         return NextResponse.json(
@@ -537,7 +538,7 @@ export async function GET(request: NextRequest) {
         const { data: pageData } = await pageQuery;
         const accountIds = (pageData ?? []).map((r) => r.account_id as string);
 
-        const accessToken = process.env.FB_ACCESS_TOKEN ?? "";
+        const accessToken = await getFacebookAccessToken();
         if (accessToken && accountIds.length > 0) {
           totalReachForAllocation = await fetchAccountReach(
             accountIds,
@@ -773,7 +774,7 @@ export async function GET(request: NextRequest) {
         : allPages;
     const accountIds = filteredPages.map((p) => p.account_id);
 
-    const accessToken = process.env.FB_ACCESS_TOKEN ?? "";
+    const accessToken = await getFacebookAccessToken();
     // Purchase map from Facebook API (overrides DB purchase_value)
     // Key: "campaign_name|||adset_name" → { purchases, purchase_value, spend }
     let fbPurchases = new Map<

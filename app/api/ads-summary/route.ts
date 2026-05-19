@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import axios from "axios";
+import { getFacebookAccessToken } from "@/lib/facebook-token";
 
 const FB_GRAPH_API = "https://graph.facebook.com/v18.0";
 
@@ -36,7 +37,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Missing accountId" }, { status: 400 });
   }
 
-  const accessToken = process.env.FB_ACCESS_TOKEN;
+  const accessToken = await getFacebookAccessToken();
   if (!accessToken) {
     return NextResponse.json(
       { error: "FB_ACCESS_TOKEN not configured" },

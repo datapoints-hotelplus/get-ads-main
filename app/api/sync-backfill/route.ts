@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import axios from "axios";
 import { getSupabase } from "@/lib/supabase";
+import { getFacebookAccessToken } from "@/lib/facebook-token";
 
 const FB_GRAPH_API = "https://graph.facebook.com/v25.0";
 
@@ -536,7 +537,7 @@ function monthChunks(
 // ─── Main route ───────────────────────────────────────────────────────────────
 
 export async function POST() {
-  const accessToken = process.env.FB_ACCESS_TOKEN;
+  const accessToken = await getFacebookAccessToken();
   if (!accessToken) {
     return NextResponse.json(
       { error: "Missing FB_ACCESS_TOKEN" },

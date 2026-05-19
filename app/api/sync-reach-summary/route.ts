@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 import { fetchAccountReach, fetchCampaignReach } from "@/lib/facebook";
+import { getFacebookAccessToken } from "@/lib/facebook-token";
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
@@ -20,7 +21,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const accessToken = process.env.FB_ACCESS_TOKEN;
+  const accessToken = await getFacebookAccessToken();
   if (!accessToken)
     return NextResponse.json(
       { error: "FB_ACCESS_TOKEN not set" },

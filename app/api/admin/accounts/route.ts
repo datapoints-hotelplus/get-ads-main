@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { verifySessionToken } from "@/lib/sessionToken";
 import { getSupabase } from "@/lib/supabase";
+import { getFacebookAccessToken } from "@/lib/facebook-token";
 import axios from "axios";
 
 async function checkAuth(): Promise<boolean> {
@@ -131,7 +132,7 @@ export async function PUT() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const accessToken = process.env.FB_ACCESS_TOKEN;
+  const accessToken = await getFacebookAccessToken();
   if (!accessToken) {
     return NextResponse.json(
       { error: "FB_ACCESS_TOKEN is not configured" },
@@ -154,9 +155,33 @@ export async function PUT() {
     );
     fbAccounts = fbRes.data.data ?? [];
   } catch (err) {
-    const msg =
-      err instanceof Error ? err.message : "Failed to fetch from Facebook";
-    return NextResponse.json({ error: msg }, { status: 502 });
+    // Expose Facebook's actual error so we can see the real reason
+    // (token expired, missing permission, etc.)
+    const e = err as {
+      response?: {
+        status?: number;
+        data?: {
+          error?: {
+            message?: string;
+            type?: string;
+            code?: number;
+            error_subcode?: number;
+            fbtrace_id?: string;
+          };
+        };
+      };
+      message?: string;
+    };
+    const fbError = e.response?.data?.error;
+    return NextResponse.json(
+      {
+        error:
+          fbError?.message ?? e.message ?? "Failed to fetch from Facebook",
+        facebook: fbError ?? null,
+        status: e.response?.status ?? null,
+      },
+      { status: 502 },
+    );
   }
 
   if (fbAccounts.length === 0) {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAllFacebookPagesData } from "@/lib/facebook";
+import { getFacebookAccessToken } from "@/lib/facebook-token";
 import {
   initializeGoogleSheet,
   insertFacebookDataToSheet,
@@ -10,7 +11,7 @@ import {
 export async function POST(request: NextRequest) {
   try {
     // Validate environment variables
-    const fbAccessToken = process.env.FB_ACCESS_TOKEN;
+    const fbAccessToken = await getFacebookAccessToken();
     const googleSheetsId = process.env.GOOGLE_SHEETS_ID;
 
     if (!fbAccessToken || !googleSheetsId) {

@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import axios from "axios";
 import { getSupabase } from "@/lib/supabase";
+import { getFacebookAccessToken } from "@/lib/facebook-token";
 
 const FB_GRAPH_API = "https://graph.facebook.com/v25.0";
 
 export async function POST() {
-  const accessToken = process.env.FB_ACCESS_TOKEN;
+  const accessToken = await getFacebookAccessToken();
   if (!accessToken) {
     return NextResponse.json({ error: "FB_ACCESS_TOKEN not set" }, { status: 500 });
   }
