@@ -86,7 +86,13 @@ function findAction(arr: FBAction[] | undefined, type: string): number {
   if (!arr) return 0;
   const variants =
     type === "purchase"
-      ? ["purchase", "offsite_conversion.fb_pixel_purchase"]
+      ? [
+          "omni_purchase",
+          "purchase",
+          "offsite_conversion.fb_pixel_purchase",
+          "onsite_web_purchase",
+          "web_in_store_purchase",
+        ]
       : [type];
   for (const variant of variants) {
     const found = arr.find((a) => a.action_type === variant);
@@ -98,7 +104,13 @@ function findVideoAction(arr: unknown, type: string): number {
   if (!Array.isArray(arr)) return 0;
   const variants =
     type === "purchase"
-      ? ["purchase", "offsite_conversion.fb_pixel_purchase"]
+      ? [
+          "omni_purchase",
+          "purchase",
+          "offsite_conversion.fb_pixel_purchase",
+          "onsite_web_purchase",
+          "web_in_store_purchase",
+        ]
       : [type];
   for (const variant of variants) {
     const found = (arr as FBAction[]).find((a) => a.action_type === variant);

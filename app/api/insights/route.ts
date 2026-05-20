@@ -46,7 +46,22 @@ function num(v: unknown): number {
 }
 
 function findAction(arr: FBAction[] | undefined, type: string): number {
-  return num(arr?.find((a) => a.action_type === type)?.value);
+  if (!arr) return 0;
+  const variants =
+    type === "purchase"
+      ? [
+          "omni_purchase",
+          "purchase",
+          "offsite_conversion.fb_pixel_purchase",
+          "onsite_web_purchase",
+          "web_in_store_purchase",
+        ]
+      : [type];
+  for (const variant of variants) {
+    const found = arr.find((a) => a.action_type === variant);
+    if (found) return num(found.value);
+  }
+  return 0;
 }
 
 function findVideoAction(arr: unknown, type: string): number {
