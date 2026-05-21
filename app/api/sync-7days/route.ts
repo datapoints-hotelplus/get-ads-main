@@ -562,13 +562,39 @@ export async function runSync(
 
 // ─── GET handler — ดึงข้อมูลวันนี้ (00:00–ตอนนี้) ───────────────────────────
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const today = new Date().toLocaleDateString("en-CA", {
       timeZone: "Asia/Bangkok",
     });
     const result = await runSync(today, today, "sync-today");
-    return NextResponse.json({ success: true, ...result });
+    const response = { success: true, ...result };
+
+    // Send notification to webhook
+    try {
+      await fetch('https://www.grit-craft.com/api/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event: 'sync_7days_completed',
+          severity: 'info',
+          data: response,
+        }),
+      });
+    } catch (notifyErr) {
+      console.error('[sync-7days] Webhook notification failed:', notifyErr);
+    }
+
+    // Trigger sync-resync after sync-7days completes
+    try {
+      const origin = new URL(request.url).origin;
+      console.log('[sync-7days] Triggering sync-resync...');
+      await fetch(`${origin}/api/sync-resync`, { method: 'POST' });
+    } catch (resyncErr) {
+      console.error('[sync-7days] Failed to trigger sync-resync:', resyncErr);
+    }
+
+    return NextResponse.json(response);
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Server error" },

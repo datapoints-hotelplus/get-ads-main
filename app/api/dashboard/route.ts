@@ -582,12 +582,130 @@ export async function GET(request: NextRequest) {
     const accounts = searchParams.getAll("account");
     const campaigns = searchParams.getAll("campaign");
     const adset = searchParams.get("adset") ?? "";
+    const fromFB = searchParams.get("from_fb") === "1";
     // single-value aliases used in a few downstream spots
     const account = accounts[0] ?? "";
     const campaign = campaigns[0] ?? "";
 
     // Resolve allowed accounts for user (null = admin, can see all)
     const allowedNames = await getAllowedAccountNames();
+
+    // ── If from_fb=1: fetch data directly from Facebook API ────────────────────
+    if (fromFB && account && dateFrom && dateTo) {
+      try {
+        const supabase = getSupabase();
+        const { data: pageData } = await supabase
+          .from("ads_allpage")
+          .select("account_id")
+          .eq("account_name", account)
+          .single();
+
+        if (!pageData) {
+          return NextResponse.json({
+            error: `Account not found: ${account}`,
+            totals: null,
+            rows: [],
+          }, { status: 404 });
+        }
+
+        const accountId = (pageData.account_id as string).replace(/^act_/, "");
+        const accessToken = await getFacebookAccessToken();
+
+        if (!accessToken) {
+          return NextResponse.json({
+            error: "No Facebook access token",
+            totals: null,
+            rows: [],
+          }, { status: 401 });
+        }
+
+        // Fetch ad-level data from FB API
+        const fbUrl = new URL("https://graph.facebook.com/v25.0");
+        fbUrl.pathname = `/act_${accountId}/insights`;
+        fbUrl.searchParams.append("fields", [
+          "ad_id", "ad_name", "campaign_name", "adset_name",
+          "date_start", "date_stop",
+          "spend", "impressions", "inline_link_clicks", "reach",
+          "actions", "action_values"
+        ].join(","));
+        fbUrl.searchParams.append("time_range", JSON.stringify({ since: dateFrom, until: dateTo }));
+        fbUrl.searchParams.append("level", "ad");
+        fbUrl.searchParams.append("limit", "1000");
+        fbUrl.searchParams.append("access_token", accessToken);
+
+        const fbRes = await axios.get(fbUrl.toString(), { timeout: 30000 });
+        const fbRows = fbRes.data.data ?? [];
+
+        // Helper to find purchase action
+        const findPurchase = (arr: { action_type: string; value: string }[] | undefined) => {
+          if (!arr) return 0;
+          const variants = ["omni_purchase", "purchase", "offsite_conversion.fb_pixel_purchase", "onsite_web_purchase", "web_in_store_purchase"];
+          for (const v of variants) {
+            const a = arr.find((x) => x.action_type === v);
+            if (a) return parseFloat(a.value ?? "0");
+          }
+          return 0;
+        };
+
+        // Convert FB rows to dashboard format
+        type FBRow = Record<string, unknown>;
+        const rows: Record<string, unknown>[] = (fbRows as FBRow[])
+          .filter((item) => (item.spend as number | undefined) ?? 0 > 0)
+          .map((item) => {
+            const spend = parseFloat(String(item.spend ?? "0"));
+            const actions = item.actions as { action_type: string; value: string }[] | undefined;
+            const purchases = actions?.find((a) => a.action_type.includes("purchase"))?.value ?? 0;
+            const purchase_value = findPurchase(item.action_values as { action_type: string; value: string }[] | undefined);
+            return {
+              date_start: String(item.date_start ?? ""),
+              date_stop: String(item.date_stop ?? ""),
+              account_name: account,
+              campaign_name: String(item.campaign_name ?? ""),
+              adset_name: String(item.adset_name ?? ""),
+              ad_name: String(item.ad_name ?? ""),
+              ad_id: String(item.ad_id ?? ""),
+              spend,
+              impressions: parseInt(String(item.impressions ?? "0"), 10),
+              inline_link_clicks: parseInt(String(item.inline_link_clicks ?? "0"), 10),
+              reach: parseInt(String(item.reach ?? "0"), 10),
+              purchases: parseInt(String(purchases), 10),
+              purchase_value,
+              roas: spend > 0 ? parseFloat((purchase_value / spend).toFixed(2)) : 0,
+            };
+          });
+
+        // Aggregate totals
+        type TotalsType = { spend: number; impressions: number; clicks: number; reach: number; purchases: number; revenue: number; roas: number };
+        const totals: TotalsType = rows.reduce((acc: TotalsType, row: Record<string, unknown>) => ({
+          spend: (acc.spend ?? 0) + (row.spend as number),
+          impressions: (acc.impressions ?? 0) + (row.impressions as number),
+          clicks: (acc.clicks ?? 0) + (row.inline_link_clicks as number),
+          reach: (acc.reach ?? 0) + (row.reach as number),
+          purchases: (acc.purchases ?? 0) + (row.purchases as number),
+          revenue: (acc.revenue ?? 0) + (row.purchase_value as number),
+          roas: 0,
+        }), { spend: 0, impressions: 0, clicks: 0, reach: 0, purchases: 0, revenue: 0, roas: 0 });
+
+        totals.roas = totals.spend > 0 ? parseFloat((totals.revenue / totals.spend).toFixed(2)) : 0;
+
+        return NextResponse.json({
+          success: true,
+          source: "facebook_api",
+          totals,
+          changes: null,
+          rows: rows.slice(0, 1000),
+          count: rows.length,
+          prevPeriod: null,
+        });
+      } catch (error) {
+        console.error("[dashboard from_fb]", error);
+        return NextResponse.json({
+          error: error instanceof Error ? error.message : "Facebook API error",
+          totals: null,
+          rows: [],
+        }, { status: 500 });
+      }
+    }
     if (allowedNames !== null && allowedNames.length === 0) {
       // User has no permissions — return empty response
       return NextResponse.json({
