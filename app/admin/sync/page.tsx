@@ -20,6 +20,18 @@ type BackfillResult = {
     error?: string;
   }[];
 };
+type TikTokSyncResult = {
+  success: boolean;
+  since: string;
+  until: string;
+  advertisers: {
+    advertiser_id: string;
+    advertiser_name: string;
+    rows: number;
+    error?: string;
+  }[];
+};
+
 type DailyResult = {
   success: boolean;
   date: string;
@@ -59,17 +71,63 @@ export default function AdminSyncPage() {
   );
   const [backfillError, setBackfillError] = useState<string | null>(null);
 
-  const [dailying, setDailying] = useState(false);
-  const [dailyResult, setDailyResult] = useState<DailyResult | null>(null);
-  const [dailyError, setDailyError] = useState<string | null>(null);
 
   const [syncing7, setSyncing7] = useState(false);
   const [sync7Result, setSync7Result] = useState<BackfillResult | null>(null);
   const [sync7Error, setSync7Error] = useState<string | null>(null);
 
   const [syncingLatest, setSyncingLatest] = useState(false);
-  const [syncLatestResult, setSyncLatestResult] = useState<LatestResult | null>(null);
+  const [syncLatestResult, setSyncLatestResult] = useState<LatestResult | null>(
+    null,
+  );
   const [syncLatestError, setSyncLatestError] = useState<string | null>(null);
+
+  const [resyncing, setResyncing] = useState(false);
+  const [resyncResult, setResyncResult] = useState<{
+    success: boolean;
+    dateFrom: string;
+    dateTo: string;
+    totalFetched: number;
+    totalUpdated: number;
+    accounts_synced: number;
+    summary: { account: string; rows_fetched: number; rows_updated: number; error?: string }[];
+  } | null>(null);
+  const [resyncError, setResyncError] = useState<string | null>(null);
+
+  const [tiktokSyncing, setTiktokSyncing] = useState(false);
+  const [tiktokResult, setTiktokResult] = useState<TikTokSyncResult | null>(null);
+  const [tiktokError, setTiktokError] = useState<string | null>(null);
+
+  const [clearing, setClearing] = useState(false);
+  const [clearResult, setClearResult] = useState<Record<
+    string,
+    { deleted: boolean; error?: string }
+  > | null>(null);
+  const [clearError, setClearError] = useState<string | null>(null);
+  const [clearTables, setClearTables] = useState<string[]>([
+    "ads_rawdata",
+    "ads_geo",
+    "ads_demographic",
+    "ads_device",
+  ]);
+  const [clearDateFrom, setClearDateFrom] = useState("");
+  const [clearDateTo, setClearDateTo] = useState("");
+
+  const handleTiktokSync = async () => {
+    setTiktokSyncing(true);
+    setTiktokError(null);
+    setTiktokResult(null);
+    try {
+      const res = await fetch("/api/tiktok/sync", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) setTiktokError(data.error ?? "เกิดข้อผิดพลาด");
+      else setTiktokResult(data);
+    } catch (err) {
+      setTiktokError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
+    } finally {
+      setTiktokSyncing(false);
+    }
+  };
 
   const handleAllPage = async () => {
     setAllPaging(true);
@@ -106,23 +164,7 @@ export default function AdminSyncPage() {
     }
   };
 
-  const handleDaily = async () => {
-    setDailying(true);
-    setDailyError(null);
-    setDailyResult(null);
-    try {
-      const res = await fetch("/api/sync-daily", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) setDailyError(data.error ?? "เกิดข้อผิดพลาด");
-      else setDailyResult(data);
-    } catch (err) {
-      setDailyError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
-    } finally {
-      setDailying(false);
-    }
-  };
-
-  const handleSync7 = async () => {
+const handleSync7 = async () => {
     setSyncing7(true);
     setSync7Error(null);
     setSync7Result(null);
@@ -151,6 +193,56 @@ export default function AdminSyncPage() {
       setSyncLatestError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
     } finally {
       setSyncingLatest(false);
+    }
+  };
+
+  const handleResync = async () => {
+    setResyncing(true);
+    setResyncError(null);
+    setResyncResult(null);
+    try {
+      const res = await fetch("/api/sync-resync", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) setResyncError(data.error ?? "เกิดข้อผิดพลาด");
+      else setResyncResult(data);
+    } catch (err) {
+      setResyncError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
+    } finally {
+      setResyncing(false);
+    }
+  };
+
+  const handleClearData = async () => {
+    if (clearTables.length === 0) return;
+    const rangeLabel =
+      clearDateFrom && clearDateTo
+        ? ` (${clearDateFrom} ถึง ${clearDateTo})`
+        : " (ทั้งหมด)";
+    const confirmed = window.confirm(
+      `ยืนยันลบข้อมูลใน: ${clearTables.join(", ")}${rangeLabel}\n\nการดำเนินการนี้ไม่สามารถย้อนกลับได้`,
+    );
+    if (!confirmed) return;
+    setClearing(true);
+    setClearError(null);
+    setClearResult(null);
+    try {
+      const body: Record<string, unknown> = { tables: clearTables };
+      if (clearDateFrom && clearDateTo) {
+        body.dateFrom = clearDateFrom;
+        body.dateTo = clearDateTo;
+      }
+      const res = await fetch("/api/admin/clear-data", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) setClearError(data.error ?? "เกิดข้อผิดพลาด");
+      else setClearResult(data.results);
+    } catch (err) {
+      setClearError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
+    } finally {
+      setClearing(false);
     }
   };
 
@@ -292,49 +384,8 @@ export default function AdminSyncPage() {
           )}
         </div>
 
-        {/* Daily Sync */}
-        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-          <h2 className="text-base font-semibold text-gray-800 mb-1">
-            Daily Sync (เมื่อวาน)
-          </h2>
-          <p className="text-sm text-gray-500 mb-4">
-            ดึงข้อมูลเมื่อวาน แล้วลบข้อมูลที่เกิน 6 เดือนออก
-          </p>
-          <button
-            onClick={handleDaily}
-            disabled={dailying}
-            className="w-full bg-secondary hover:bg-secondary-light disabled:bg-gray-400 text-white font-semibold py-2.5 rounded-xl transition"
-          >
-            {dailying ? "กำลัง Sync..." : "Daily Sync"}
-          </button>
-          {dailyError && (
-            <p className="mt-3 text-sm text-red-600">{dailyError}</p>
-          )}
-          {dailyResult && (
-            <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-xl">
-              <p className="text-green-800 font-semibold text-sm mb-1">
-                Sync สำเร็จ — {dailyResult.date} · ลบข้อมูลก่อน{" "}
-                {dailyResult.cutoff}
-              </p>
-              <ul className="text-sm text-green-700 space-y-0.5">
-                {dailyResult.accounts.map((a) => (
-                  <li key={a.id}>
-                    {a.name}{" "}
-                    <span className="text-green-500 font-mono text-xs">
-                      {a.error
-                        ? `error: ${a.error}`
-                        : Object.entries(a.rows)
-                            .map(([k, v]) => `${k}:${v}`)
-                            .join(" · ")}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
 
-        {/* Today Sync */}
+{/* Today Sync */}
         <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
           <h2 className="text-base font-semibold text-gray-800 mb-1">
             ดึงข้อมูลวันนี้
@@ -397,7 +448,9 @@ export default function AdminSyncPage() {
             <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-xl">
               <p className="text-green-800 font-semibold text-sm mb-1">
                 Sync สำเร็จ — ข้อมูลล่าสุดเดิม:{" "}
-                <span className="font-mono">{syncLatestResult.latestDate ?? "ไม่มี"}</span>
+                <span className="font-mono">
+                  {syncLatestResult.latestDate ?? "ไม่มี"}
+                </span>
                 {" → "}ดึงตั้งแต่{" "}
                 <span className="font-mono">{syncLatestResult.since}</span>
                 {" ถึง "}
@@ -414,6 +467,172 @@ export default function AdminSyncPage() {
                             .map(([k, v]) => `${k}:${v}`)
                             .join(" · ")}
                     </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+
+        {/* Resync - Smart Update */}
+        <div className="bg-white border border-blue-200 rounded-xl p-5 shadow-sm">
+          <h2 className="text-base font-semibold text-gray-800 mb-1">
+            Resync (Smart Update)
+          </h2>
+          <p className="text-sm text-gray-500 mb-4">
+            ดึงข้อมูลตั้งแต่วันแรกถึงวันนี้ · เปรียบเทียบ Hash · Update เฉพาะแถวที่เปลี่ยน
+          </p>
+          <button
+            onClick={handleResync}
+            disabled={resyncing}
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-2.5 rounded-xl transition"
+          >
+            {resyncing ? "กำลัง Resync..." : "Resync ทั้งหมด"}
+          </button>
+          {resyncError && (
+            <p className="mt-3 text-sm text-red-600">{resyncError}</p>
+          )}
+          {resyncResult && (
+            <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-xl">
+              <p className="text-green-800 font-semibold text-sm mb-1">
+                Resync สำเร็จ · ดึง {resyncResult.totalFetched}, อัปเดต {resyncResult.totalUpdated}
+              </p>
+              <ul className="text-sm text-green-700 space-y-0.5">
+                {resyncResult.summary.map((a) => (
+                  <li key={a.account}>
+                    {a.account}{" "}
+                    <span className="text-green-500 font-mono text-xs">
+                      {a.error
+                        ? `error: ${a.error}`
+                        : `ดึง:${a.rows_fetched} อัปเดต:${a.rows_updated}`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+        {/* TikTok Backfill */}
+        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+          <h2 className="text-base font-semibold text-gray-800 mb-1">
+            TikTok — Backfill ย้อนหลัง 365 วัน
+          </h2>
+          <p className="text-sm text-gray-500 mb-4">
+            ดึงข้อมูล TikTok Ads ทีละ 30 วัน แล้ว upsert ลง tiktok_ads_rawdata
+          </p>
+          <button
+            onClick={handleTiktokSync}
+            disabled={tiktokSyncing}
+            className="w-full bg-secondary hover:bg-secondary-light disabled:bg-gray-400 text-white font-semibold py-2.5 rounded-xl transition"
+          >
+            {tiktokSyncing ? "กำลัง Sync TikTok..." : "Backfill TikTok"}
+          </button>
+          {tiktokError && (
+            <p className="mt-3 text-sm text-red-600">{tiktokError}</p>
+          )}
+          {tiktokResult && (
+            <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-xl">
+              <p className="text-green-800 font-semibold text-sm mb-1">
+                Sync สำเร็จ ({tiktokResult.since} → {tiktokResult.until})
+              </p>
+              <ul className="text-sm text-green-700 space-y-0.5">
+                {tiktokResult.advertisers.map((a) => (
+                  <li key={a.advertiser_id}>
+                    {a.advertiser_name}{" "}
+                    <span className="text-green-500 font-mono text-xs">
+                      {a.error ? `error: ${a.error}` : `${a.rows} rows`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+
+        {/* Clear Data */}
+        <div className="bg-white border border-red-200 rounded-xl p-5 shadow-sm">
+          <h2 className="text-base font-semibold text-red-700 mb-1">
+            ลบข้อมูลในฐานข้อมูล
+          </h2>
+          <p className="text-sm text-gray-500 mb-4">
+            ลบข้อมูลออกจากตารางที่เลือก สามารถระบุช่วงวันที่หรือลบทั้งหมด
+          </p>
+          <div className="flex flex-wrap gap-3 mb-4">
+            {(
+              [
+                "ads_rawdata",
+                "ads_geo",
+                "ads_demographic",
+                "ads_device",
+              ] as const
+            ).map((t) => (
+              <label
+                key={t}
+                className="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={clearTables.includes(t)}
+                  onChange={(e) =>
+                    setClearTables((prev) =>
+                      e.target.checked
+                        ? [...prev, t]
+                        : prev.filter((x) => x !== t),
+                    )
+                  }
+                  className="accent-red-600"
+                />
+                {t}
+              </label>
+            ))}
+          </div>
+          <div className="flex gap-3 mb-4">
+            <div className="flex-1">
+              <label className="block text-xs text-gray-500 mb-1">
+                วันเริ่มต้น (ไม่บังคับ)
+              </label>
+              <input
+                type="date"
+                value={clearDateFrom}
+                onChange={(e) => setClearDateFrom(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="block text-xs text-gray-500 mb-1">
+                วันสิ้นสุด (ไม่บังคับ)
+              </label>
+              <input
+                type="date"
+                value={clearDateTo}
+                onChange={(e) => setClearDateTo(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+          <button
+            onClick={handleClearData}
+            disabled={clearing || clearTables.length === 0}
+            className="w-full bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white font-semibold py-2.5 rounded-xl transition"
+          >
+            {clearing ? "กำลังลบ..." : "ลบข้อมูล"}
+          </button>
+          {clearError && (
+            <p className="mt-3 text-sm text-red-600">{clearError}</p>
+          )}
+          {clearResult && (
+            <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-xl">
+              <p className="text-green-800 font-semibold text-sm mb-1">
+                ผลการลบ
+              </p>
+              <ul className="text-sm space-y-0.5">
+                {Object.entries(clearResult).map(([table, res]) => (
+                  <li
+                    key={table}
+                    className={res.deleted ? "text-green-700" : "text-red-600"}
+                  >
+                    {table}:{" "}
+                    {res.deleted ? "ลบสำเร็จ" : `ผิดพลาด — ${res.error}`}
                   </li>
                 ))}
               </ul>

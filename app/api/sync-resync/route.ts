@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import axios from "axios";
 import { getSupabase } from "@/lib/supabase";
-import { getFacebookAccessToken } from "@/lib/facebook-token";
+import {
+  isFacebookAuthError,
+  refreshFacebookToken,
+} from "@/lib/facebook-token";
 
 const FB_GRAPH_API = "https://graph.facebook.com/v25.0";
 
@@ -41,7 +44,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const supabase = getSupabase();
-    const accessToken = await getFacebookAccessToken();
+
+    // Proactively refresh token on every API call
+    console.log("[sync-resync] Refreshing token before sync...");
+    const refreshed = await refreshFacebookToken();
+    const accessToken = refreshed.access_token;
 
     if (!accessToken) {
       return NextResponse.json(
@@ -121,20 +128,38 @@ export async function POST(request: NextRequest) {
         const timeRange = encodeURIComponent(
           JSON.stringify({ since: dateFrom, until: dateTo })
         );
-        const url =
-          `${FB_GRAPH_API}/act_${accountId}/insights?` +
-          `fields=${FIELDS}` +
-          `&time_range=${timeRange}` +
-          `&level=ad&limit=1000` +
-          `&access_token=${accessToken}`;
 
-        const response: { data: { data?: FBItem[] } } = await axios.get(url, {
-          timeout: 30000,
-        });
+        let currentToken = accessToken;
+        let response: { data: { data?: FBItem[] } };
+
+        try {
+          const url =
+            `${FB_GRAPH_API}/act_${accountId}/insights?` +
+            `fields=${FIELDS}` +
+            `&time_range=${timeRange}` +
+            `&level=ad&limit=1000` +
+            `&access_token=${currentToken}`;
+
+          response = await axios.get(url, { timeout: 30000 });
+        } catch (err) {
+          if (!isFacebookAuthError(err)) throw err;
+
+          console.warn(`[sync-resync] FB token rejected for ${acc.account_name}; refreshing…`);
+          const refreshed = await refreshFacebookToken();
+          currentToken = refreshed.access_token;
+
+          const url =
+            `${FB_GRAPH_API}/act_${accountId}/insights?` +
+            `fields=${FIELDS}` +
+            `&time_range=${timeRange}` +
+            `&level=ad&limit=1000` +
+            `&access_token=${currentToken}`;
+
+          response = await axios.get(url, { timeout: 30000 });
+        }
 
         const items = response.data.data ?? [];
         let updated = 0;
-        let inserted = 0;
 
         for (const item of items) {
           const spend = num(item.spend);
@@ -198,7 +223,7 @@ export async function POST(request: NextRequest) {
         });
 
         console.log(
-          `[sync-resync] ${acc.account_name}: fetched ${items.length}, updated ${updated}, inserted ${inserted}`
+          `[sync-resync] ${acc.account_name}: fetched ${items.length}, updated ${updated}`
         );
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Unknown error";

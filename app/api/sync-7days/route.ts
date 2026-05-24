@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import axios from "axios";
 import { getSupabase } from "@/lib/supabase";
 import {
-  getFacebookAccessToken,
   isFacebookAuthError,
   refreshFacebookToken,
 } from "@/lib/facebook-token";
@@ -485,8 +484,11 @@ export async function runSync(
   until: string,
   label = "sync",
 ): Promise<{ since: string; until: string; accounts: SyncSummaryItem[] }> {
+  // Proactively refresh token on every sync call
+  console.log(`[${label}] Refreshing token before sync...`);
+  const refreshed = await refreshFacebookToken();
   // Mutable ref so a mid-run refresh propagates to subsequent fetchRange calls.
-  const tokenRef = { current: await getFacebookAccessToken() };
+  const tokenRef = { current: refreshed.access_token };
 
   const accounts = await getAccountIds();
   if (accounts.length === 0) throw new Error("ไม่พบ Active Account");
@@ -589,7 +591,9 @@ export async function GET(request: Request) {
     try {
       const origin = new URL(request.url).origin;
       console.log('[sync-7days] Triggering sync-resync...');
-      await fetch(`${origin}/api/sync-resync`, { method: 'POST' });
+      const resyncRes = await fetch(`${origin}/api/sync-resync`, { method: 'POST' });
+      const resyncData = await resyncRes.json();
+      console.log('[sync-7days] sync-resync response:', resyncData);
     } catch (resyncErr) {
       console.error('[sync-7days] Failed to trigger sync-resync:', resyncErr);
     }
