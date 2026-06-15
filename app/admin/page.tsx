@@ -174,7 +174,7 @@ export default function AdminPage() {
           >
             Highlight Metrics
           </button>
-          <button
+          {/* <button
             onClick={() => router.push("/admin/sync")}
             className="text-sm text-secondary/80 hover:text-secondary font-medium"
           >
@@ -185,7 +185,7 @@ export default function AdminPage() {
             className="text-sm text-secondary/80 hover:text-secondary font-medium"
           >
             ⚙️ Config
-          </button>
+          </button> */}
           <button
             onClick={() => router.push("/admin/docs")}
             className="text-sm text-secondary/80 hover:text-secondary font-medium"

@@ -172,28 +172,6 @@ Frequency Gauge:
    → แยกตามอายุ+เพศ และอุปกรณ์`,
   },
   {
-    id: "sync",
-    icon: "🔄",
-    title: "Sync Panel",
-    content: `หน้า: /sync
-
-ใช้ดึงข้อมูลจาก Facebook API มาเก็บใน database
-
-3 ปุ่มหลัก:
-1. Get All Page
-   → ดึง account จาก rawdata แล้วบันทึกลงตาราง allpage
-   → ใช้ตอนเพิ่ม account ใหม่
-
-2. Backfill (6 เดือนย้อนหลัง)
-   → ดึงข้อมูลรายวันย้อนหลัง 6 เดือน
-   → ใช้ตอนเริ่มต้นระบบ หรือต้องการข้อมูลเก่า
-   → ⚠️ ใช้เวลานาน อาจ 5-15 นาที
-
-3. Daily Sync
-   → ดึงข้อมูลเมื่อวาน + ลบข้อมูลเกิน 6 เดือน
-   → ควรรันทุกวัน (หรือตั้ง cron job)`,
-  },
-  {
     id: "logs",
     icon: "📋",
     title: "Access Logs",
