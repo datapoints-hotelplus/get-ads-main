@@ -51,6 +51,8 @@ export default function AdminConfigPage() {
   const [status, setStatus] = useState<ConfigStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [manualToken, setManualToken] = useState("");
   const [message, setMessage] = useState<{
     type: "success" | "error";
     text: string;
@@ -99,6 +101,31 @@ export default function AdminConfigPage() {
       });
     } finally {
       setRefreshing(false);
+    }
+  }
+
+  async function handleSaveToken() {
+    if (!manualToken.trim()) return;
+    setSaving(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/admin/config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: manualToken.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setMessage({ type: "success", text: `บันทึก token สำเร็จ — ${data.masked}` });
+        setManualToken("");
+        await loadStatus();
+      } else {
+        setMessage({ type: "error", text: data.error ?? "บันทึกไม่สำเร็จ" });
+      }
+    } catch (e) {
+      setMessage({ type: "error", text: e instanceof Error ? e.message : "บันทึกไม่สำเร็จ" });
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -209,6 +236,31 @@ export default function AdminConfigPage() {
               )}
             </dd>
           </dl>
+        </div>
+
+        {/* Manual Token Input */}
+        <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6">
+          <h2 className="text-base font-semibold text-gray-900 mb-1">
+            ใส่ Token ตรงๆ
+          </h2>
+          <p className="text-sm text-gray-500 mb-4">
+            วาง Facebook Access Token ใหม่เพื่อบันทึกลงฐานข้อมูลทันที
+          </p>
+          <textarea
+            value={manualToken}
+            onChange={(e) => setManualToken(e.target.value)}
+            placeholder="วาง access token ที่นี่…"
+            rows={3}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
+          />
+          <button
+            type="button"
+            onClick={handleSaveToken}
+            disabled={saving || !manualToken.trim()}
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-2.5 rounded-xl transition text-sm"
+          >
+            {saving ? "กำลังบันทึก…" : "บันทึก Token"}
+          </button>
         </div>
 
         {/* ads_rawdata Status */}

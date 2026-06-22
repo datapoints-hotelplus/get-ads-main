@@ -3,84 +3,20 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-type AccountRow = { account_name: string; account_id: string };
-type AllPageResult = {
-  success: boolean;
-  count: number;
-  accounts: AccountRow[];
-};
-type BackfillResult = {
-  success: boolean;
-  since: string;
-  until: string;
-  accounts: {
-    name: string;
-    id: string;
-    rows: Record<string, number>;
-    error?: string;
-  }[];
-};
-type TikTokSyncResult = {
-  success: boolean;
-  since: string;
-  until: string;
-  advertisers: {
-    advertiser_id: string;
-    advertiser_name: string;
-    rows: number;
-    error?: string;
-  }[];
-};
-
-type DailyResult = {
-  success: boolean;
-  date: string;
-  cutoff: string;
-  accounts: {
-    name: string;
-    id: string;
-    rows: Record<string, number>;
-    error?: string;
-  }[];
-};
-type LatestResult = {
-  success: boolean;
-  latestDate: string;
-  since: string;
-  until: string;
-  accounts: {
-    name: string;
-    id: string;
-    rows: Record<string, number>;
-    error?: string;
-  }[];
-};
-
 export default function AdminSyncPage() {
   const router = useRouter();
 
-  const [allPaging, setAllPaging] = useState(false);
-  const [allPageResult, setAllPageResult] = useState<AllPageResult | null>(
-    null,
-  );
-  const [allPageError, setAllPageError] = useState<string | null>(null);
-
   const [backfilling, setBackfilling] = useState(false);
-  const [backfillResult, setBackfillResult] = useState<BackfillResult | null>(
-    null,
-  );
+  const [backfillResult, setBackfillResult] = useState<{
+    success: boolean;
+    since: string;
+    until: string;
+    accounts: { name: string; id: string; rows: Record<string, number>; error?: string }[];
+  } | null>(null);
   const [backfillError, setBackfillError] = useState<string | null>(null);
-
-
-  const [syncing7, setSyncing7] = useState(false);
-  const [sync7Result, setSync7Result] = useState<BackfillResult | null>(null);
-  const [sync7Error, setSync7Error] = useState<string | null>(null);
-
-  const [syncingLatest, setSyncingLatest] = useState(false);
-  const [syncLatestResult, setSyncLatestResult] = useState<LatestResult | null>(
-    null,
-  );
-  const [syncLatestError, setSyncLatestError] = useState<string | null>(null);
+  const [backfillTables, setBackfillTables] = useState<string[]>([
+    "rawdata", "geo", "demographic", "device",
+  ]);
 
   const [resyncing, setResyncing] = useState(false);
   const [resyncResult, setResyncResult] = useState<{
@@ -93,10 +29,6 @@ export default function AdminSyncPage() {
     summary: { account: string; rows_fetched: number; rows_updated: number; error?: string }[];
   } | null>(null);
   const [resyncError, setResyncError] = useState<string | null>(null);
-
-  const [tiktokSyncing, setTiktokSyncing] = useState(false);
-  const [tiktokResult, setTiktokResult] = useState<TikTokSyncResult | null>(null);
-  const [tiktokError, setTiktokError] = useState<string | null>(null);
 
   const [clearing, setClearing] = useState(false);
   const [clearResult, setClearResult] = useState<Record<
@@ -113,47 +45,16 @@ export default function AdminSyncPage() {
   const [clearDateFrom, setClearDateFrom] = useState("");
   const [clearDateTo, setClearDateTo] = useState("");
 
-  const handleTiktokSync = async () => {
-    setTiktokSyncing(true);
-    setTiktokError(null);
-    setTiktokResult(null);
-    try {
-      const res = await fetch("/api/tiktok/sync", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) setTiktokError(data.error ?? "เกิดข้อผิดพลาด");
-      else setTiktokResult(data);
-    } catch (err) {
-      setTiktokError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
-    } finally {
-      setTiktokSyncing(false);
-    }
-  };
-
-  const handleAllPage = async () => {
-    setAllPaging(true);
-    setAllPageError(null);
-    setAllPageResult(null);
-    try {
-      const res = await fetch("/api/sync-allpage", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-      const data = await res.json();
-      if (!res.ok) setAllPageError(data.error ?? "เกิดข้อผิดพลาด");
-      else setAllPageResult(data);
-    } catch (err) {
-      setAllPageError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
-    } finally {
-      setAllPaging(false);
-    }
-  };
-
   const handleBackfill = async () => {
     setBackfilling(true);
     setBackfillError(null);
     setBackfillResult(null);
     try {
-      const res = await fetch("/api/sync-backfill", { method: "POST" });
+      const res = await fetch("/api/sync-backfill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tables: backfillTables }),
+      });
       const data = await res.json();
       if (!res.ok) setBackfillError(data.error ?? "เกิดข้อผิดพลาด");
       else setBackfillResult(data);
@@ -161,38 +62,6 @@ export default function AdminSyncPage() {
       setBackfillError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
     } finally {
       setBackfilling(false);
-    }
-  };
-
-const handleSync7 = async () => {
-    setSyncing7(true);
-    setSync7Error(null);
-    setSync7Result(null);
-    try {
-      const res = await fetch("/api/sync-7days");
-      const data = await res.json();
-      if (!res.ok) setSync7Error(data.error ?? "เกิดข้อผิดพลาด");
-      else setSync7Result(data);
-    } catch (err) {
-      setSync7Error(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
-    } finally {
-      setSyncing7(false);
-    }
-  };
-
-  const handleSyncLatest = async () => {
-    setSyncingLatest(true);
-    setSyncLatestError(null);
-    setSyncLatestResult(null);
-    try {
-      const res = await fetch("/api/sync-latest");
-      const data = await res.json();
-      if (!res.ok) setSyncLatestError(data.error ?? "เกิดข้อผิดพลาด");
-      else setSyncLatestResult(data);
-    } catch (err) {
-      setSyncLatestError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
-    } finally {
-      setSyncingLatest(false);
     }
   };
 
@@ -263,9 +132,7 @@ const handleSync7 = async () => {
             <span className="text-lg font-bold text-secondary tracking-tight block leading-tight">
               HOTEL PLUS
             </span>
-            <span className="text-xs text-secondary/70">
-              Admin — Sync Panel
-            </span>
+            <span className="text-xs text-secondary/70">Admin — Sync Panel</span>
           </div>
         </div>
         <div className="flex items-center gap-4">
@@ -305,54 +172,34 @@ const handleSync7 = async () => {
       <div className="max-w-2xl mx-auto px-4 py-8 space-y-5">
         <h1 className="text-xl font-bold text-gray-900">Sync Panel</h1>
 
-        {/* Get All Page */}
-        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-          <h2 className="text-base font-semibold text-gray-800 mb-1">
-            Get All Page → Supabase &quot;allpage&quot;
-          </h2>
-          <p className="text-sm text-gray-500 mb-4">
-            ดึงข้อมูล account จาก rawdata แล้วบันทึกลงตาราง allpage
-          </p>
-          <button
-            onClick={handleAllPage}
-            disabled={allPaging}
-            className="w-full bg-secondary hover:bg-secondary-light disabled:bg-gray-400 text-white font-semibold py-2.5 rounded-xl transition"
-          >
-            {allPaging ? "กำลังดึง..." : "Get All Page"}
-          </button>
-          {allPageError && (
-            <p className="mt-3 text-sm text-red-600">{allPageError}</p>
-          )}
-          {allPageResult && (
-            <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-xl">
-              <p className="text-green-800 font-semibold text-sm mb-1">
-                บันทึกสำเร็จ {allPageResult.count} accounts
-              </p>
-              <ul className="text-sm text-green-700 space-y-0.5">
-                {allPageResult.accounts.map((a) => (
-                  <li key={a.account_id}>
-                    {a.account_name}{" "}
-                    <span className="text-green-500 font-mono text-xs">
-                      {a.account_id}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-
         {/* Backfill */}
         <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
           <h2 className="text-base font-semibold text-gray-800 mb-1">
             Backfill (12 เดือนย้อนหลัง)
           </h2>
-          <p className="text-sm text-gray-500 mb-4">
+          <p className="text-sm text-gray-500 mb-3">
             ดึงข้อมูลรายวันย้อนหลัง 12 เดือน เฉพาะแถวที่ spend &gt; 0
           </p>
+          <div className="flex flex-wrap gap-3 mb-4">
+            {(["rawdata", "geo", "demographic", "device"] as const).map((t) => (
+              <label key={t} className="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={backfillTables.includes(t)}
+                  onChange={(e) =>
+                    setBackfillTables((prev) =>
+                      e.target.checked ? [...prev, t] : prev.filter((x) => x !== t),
+                    )
+                  }
+                  className="accent-blue-600"
+                />
+                {t}
+              </label>
+            ))}
+          </div>
           <button
             onClick={handleBackfill}
-            disabled={backfilling}
+            disabled={backfilling || backfillTables.length === 0}
             className="w-full bg-secondary hover:bg-secondary-light disabled:bg-gray-400 text-white font-semibold py-2.5 rounded-xl transition"
           >
             {backfilling ? "กำลัง Backfill..." : "เริ่ม Backfill"}
@@ -363,8 +210,7 @@ const handleSync7 = async () => {
           {backfillResult && (
             <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-xl">
               <p className="text-green-800 font-semibold text-sm mb-1">
-                Backfill สำเร็จ ({backfillResult.since} → {backfillResult.until}
-                )
+                Backfill สำเร็จ ({backfillResult.since} → {backfillResult.until})
               </p>
               <ul className="text-sm text-green-700 space-y-0.5">
                 {backfillResult.accounts.map((a) => (
@@ -373,99 +219,7 @@ const handleSync7 = async () => {
                     <span className="text-green-500 font-mono text-xs">
                       {a.error
                         ? `error: ${a.error}`
-                        : Object.entries(a.rows)
-                            .map(([k, v]) => `${k}:${v}`)
-                            .join(" · ")}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-
-
-{/* Today Sync */}
-        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-          <h2 className="text-base font-semibold text-gray-800 mb-1">
-            ดึงข้อมูลวันนี้
-          </h2>
-          <p className="text-sm text-gray-500 mb-4">
-            ดึงข้อมูลตั้งแต่ 00:00 ถึงตอนนี้ของวันปัจจุบัน แล้ว upsert เข้า
-            Supabase
-          </p>
-          <button
-            onClick={handleSync7}
-            disabled={syncing7}
-            className="w-full bg-secondary hover:bg-secondary-light disabled:bg-gray-400 text-white font-semibold py-2.5 rounded-xl transition"
-          >
-            {syncing7 ? "กำลัง Sync..." : "ดึงข้อมูลวันนี้"}
-          </button>
-          {sync7Error && (
-            <p className="mt-3 text-sm text-red-600">{sync7Error}</p>
-          )}
-          {sync7Result && (
-            <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-xl">
-              <p className="text-green-800 font-semibold text-sm mb-1">
-                Sync สำเร็จ ({sync7Result.since} → {sync7Result.until})
-              </p>
-              <ul className="text-sm text-green-700 space-y-0.5">
-                {sync7Result.accounts.map((a) => (
-                  <li key={a.id}>
-                    {a.name}{" "}
-                    <span className="text-green-500 font-mono text-xs">
-                      {a.error
-                        ? `error: ${a.error}`
-                        : Object.entries(a.rows)
-                            .map(([k, v]) => `${k}:${v}`)
-                            .join(" · ")}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-        {/* Sync Latest */}
-        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-          <h2 className="text-base font-semibold text-gray-800 mb-1">
-            อัปเดตข้อมูลให้เป็นล่าสุด
-          </h2>
-          <p className="text-sm text-gray-500 mb-4">
-            เช็ควันที่ล่าสุดในฐานข้อมูล แล้วดึงข้อมูลตั้งแต่วันนั้นถึงวันนี้
-          </p>
-          <button
-            onClick={handleSyncLatest}
-            disabled={syncingLatest}
-            className="w-full bg-secondary hover:bg-secondary-light disabled:bg-gray-400 text-white font-semibold py-2.5 rounded-xl transition"
-          >
-            {syncingLatest ? "กำลัง Sync..." : "อัปเดตข้อมูลให้เป็นล่าสุด"}
-          </button>
-          {syncLatestError && (
-            <p className="mt-3 text-sm text-red-600">{syncLatestError}</p>
-          )}
-          {syncLatestResult && (
-            <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-xl">
-              <p className="text-green-800 font-semibold text-sm mb-1">
-                Sync สำเร็จ — ข้อมูลล่าสุดเดิม:{" "}
-                <span className="font-mono">
-                  {syncLatestResult.latestDate ?? "ไม่มี"}
-                </span>
-                {" → "}ดึงตั้งแต่{" "}
-                <span className="font-mono">{syncLatestResult.since}</span>
-                {" ถึง "}
-                <span className="font-mono">{syncLatestResult.until}</span>
-              </p>
-              <ul className="text-sm text-green-700 space-y-0.5">
-                {syncLatestResult.accounts.map((a) => (
-                  <li key={a.id}>
-                    {a.name}{" "}
-                    <span className="text-green-500 font-mono text-xs">
-                      {a.error
-                        ? `error: ${a.error}`
-                        : Object.entries(a.rows)
-                            .map(([k, v]) => `${k}:${v}`)
-                            .join(" · ")}
+                        : Object.entries(a.rows).map(([k, v]) => `${k}:${v}`).join(" · ")}
                     </span>
                   </li>
                 ))}
@@ -512,42 +266,6 @@ const handleSync7 = async () => {
             </div>
           )}
         </div>
-        {/* TikTok Backfill */}
-        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-          <h2 className="text-base font-semibold text-gray-800 mb-1">
-            TikTok — Backfill ย้อนหลัง 365 วัน
-          </h2>
-          <p className="text-sm text-gray-500 mb-4">
-            ดึงข้อมูล TikTok Ads ทีละ 30 วัน แล้ว upsert ลง tiktok_ads_rawdata
-          </p>
-          <button
-            onClick={handleTiktokSync}
-            disabled={tiktokSyncing}
-            className="w-full bg-secondary hover:bg-secondary-light disabled:bg-gray-400 text-white font-semibold py-2.5 rounded-xl transition"
-          >
-            {tiktokSyncing ? "กำลัง Sync TikTok..." : "Backfill TikTok"}
-          </button>
-          {tiktokError && (
-            <p className="mt-3 text-sm text-red-600">{tiktokError}</p>
-          )}
-          {tiktokResult && (
-            <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-xl">
-              <p className="text-green-800 font-semibold text-sm mb-1">
-                Sync สำเร็จ ({tiktokResult.since} → {tiktokResult.until})
-              </p>
-              <ul className="text-sm text-green-700 space-y-0.5">
-                {tiktokResult.advertisers.map((a) => (
-                  <li key={a.advertiser_id}>
-                    {a.advertiser_name}{" "}
-                    <span className="text-green-500 font-mono text-xs">
-                      {a.error ? `error: ${a.error}` : `${a.rows} rows`}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
 
         {/* Clear Data */}
         <div className="bg-white border border-red-200 rounded-xl p-5 shadow-sm">
@@ -558,14 +276,7 @@ const handleSync7 = async () => {
             ลบข้อมูลออกจากตารางที่เลือก สามารถระบุช่วงวันที่หรือลบทั้งหมด
           </p>
           <div className="flex flex-wrap gap-3 mb-4">
-            {(
-              [
-                "ads_rawdata",
-                "ads_geo",
-                "ads_demographic",
-                "ads_device",
-              ] as const
-            ).map((t) => (
+            {(["ads_rawdata", "ads_geo", "ads_demographic", "ads_device"] as const).map((t) => (
               <label
                 key={t}
                 className="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer"
@@ -575,9 +286,7 @@ const handleSync7 = async () => {
                   checked={clearTables.includes(t)}
                   onChange={(e) =>
                     setClearTables((prev) =>
-                      e.target.checked
-                        ? [...prev, t]
-                        : prev.filter((x) => x !== t),
+                      e.target.checked ? [...prev, t] : prev.filter((x) => x !== t),
                     )
                   }
                   className="accent-red-600"
@@ -622,17 +331,14 @@ const handleSync7 = async () => {
           )}
           {clearResult && (
             <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-xl">
-              <p className="text-green-800 font-semibold text-sm mb-1">
-                ผลการลบ
-              </p>
+              <p className="text-green-800 font-semibold text-sm mb-1">ผลการลบ</p>
               <ul className="text-sm space-y-0.5">
                 {Object.entries(clearResult).map(([table, res]) => (
                   <li
                     key={table}
                     className={res.deleted ? "text-green-700" : "text-red-600"}
                   >
-                    {table}:{" "}
-                    {res.deleted ? "ลบสำเร็จ" : `ผิดพลาด — ${res.error}`}
+                    {table}: {res.deleted ? "ลบสำเร็จ" : `ผิดพลาด — ${res.error}`}
                   </li>
                 ))}
               </ul>

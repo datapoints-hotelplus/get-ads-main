@@ -103,10 +103,10 @@ export async function GET(request: NextRequest) {
       ].filter(Boolean);
 
       // Fetch campaign+adset pairs with spend filter (only campaigns with spend > 0 in date range)
-      let pairsData: { campaign_name: string; adset_name: string }[] = [];
       let q = supabase
         .from("ads_rawdata")
-        .select("campaign_name,adset_name,spend");
+        .select("campaign_id,campaign_name,adset_name,spend")
+        .order("date_start", { ascending: false });
       if (selectedAccounts.length > 0)
         q = q.in("account_name", selectedAccounts);
       else if (allowedNames !== null) q = q.in("account_name", allowedNames);
@@ -117,26 +117,33 @@ export async function GET(request: NextRequest) {
       if (pairsErr) throw pairsErr;
 
       // Filter pairs to only include campaigns/adsets with spend > 0
-      const filteredPairs = (rawPairs ?? []).filter((r) => (r.spend ?? 0) > 0);
-      pairsData = filteredPairs as {
+      const filteredPairs = (rawPairs ?? []).filter((r) => (r.spend ?? 0) > 0) as {
+        campaign_id: string;
         campaign_name: string;
         adset_name: string;
         spend: number;
       }[];
 
-      const campaigns = [
-        ...new Set((pairsData ?? []).map((r) => r.campaign_name as string)),
-      ]
-        .filter(Boolean)
-        .sort();
+      // Dedup by campaign_id → rows ordered DESC so first = latest name
+      const campaignMap = new Map<string, string>(); // campaign_id → latest name
+      for (const r of filteredPairs) {
+        const cid = r.campaign_id || r.campaign_name;
+        if (!campaignMap.has(cid)) campaignMap.set(cid, r.campaign_name);
+      }
+      const campaigns = [...campaignMap.values()].filter(Boolean).sort();
 
-      // Adsets: filter to selected campaigns if any
+      // Build reverse map name→id for cascade filtering
+      const nameToId = new Map<string, string>();
+      for (const [id, name] of campaignMap) nameToId.set(name, id);
+
+      // Adsets: filter to selected campaigns via campaign_id
       const adsetSource =
         selectedCampaigns.length > 0
-          ? (pairsData ?? []).filter((r) =>
-              selectedCampaigns.includes(r.campaign_name),
-            )
-          : (pairsData ?? []);
+          ? filteredPairs.filter((r) => {
+              const cid = r.campaign_id || r.campaign_name;
+              return selectedCampaigns.some((n) => (nameToId.get(n) ?? n) === cid);
+            })
+          : filteredPairs;
       const adsets = [
         ...new Set(adsetSource.map((r) => r.adset_name as string)),
       ]
@@ -737,6 +744,7 @@ export async function GET(request: NextRequest) {
       date_start: string;
       date_stop: string;
       account_name: string;
+      campaign_id: string;
       campaign_name: string;
       adset_name: string;
       ad_name: string;
@@ -762,8 +770,21 @@ export async function GET(request: NextRequest) {
       cost_per_like: number;
     };
 
+    // Resolve campaign names → campaign_ids (handles renamed campaigns)
+    let campaignIds: string[] = [];
+    if (campaigns.length > 0) {
+      const { data: cidRows } = await supabase
+        .from("ads_rawdata")
+        .select("campaign_id")
+        .in("campaign_name", campaigns)
+        .not("campaign_id", "is", null);
+      campaignIds = [
+        ...new Set((cidRows ?? []).map((r) => String(r.campaign_id ?? "")).filter(Boolean)),
+      ];
+    }
+
     const selectFields =
-      "date_start,date_stop,account_name,campaign_name,adset_name,ad_name,ad_id," +
+      "date_start,date_stop,account_name,campaign_id,campaign_name,adset_name,ad_name,ad_id," +
       "spend,reach,impressions,inline_link_clicks,unique_inline_link_clicks,clicks_all," +
       "purchases,purchase_value,cpc,ctr,cpm,frequency," +
       "leads,messaging_conversations_started,post_shares,page_likes," +
@@ -785,7 +806,8 @@ export async function GET(request: NextRequest) {
         } else if (allowedNames !== null) {
           q = q.in("account_name", allowedNames);
         }
-        if (campaigns.length > 0) q = q.in("campaign_name", campaigns);
+        if (campaignIds.length > 0) q = q.in("campaign_id", campaignIds);
+        else if (campaigns.length > 0) q = q.in("campaign_name", campaigns);
         if (adset) q = q.eq("adset_name", adset);
         q = q.range(offset, offset + CHUNK - 1);
         const { data, error } = await q;
@@ -806,16 +828,12 @@ export async function GET(request: NextRequest) {
       pageQuery = pageQuery.in("account_name", allowedNames);
     }
 
-    const [rows, prevRows, pageRes, allPairsRes] = await Promise.all([
+    const [rows, prevRows, pageRes] = await Promise.all([
       fetchAllRows(dateFrom, dateTo),
       prevFrom
         ? fetchAllRows(prevFrom, prevTo)
         : Promise.resolve([] as RawRow[]),
       pageQuery.then((r) => r),
-      // All distinct campaign+adset combos via RPC (no row-limit issue)
-      supabase
-        .rpc("get_campaign_adset_pairs", { p_account: account || null })
-        .then((r) => r),
     ]);
 
     // Aggregate helper
@@ -1092,9 +1110,10 @@ export async function GET(request: NextRequest) {
       cost_per_like: pctChange(totals.cost_per_like, prevTotals.cost_per_like),
     };
 
-    // Group by campaign_name/adset_name for table view
+    // Group by campaign_id/adset_name for table view
     type GroupKey = string;
     type GroupRow = {
+      campaign_id: string;
       campaign_name: string;
       adset_name: string;
       spend: number;
@@ -1116,7 +1135,8 @@ export async function GET(request: NextRequest) {
       cost_per_like: number;
     };
 
-    const emptyRow = (campaign_name: string, adset_name: string): GroupRow => ({
+    const emptyRow = (campaign_id: string, campaign_name: string, adset_name: string): GroupRow => ({
+      campaign_id,
       campaign_name,
       adset_name,
       spend: 0,
@@ -1138,28 +1158,22 @@ export async function GET(request: NextRequest) {
       cost_per_like: 0,
     });
 
-    const grouped = new Map<GroupKey, GroupRow>();
-
-    // Seed ALL known campaign+adset pairs (regardless of date range)
-    if (!allPairsRes.error) {
-      const seen = new Set<string>();
-      for (const r of (allPairsRes.data ?? []) as {
-        campaign_name: string;
-        adset_name: string;
-      }[]) {
-        const key = `${r.campaign_name}|||${r.adset_name}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          grouped.set(key, emptyRow(r.campaign_name, r.adset_name));
-        }
-      }
+    // rows เรียง date DESC → record แรกของแต่ละ campaign_id คือชื่อล่าสุด
+    const latestCampaignName = new Map<string, string>();
+    for (const r of rows) {
+      const cid = r.campaign_id || r.campaign_name;
+      if (!latestCampaignName.has(cid)) latestCampaignName.set(cid, r.campaign_name);
     }
 
-    // Overlay actual aggregated data for the selected period
+    const grouped = new Map<GroupKey, GroupRow>();
+
+    // Group by campaign_id|||adset_name — รวม record ทุกชื่อเก่า/ใหม่ไว้ด้วยกัน
     for (const r of rows) {
-      const key = `${r.campaign_name}|||${r.adset_name}`;
+      const cid = r.campaign_id || r.campaign_name;
+      const key = `${cid}|||${r.adset_name}`;
       if (!grouped.has(key)) {
-        grouped.set(key, emptyRow(r.campaign_name, r.adset_name));
+        const displayName = latestCampaignName.get(cid) ?? r.campaign_name;
+        grouped.set(key, emptyRow(cid, displayName, r.adset_name));
       }
       const g = grouped.get(key)!;
       g.spend += r.spend ?? 0;

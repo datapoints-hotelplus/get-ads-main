@@ -548,7 +548,14 @@ function monthChunks(
 
 // ─── Main route ───────────────────────────────────────────────────────────────
 
-export async function POST() {
+export async function POST(req: Request) {
+  const body = await req.json().catch(() => ({}));
+  const selectedTables: SheetKey[] = Array.isArray(body.tables) && body.tables.length > 0
+    ? body.tables.filter((t: string): t is SheetKey =>
+        ["rawdata", "geo", "demographic", "device"].includes(t),
+      )
+    : ["rawdata", "geo", "demographic", "device"];
+
   const accessToken = await getFacebookAccessToken();
   if (!accessToken) {
     return NextResponse.json(
@@ -576,7 +583,7 @@ export async function POST() {
   const chunks = monthChunks(since, until);
 
   console.log(
-    `\n[sync-backfill] START — ${since} → ${until} (daily), ${accounts.length} accounts, ${chunks.length} months`,
+    `\n[sync-backfill] START — ${since} → ${until} (daily), ${accounts.length} accounts, ${chunks.length} months, tables: ${selectedTables.join(",")}`,
   );
 
   const summary: {
@@ -600,96 +607,53 @@ export async function POST() {
     try {
       for (const chunk of chunks) {
         console.log(
-          `  [${chunk.since}→${chunk.until}] fetching & saving 4 streams in parallel...`,
+          `  [${chunk.since}→${chunk.until}] fetching & saving ${selectedTables.length} streams in parallel...`,
         );
 
-        // Fetch + save each stream in parallel (each saves to DB as soon as its fetch completes)
-        const streamJobs: Array<Promise<{ key: SheetKey; count: number }>> = [
-          fetchMonth(
-            account.id,
-            accessToken,
-            chunk.since,
-            chunk.until,
-            "rawdata",
-          ).then(async (items) => {
-            await deleteAndInsert(
-              "ads_rawdata",
-              items.map(toRawdata),
-              chunk.since,
-              chunk.until,
-              true,
-            );
-            console.log(`  ✓ rawdata saved: ${items.length} rows`);
-            return { key: "rawdata" as const, count: items.length };
-          }),
-          fetchMonth(
-            account.id,
-            accessToken,
-            chunk.since,
-            chunk.until,
-            "geo",
-          ).then(async (items) => {
-            const rows = dedupe(items.map(toGeo), [
-              "ad_id",
-              "date_start",
-              "region",
-            ]);
-            await deleteAndInsert(
-              "ads_geo",
-              rows,
-              chunk.since,
-              chunk.until,
-              false,
-            );
-            console.log(`  ✓ geo saved: ${rows.length} rows`);
-            return { key: "geo" as const, count: rows.length };
-          }),
-          fetchMonth(
-            account.id,
-            accessToken,
-            chunk.since,
-            chunk.until,
-            "demographic",
-          ).then(async (items) => {
-            const rows = dedupe(items.map(toDemographic), [
-              "ad_id",
-              "date_start",
-              "age",
-              "gender",
-            ]);
-            await deleteAndInsert(
-              "ads_demographic",
-              rows,
-              chunk.since,
-              chunk.until,
-              false,
-            );
-            console.log(`  ✓ demographic saved: ${rows.length} rows`);
-            return { key: "demographic" as const, count: rows.length };
-          }),
-          fetchMonth(
-            account.id,
-            accessToken,
-            chunk.since,
-            chunk.until,
-            "device",
-          ).then(async (items) => {
-            const rows = dedupe(items.map(toDevice), [
-              "ad_id",
-              "date_start",
-              "impression_device",
-            ]);
-            await deleteAndInsert(
-              "ads_device",
-              rows,
-              chunk.since,
-              chunk.until,
-              false,
-            );
-            console.log(`  ✓ device saved: ${rows.length} rows`);
-            return { key: "device" as const, count: rows.length };
-          }),
-        ];
+        const streamJobs: Array<Promise<{ key: SheetKey; count: number }>> = [];
+
+        if (selectedTables.includes("rawdata")) {
+          streamJobs.push(
+            fetchMonth(account.id, accessToken, chunk.since, chunk.until, "rawdata").then(async (items) => {
+              await deleteAndInsert("ads_rawdata", items.map(toRawdata), chunk.since, chunk.until, true);
+              console.log(`  ✓ rawdata saved: ${items.length} rows`);
+              return { key: "rawdata" as const, count: items.length };
+            }),
+          );
+        }
+
+        if (selectedTables.includes("geo")) {
+          streamJobs.push(
+            fetchMonth(account.id, accessToken, chunk.since, chunk.until, "geo").then(async (items) => {
+              const rows = dedupe(items.map(toGeo), ["ad_id", "date_start", "region"]);
+              await deleteAndInsert("ads_geo", rows, chunk.since, chunk.until, false);
+              console.log(`  ✓ geo saved: ${rows.length} rows`);
+              return { key: "geo" as const, count: rows.length };
+            }),
+          );
+        }
+
+        if (selectedTables.includes("demographic")) {
+          streamJobs.push(
+            fetchMonth(account.id, accessToken, chunk.since, chunk.until, "demographic").then(async (items) => {
+              const rows = dedupe(items.map(toDemographic), ["ad_id", "date_start", "age", "gender"]);
+              await deleteAndInsert("ads_demographic", rows, chunk.since, chunk.until, false);
+              console.log(`  ✓ demographic saved: ${rows.length} rows`);
+              return { key: "demographic" as const, count: rows.length };
+            }),
+          );
+        }
+
+        if (selectedTables.includes("device")) {
+          streamJobs.push(
+            fetchMonth(account.id, accessToken, chunk.since, chunk.until, "device").then(async (items) => {
+              const rows = dedupe(items.map(toDevice), ["ad_id", "date_start", "impression_device"]);
+              await deleteAndInsert("ads_device", rows, chunk.since, chunk.until, false);
+              console.log(`  ✓ device saved: ${rows.length} rows`);
+              return { key: "device" as const, count: rows.length };
+            }),
+          );
+        }
 
         const settled = await Promise.allSettled(streamJobs);
         const chunkCounts: Record<SheetKey, number> = {

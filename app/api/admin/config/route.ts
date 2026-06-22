@@ -103,6 +103,36 @@ export async function POST() {
   }
 }
 
+// PUT /api/admin/config — save token directly
+export async function PUT(req: Request) {
+  if (!(await checkAdmin())) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const body = await req.json().catch(() => ({}));
+  const token = String(body.token ?? "").trim();
+  if (!token) {
+    return NextResponse.json({ error: "token is required" }, { status: 400 });
+  }
+
+  const supabase = getSupabase();
+  const { error } = await supabase.from("fb_token_store").upsert(
+    {
+      id: 1,
+      access_token: token,
+      refreshed_at: new Date().toISOString(),
+      expires_at: null,
+    },
+    { onConflict: "id" },
+  );
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true, masked: maskToken(token) });
+}
+
 function maskToken(t: string): string {
   if (!t) return "";
   if (t.length <= 12) return "****";
