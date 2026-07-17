@@ -10,10 +10,5 @@ create table if not exists fb_token_store (
   constraint fb_token_store_singleton check (id = 1)
 );
 
--- Allow service role full access; deny everyone else (token is sensitive)
+-- RLS blocks anon/authenticated; service role bypasses RLS automatically
 alter table fb_token_store enable row level security;
-
-create policy "service role only" on fb_token_store
-  for all
-  using (auth.role() = 'service_role')
-  with check (auth.role() = 'service_role');

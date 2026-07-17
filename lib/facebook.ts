@@ -799,6 +799,7 @@ export async function fetchAccountPurchaseRoas(
       `&access_token=${accessToken}`;
 
     try {
+      console.log(`fetchAccountPurchaseRoas url for ${accountId}:`, url.replace(accessToken, "***"));
       const res: {
         data: {
           data?: {
@@ -829,8 +830,9 @@ export async function fetchAccountPurchaseRoas(
           pick(item.action_values) || pick(item.conversion_values);
         totals.purchase_value += purchase_value;
       }
-    } catch (e) {
-      console.error(`fetchAccountPurchaseRoas error for ${accountId}:`, e);
+    } catch (e: any) {
+      const fbMsg = e?.response?.data?.error?.message ?? e?.response?.data ?? e?.message;
+      console.error(`fetchAccountPurchaseRoas error for ${accountId}:`, fbMsg);
     }
   }
 

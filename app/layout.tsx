@@ -16,7 +16,6 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Ads Dashboard — วิเคราะห์โฆษณา Facebook",
   description: "แดชบอร์ดวิเคราะห์ผลโฆษณา Facebook Ads แบบเรียลไทม์ ดู Spend, ROAS, CPM, CPC และอื่นๆ",
-  icons: { icon: "/favicon.ico" },
 };
 
 export default function RootLayout({

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import AdminNav from "@/app/components/AdminNav";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -226,70 +227,17 @@ export default function AdminUsersPage() {
     fetchLogs(userId);
   }
 
-  async function handleLogout() {
-    await fetch("/api/admin/auth", { method: "DELETE" });
-    router.push("/admin/login");
-  }
-
   // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className=" min-h-screen bg-gray-100">
-      {/* Header */}
-      <div className="bg-primary px-6 py-4 flex items-center justify-between shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center">
-            <span className="text-primary font-bold text-sm">H+</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <div>
-              <span className="text-lg font-bold text-secondary tracking-tight block leading-tight">
-                HOTEL PLUS
-              </span>
-              <span className="text-xs text-secondary/70">
-                {view === "permissions" && permUser
-                  ? `Permissions — ${permUser.display_name ?? permUser.username}`
-                  : view === "logs"
-                    ? "Access Logs"
-                    : "Admin — Manage Users"}
-              </span>
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => router.push("/admin")}
-            className="text-sm text-secondary/60 hover:text-secondary font-medium"
-          >
-            ← Accounts
-          </button>
-          {view !== "users" && (
-            <button
-              onClick={() => {
-                setView("users");
-                setPermUser(null);
-              }}
-              className="text-sm text-secondary hover:text-primary font-medium"
-            >
-              ← Users
-            </button>
-          )}
-          {view === "users" && (
-            <button
-              onClick={() => openLogs()}
-              className="text-sm text-gray-600 hover:text-gray-800 font-medium"
-            >
-              View All Logs
-            </button>
-          )}
-          <button
-            onClick={handleLogout}
-            className="text-sm bg-secondary text-white font-medium px-3 py-1.5 rounded-lg hover:bg-secondary-light transition-colors"
-          >
-            Logout
-          </button>
-        </div>
-      </div>
+    <div className="min-h-screen bg-gray-100">
+      <AdminNav
+        subtitle={
+          view === "permissions" && permUser
+            ? `Permissions — ${permUser.display_name ?? permUser.username}`
+            : view === "logs" ? "Access Logs" : "Admin — Manage Users"
+        }
+      />
 
       <div className="max-w-5xl mx-auto px-4 py-8 space-y-8">
         {/* ── USERS VIEW ─────────────────────────────────────────────────── */}

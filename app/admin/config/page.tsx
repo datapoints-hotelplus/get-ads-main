@@ -109,14 +109,17 @@ export default function AdminConfigPage() {
     setSaving(true);
     setMessage(null);
     try {
-      const res = await fetch("/api/admin/config", {
-        method: "PUT",
+      const res = await fetch("/api/admin/refresh-token", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token: manualToken.trim() }),
       });
       const data = await res.json();
       if (res.ok) {
-        setMessage({ type: "success", text: `บันทึก token สำเร็จ — ${data.masked}` });
+        setMessage({
+          type: "success",
+          text: `บันทึก token สำเร็จ — ${data.masked} (อายุ ${Math.round((data.expires_in ?? 0) / 86400)} วัน)`,
+        });
         setManualToken("");
         await loadStatus();
       } else {

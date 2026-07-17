@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import AdminNav from "@/app/components/AdminNav";
 
 export default function AdminSyncPage() {
   const router = useRouter();
@@ -29,6 +30,17 @@ export default function AdminSyncPage() {
     summary: { account: string; rows_fetched: number; rows_updated: number; error?: string }[];
   } | null>(null);
   const [resyncError, setResyncError] = useState<string | null>(null);
+
+  const [catchingUp, setCatchingUp] = useState(false);
+  const [catchupResult, setCatchupResult] = useState<{
+    success: boolean;
+    message?: string;
+    last_date?: string;
+    since?: string;
+    until?: string;
+    synced_days?: number;
+  } | null>(null);
+  const [catchupError, setCatchupError] = useState<string | null>(null);
 
   const [clearing, setClearing] = useState(false);
   const [clearResult, setClearResult] = useState<Record<
@@ -62,6 +74,22 @@ export default function AdminSyncPage() {
       setBackfillError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
     } finally {
       setBackfilling(false);
+    }
+  };
+
+  const handleCatchup = async () => {
+    setCatchingUp(true);
+    setCatchupError(null);
+    setCatchupResult(null);
+    try {
+      const res = await fetch("/api/sync-catchup");
+      const data = await res.json();
+      if (!res.ok) setCatchupError(data.error ?? "เกิดข้อผิดพลาด");
+      else setCatchupResult(data);
+    } catch (err) {
+      setCatchupError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
+    } finally {
+      setCatchingUp(false);
     }
   };
 
@@ -122,52 +150,7 @@ export default function AdminSyncPage() {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      {/* Header */}
-      <div className="bg-primary px-6 py-4 flex items-center justify-between shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center">
-            <span className="text-primary font-bold text-sm">H+</span>
-          </div>
-          <div>
-            <span className="text-lg font-bold text-secondary tracking-tight block leading-tight">
-              HOTEL PLUS
-            </span>
-            <span className="text-xs text-secondary/70">Admin — Sync Panel</span>
-          </div>
-        </div>
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => router.push("/admin")}
-            className="text-sm text-secondary/80 hover:text-secondary font-medium"
-          >
-            Manage Accounts
-          </button>
-          <button
-            onClick={() => router.push("/admin/users")}
-            className="text-sm text-secondary/80 hover:text-secondary font-medium"
-          >
-            Manage Users
-          </button>
-          <button
-            onClick={() => router.push("/admin/highlights")}
-            className="text-sm text-secondary/80 hover:text-secondary font-medium"
-          >
-            Highlight Metrics
-          </button>
-          <button
-            onClick={() => router.push("/admin/docs")}
-            className="text-sm text-secondary/80 hover:text-secondary font-medium"
-          >
-            📖 วิธีใช้
-          </button>
-          <button
-            onClick={handleLogout}
-            className="text-sm bg-secondary text-white font-medium px-3 py-1.5 rounded-lg hover:bg-secondary-light transition-colors"
-          >
-            Logout
-          </button>
-        </div>
-      </div>
+      <AdminNav subtitle="Admin — Sync Panel" />
 
       <div className="max-w-2xl mx-auto px-4 py-8 space-y-5">
         <h1 className="text-xl font-bold text-gray-900">Sync Panel</h1>
@@ -224,6 +207,40 @@ export default function AdminSyncPage() {
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+        </div>
+
+        {/* Catchup - เติมข้อมูลที่ขาด */}
+        <div className="bg-white border border-green-200 rounded-xl p-5 shadow-sm">
+          <h2 className="text-base font-semibold text-gray-800 mb-1">
+            Catchup (เติมข้อมูลที่ขาด)
+          </h2>
+          <p className="text-sm text-gray-500 mb-4">
+            หาวันล่าสุดใน DB แล้ว sync ต่อจากวันถัดไปถึงเมื่อวาน · ไม่ดึงวันนี้เพราะข้อมูลยังไม่ครบ
+          </p>
+          <button
+            onClick={handleCatchup}
+            disabled={catchingUp}
+            className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-semibold py-2.5 rounded-xl transition"
+          >
+            {catchingUp ? "กำลัง Catchup..." : "Catchup ข้อมูลที่ขาด"}
+          </button>
+          {catchupError && (
+            <p className="mt-3 text-sm text-red-600">{catchupError}</p>
+          )}
+          {catchupResult && (
+            <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-xl text-sm">
+              {catchupResult.synced_days === 0 ? (
+                <p className="text-green-700 font-semibold">{catchupResult.message ?? "ข้อมูลเป็นปัจจุบันแล้ว"}</p>
+              ) : (
+                <>
+                  <p className="text-green-800 font-semibold mb-1">
+                    Catchup สำเร็จ · {catchupResult.since} → {catchupResult.until} ({catchupResult.synced_days} วัน)
+                  </p>
+                  <p className="text-green-600 text-xs">วันล่าสุดก่อน sync: {catchupResult.last_date}</p>
+                </>
+              )}
             </div>
           )}
         </div>

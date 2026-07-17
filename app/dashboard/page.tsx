@@ -15,6 +15,7 @@ import ReactSelect from "react-select";
 import FrequencyGauge from "../FrequencyGauge";
 import ThaiGeoChart from "../ThaiGeoChart";
 import ErrorBoundary from "../ErrorBoundary";
+import UserNav from "@/app/components/UserNav";
 
 // ─── Checkbox Filter Component ────────────────────────────────────────────────
 
@@ -1418,64 +1419,16 @@ export default function DashboardPage() {
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-100">
-      {/* ── Top bar with auth ──────────────────────────────────────────── */}
-      <div className="sticky top-0 z-30 bg-primary shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-3">
-          {/* Auth row */}
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center">
-                <span className="text-primary font-bold text-sm">H+</span>
-              </div>
-              <div>
-                <span className="text-lg font-bold text-secondary tracking-tight block leading-tight">
-                  HOTEL PLUS
-                </span>
-                <span className="text-xs text-secondary/70">
-                  Ads Performance Dashboard
-                </span>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              {authLoading ? (
-                <span className="text-xs text-gray-400">...</span>
-              ) : currentUser ? (
-                <>
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 bg-secondary rounded-full flex items-center justify-center">
-                      <span className="text-xs font-bold text-primary">
-                        {(currentUser.display_name || currentUser.username)
-                          .charAt(0)
-                          .toUpperCase()}
-                      </span>
-                    </div>
-                    <span className="text-sm text-secondary font-medium">
-                      {currentUser.display_name || currentUser.username}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleLogout}
-                    className="text-sm bg-secondary text-white font-medium px-3 py-1.5 rounded-lg hover:bg-secondary-light transition-colors"
-                  >
-                    ออกจากระบบ
-                  </button>
-                </>
-              ) : (
-                <a
-                  href="/login"
-                  className="text-sm font-medium px-4 py-1.5 bg-secondary text-white rounded-lg hover:bg-secondary-light transition-colors"
-                >
-                  เข้าสู่ระบบ
-                </a>
-              )}
-            </div>
-          </div>
-
-          {/* Filter form */}
-          <form onSubmit={handleApply} className="space-y-3">
-            {/* Filter row with buttons */}
-            <div className="flex flex-wrap items-end gap-3">
+      <UserNav
+        subtitle="Ads Performance Dashboard"
+        user={currentUser}
+        authLoading={authLoading}
+        onLogout={handleLogout}
+      >
+        {/* Filter form */}
+        <form onSubmit={handleApply} className="space-y-3">
+          {/* Filter row with buttons */}
+          <div className="flex flex-wrap items-end gap-3">
               {/* Date From */}
               <DatePickerField
                 label="วันเริ่มต้น"
@@ -1564,8 +1517,7 @@ export default function DashboardPage() {
               </div>
             </div>
           </form>
-        </div>
-      </div>
+      </UserNav>
 
       {/* ── Page content ────────────────────────────────────────────────────── */}
       <div className="max-w-7xl mx-auto px-4 py-6">

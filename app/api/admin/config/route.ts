@@ -40,6 +40,7 @@ export async function GET() {
       .eq("id", 1)
       .single();
     if (data?.access_token) {
+      console.log("[config] current token:", data.access_token);
       token = {
         refreshed_at: data.refreshed_at as string | null,
         expires_at: data.expires_at as string | null,

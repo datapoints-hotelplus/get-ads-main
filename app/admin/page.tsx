@@ -2,6 +2,7 @@
 
 import { useState, useEffect, FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import AdminNav from "@/app/components/AdminNav";
 
 type Account = {
   account_name: string;
@@ -108,11 +109,6 @@ export default function AdminPage() {
     }
   }
 
-  async function handleLogout() {
-    await fetch("/api/admin/auth", { method: "DELETE" });
-    router.push("/admin/login");
-  }
-
   async function handleFetchFromFacebook() {
     if (
       !window.confirm(
@@ -145,61 +141,8 @@ export default function AdminPage() {
   }
 
   return (
-    <div className=" min-h-screen bg-gray-100">
-      {/* Header */}
-      <div className="bg-primary px-6 py-4 flex items-center justify-between shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center">
-            <span className="text-primary font-bold text-sm">H+</span>
-          </div>
-          <div>
-            <span className="text-lg font-bold text-secondary tracking-tight block leading-tight">
-              HOTEL PLUS
-            </span>
-            <span className="text-xs text-secondary/70">
-              Admin — Manage Accounts
-            </span>
-          </div>
-        </div>
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => router.push("/admin/users")}
-            className="text-sm text-secondary/80 hover:text-secondary font-medium"
-          >
-            Manage Users
-          </button>
-          <button
-            onClick={() => router.push("/admin/highlights")}
-            className="text-sm text-secondary/80 hover:text-secondary font-medium"
-          >
-            Highlight Metrics
-          </button>
-          {/* <button
-            onClick={() => router.push("/admin/sync")}
-            className="text-sm text-secondary/80 hover:text-secondary font-medium"
-          >
-            Sync Panel
-          </button>
-          <button
-            onClick={() => router.push("/admin/config")}
-            className="text-sm text-secondary/80 hover:text-secondary font-medium"
-          >
-            ⚙️ Config
-          </button> */}
-          <button
-            onClick={() => router.push("/admin/docs")}
-            className="text-sm text-secondary/80 hover:text-secondary font-medium"
-          >
-            📖 วิธีใช้
-          </button>
-          <button
-            onClick={handleLogout}
-            className="text-sm bg-secondary text-white font-medium px-3 py-1.5 rounded-lg hover:bg-secondary-light transition-colors"
-          >
-            Logout
-          </button>
-        </div>
-      </div>
+    <div className="min-h-screen bg-gray-100">
+      <AdminNav subtitle="Admin — Manage Accounts" />
 
       <div className="max-w-3xl mx-auto px-4 py-8 space-y-8">
         {/* Add Account Form */}
