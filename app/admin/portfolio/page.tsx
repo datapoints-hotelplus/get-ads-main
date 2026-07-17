@@ -258,7 +258,7 @@ export default function AdminPortfolioPage() {
     <div className="min-h-screen bg-gray-100">
       <AdminNav subtitle="Admin — Portfolio" />
 
-      <div className="max-w-3xl mx-auto px-4 py-8 space-y-5">
+      <div className="max-w-4xl mx-auto px-4 py-8 space-y-5">
         {/* Tab switcher */}
         <div className="flex gap-2">
           {(["templates", "profiles"] as const).map((t) => (
@@ -538,7 +538,7 @@ export default function AdminPortfolioPage() {
                                         },
                                     )
                                   }
-                                  className="input flex-1 text-xs"
+                                  className="input flex-3 text-xs"
                                 >
                                   <option value=">=">&gt;=</option>
                                   <option value=">">&gt;</option>
@@ -581,7 +581,7 @@ export default function AdminPortfolioPage() {
                                         },
                                     )
                                   }
-                                  className="input flex-1 text-xs"
+                                  className="input flex-3 text-xs"
                                 >
                                   <option value=">=">&gt;=</option>
                                   <option value=">">&gt;</option>
