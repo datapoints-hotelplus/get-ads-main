@@ -27,12 +27,12 @@ export async function GET() {
 export async function POST(req: Request) {
   if (!(await checkAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const body = await req.json().catch(() => ({}));
-  const { name, metric, direction, target, green_min, yellow_min } = body;
+  const { name, metric, direction, target, green_min, yellow_min, green_op, yellow_op } = body;
   if (!name || !metric) return NextResponse.json({ error: "name and metric required" }, { status: 400 });
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from("ads_portfolio_templates")
-    .insert({ name, metric, direction: direction ?? "higher_better", target, green_min, yellow_min })
+    .insert({ name, metric, direction: direction ?? "higher_better", target, green_min, yellow_min, green_op: green_op ?? ">=", yellow_op: yellow_op ?? ">=" })
     .select()
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

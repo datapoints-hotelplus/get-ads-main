@@ -12,6 +12,8 @@ type Template = {
   target: number | null;
   green_min: number | null;
   yellow_min: number | null;
+  green_op: "<" | "<=" | ">" | ">=";
+  yellow_op: "<" | "<=" | ">" | ">=";
 };
 
 type Profile = { id: string; name: string };
@@ -29,28 +31,30 @@ type PortfolioData = {
   allAccounts: AllAccount[];
 };
 
+function compare(value: number, op: string, threshold: number): boolean {
+  if (op === "<")  return value <  threshold;
+  if (op === "<=") return value <= threshold;
+  if (op === ">")  return value >  threshold;
+  if (op === ">=") return value >= threshold;
+  return false;
+}
+
 function getTrafficLight(
   value: number | null,
   tpl: Template,
 ): "green" | "yellow" | "red" | "gray" {
   if (value === null) return "gray";
-  const { direction, green_min, yellow_min } = tpl;
+  const { green_min, yellow_min, green_op, yellow_op } = tpl;
   if (green_min === null && yellow_min === null) return "gray";
-  if (direction === "higher_better") {
-    if (green_min !== null && value >= green_min) return "green";
-    if (yellow_min !== null && value >= yellow_min) return "yellow";
-    return "red";
-  } else {
-    if (green_min !== null && value <= green_min) return "green";
-    if (yellow_min !== null && value <= yellow_min) return "yellow";
-    return "red";
-  }
+  if (green_min  !== null && compare(value, green_op  ?? ">=", green_min))  return "green";
+  if (yellow_min !== null && compare(value, yellow_op ?? ">=", yellow_min)) return "yellow";
+  return "red";
 }
 
-const DOT: Record<string, string> = {
-  green: "bg-green-500",
-  yellow: "bg-yellow-400",
-  red: "bg-red-500",
+const BAR_COLOR: Record<string, string> = {
+  green: "#22c55e",
+  yellow: "#facc15",
+  red:    "#ef4444",
   gray: "bg-gray-300",
 };
 
@@ -259,7 +263,7 @@ function KpiCard({ tpl, rows, index }: { tpl: Template; rows: AccountRow[]; inde
                   {/* bar */}
                   <div
                     className="absolute inset-y-0 left-0 rounded transition-all"
-                    style={{ width: `${pct}%`, backgroundColor: palette.bar }}
+                    style={{ width: `${pct}%`, backgroundColor: BAR_COLOR[light] ?? palette.bar }}
                   />
                   {/* target line */}
                   {targetPct !== null && (
@@ -276,7 +280,6 @@ function KpiCard({ tpl, rows, index }: { tpl: Template; rows: AccountRow[]; inde
                     {fmt(val, tpl.metric)}
                   </span>
                 </div>
-                <span className={`w-2.5 h-2.5 shrink-0 rounded-full ${DOT[light]}`} />
               </div>
             );
           })}
