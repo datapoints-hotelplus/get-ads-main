@@ -43,70 +43,144 @@ export async function GET(req: NextRequest) {
 
   if (accountIds.length === 0) return NextResponse.json({ templates, profile, rows: [], presetIds, allAccounts });
 
-  // Resolve account names for selected ids
+  // Build id→name map for display labels
   const accountMap = new Map(allAccounts.map((a) => [a.account_id as string, a.account_name as string]));
-  const accountNames = accountIds.map((id) => accountMap.get(id)).filter(Boolean) as string[];
+  const accountLabels = accountIds.map((id) => accountMap.get(id) ?? id);
 
-  if (accountNames.length === 0) return NextResponse.json({ templates, profile, rows: [], presetIds, allAccounts });
+  // rawdata.account_id stores bare number (no act_ prefix)
+  const rawAccountIds = accountIds.map((id) => id.replace(/^act_/, ""));
 
-  // Fetch rawdata aggregated per account
+  // Fetch rawdata aggregated per account — filter by account_id (immune to name changes)
   let q = supabase
     .from("ads_rawdata")
-    .select("account_name,spend,impressions,clicks_all,reach,leads,messaging_conversations_started,purchases,purchase_value")
-    .in("account_name", accountNames)
-    .gt("spend", 0);
+    .select("account_id,spend,impressions,clicks_all,reach,leads,messaging_conversations_started,purchases,purchase_value,frequency,cpm,cpc,ctr,ctr_all,inline_link_clicks,unique_inline_link_clicks,post_engagement,cost_per_engagement,cost_per_like,post_shares,post_comments,post_reactions,page_likes,video_views_3s,video_p25,video_p50,video_p75,video_p100,video_avg_time,hook_rate,hold_rate,cost_per_result")
+    .in("account_id", rawAccountIds);
   if (dateFrom) q = q.gte("date_start", dateFrom);
   if (dateTo) q = q.lte("date_start", dateTo);
 
-  const { data: raw, error: rErr } = await q.limit(200000);
-  if (rErr) return NextResponse.json({ error: rErr.message }, { status: 500 });
+  const allRaw: typeof raw = [];
+  let offset = 0;
+  const CHUNK = 1000;
+  while (true) {
+    const { data: chunk, error: chunkErr } = await q.range(offset, offset + CHUNK - 1);
+    if (chunkErr) return NextResponse.json({ error: chunkErr.message }, { status: 500 });
+    allRaw.push(...(chunk ?? []));
+    if ((chunk ?? []).length < CHUNK) break;
+    offset += CHUNK;
+  }
+  const raw = allRaw;
 
   type Agg = {
     spend: number; impressions: number; clicks: number; reach: number;
     leads: number; messages: number; purchases: number; purchase_value: number;
+    frequency: number; cpm: number; cpc: number; ctr: number; ctr_all: number;
+    inline_link_clicks: number; unique_inline_link_clicks: number;
+    post_engagement: number; cost_per_engagement: number; cost_per_like: number;
+    post_shares: number; post_comments: number; post_reactions: number; page_likes: number;
+    video_views_3s: number; video_p25: number; video_p50: number; video_p75: number;
+    video_p100: number; video_avg_time: number; hook_rate: number; hold_rate: number;
+    cost_per_result: number; rows: number;
   };
   const agg = new Map<string, Agg>();
-  console.log(agg);
   for (const r of raw ?? []) {
-    const name = r.account_name as string;
-    if (!agg.has(name)) agg.set(name, { spend: 0, impressions: 0, clicks: 0, reach: 0, leads: 0, messages: 0, purchases: 0, purchase_value: 0 });
+    const name = r.account_id as string;
+    if (!agg.has(name)) agg.set(name, {
+      spend: 0, impressions: 0, clicks: 0, reach: 0, leads: 0, messages: 0, purchases: 0, purchase_value: 0,
+      frequency: 0, cpm: 0, cpc: 0, ctr: 0, ctr_all: 0,
+      inline_link_clicks: 0, unique_inline_link_clicks: 0,
+      post_engagement: 0, cost_per_engagement: 0, cost_per_like: 0,
+      post_shares: 0, post_comments: 0, post_reactions: 0, page_likes: 0,
+      video_views_3s: 0, video_p25: 0, video_p50: 0, video_p75: 0,
+      video_p100: 0, video_avg_time: 0, hook_rate: 0, hold_rate: 0,
+      cost_per_result: 0, rows: 0,
+    });
     const a = agg.get(name)!;
-    a.spend += Number(r.spend ?? 0);
+    a.spend    += Number(r.spend ?? 0);
     a.impressions += Number(r.impressions ?? 0);
-    a.clicks += Number(r.clicks_all ?? 0);
-    a.reach += Number(r.reach ?? 0);
-    a.leads += Number(r.leads ?? 0);
+    a.clicks   += Number(r.clicks_all ?? 0);
+    a.reach    += Number(r.reach ?? 0);
+    a.leads    += Number(r.leads ?? 0);
     a.messages += Number(r.messaging_conversations_started ?? 0);
     a.purchases += Number(r.purchases ?? 0);
     a.purchase_value += Number(r.purchase_value ?? 0);
+    a.inline_link_clicks += Number(r.inline_link_clicks ?? 0);
+    a.unique_inline_link_clicks += Number(r.unique_inline_link_clicks ?? 0);
+    a.post_engagement += Number(r.post_engagement ?? 0);
+    a.post_shares  += Number(r.post_shares ?? 0);
+    a.post_comments += Number(r.post_comments ?? 0);
+    a.post_reactions += Number(r.post_reactions ?? 0);
+    a.page_likes   += Number(r.page_likes ?? 0);
+    a.video_views_3s += Number(r.video_views_3s ?? 0);
+    a.video_p25 += Number(r.video_p25 ?? 0);
+    a.video_p50 += Number(r.video_p50 ?? 0);
+    a.video_p75 += Number(r.video_p75 ?? 0);
+    a.video_p100 += Number(r.video_p100 ?? 0);
+    // average per row
+    a.frequency    += Number(r.frequency ?? 0);
+    a.video_avg_time += Number(r.video_avg_time ?? 0);
+    a.hook_rate    += Number(r.hook_rate ?? 0);
+    a.hold_rate    += Number(r.hold_rate ?? 0);
+    a.cost_per_result += Number(r.cost_per_result ?? 0);
+    a.rows += 1;
   }
 
   function getMetricValue(metric: string, a: Agg): number | null {
+    const n = a.rows || 1; // number of rows for averaging
     switch (metric) {
-      case "spend": return a.spend;
-      case "impressions": return a.impressions;
-      case "clicks": return a.clicks;
-      case "reach": return a.reach;
-      case "leads": return a.leads;
-      case "messages": return a.messages;
-      case "purchases": return a.purchases;
+      case "spend":        return a.spend;
+      case "impressions":  return a.impressions;
+      case "clicks":       return a.clicks;
+      case "reach":        return a.reach;
+      case "leads":        return a.leads;
+      case "messages":     return a.messages;
+      case "purchases":    return a.purchases;
       case "purchase_value": return a.purchase_value;
-      case "roas": return a.spend > 0 ? a.purchase_value / a.spend : null;
-      case "cpc": return a.clicks > 0 ? a.spend / a.clicks : null;
-      case "cpm": return a.impressions > 0 ? (a.spend / a.impressions) * 1000 : null;
-      case "ctr": return a.impressions > 0 ? (a.clicks / a.impressions) * 100 : null;
+      case "inline_link_clicks": return a.inline_link_clicks;
+      case "unique_inline_link_clicks": return a.unique_inline_link_clicks;
+      case "post_engagement": return a.post_engagement;
+      case "post_shares":  return a.post_shares;
+      case "post_comments": return a.post_comments;
+      case "post_reactions": return a.post_reactions;
+      case "page_likes":   return a.page_likes;
+      case "video_views_3s": return a.video_views_3s;
+      case "video_p25":    return a.video_p25 / n;
+      case "video_p50":    return a.video_p50 / n;
+      case "video_p75":    return a.video_p75 / n;
+      case "video_p100":   return a.video_p100 / n;
+      case "video_avg_time": return a.video_avg_time / n;
+      case "hook_rate":    return a.hook_rate / n;
+      case "hold_rate":    return a.hold_rate / n;
+      case "frequency":    return a.impressions > 0 ? a.impressions / a.reach : null;
+      // calculated from totals (weighted)
+      case "roas":         return a.spend > 0 ? a.purchase_value / a.spend : null;
+      case "cpc":          return a.clicks > 0 ? a.spend / a.clicks : null;
+      case "cpm":          return a.impressions > 0 ? (a.spend / a.impressions) * 1000 : null;
+      case "ctr":          return a.impressions > 0 ? (a.clicks / a.impressions) * 100 : null;
+      case "ctr_all":      return a.impressions > 0 ? (a.clicks / a.impressions) * 100 : null;
       case "cost_per_lead": return a.leads > 0 ? a.spend / a.leads : null;
       case "cost_per_message": return a.messages > 0 ? a.spend / a.messages : null;
       case "cost_per_purchase": return a.purchases > 0 ? a.spend / a.purchases : null;
+      case "cost_per_engagement": return a.post_engagement > 0 ? a.spend / a.post_engagement : null;
+      case "cost_per_like": return a.page_likes > 0 ? a.spend / a.page_likes : null;
+      case "cost_per_result": return a.rows > 0 ? a.cost_per_result / a.rows : null;
       default: return null;
     }
   }
 
-  const rows = accountNames.map((name) => {
-    const a = agg.get(name) ?? { spend: 0, impressions: 0, clicks: 0, reach: 0, leads: 0, messages: 0, purchases: 0, purchase_value: 0 };
+  const rows = rawAccountIds.map((rawId, i) => {
+    const a = agg.get(rawId) ?? {
+      spend: 0, impressions: 0, clicks: 0, reach: 0, leads: 0, messages: 0, purchases: 0, purchase_value: 0,
+      frequency: 0, cpm: 0, cpc: 0, ctr: 0, ctr_all: 0,
+      inline_link_clicks: 0, unique_inline_link_clicks: 0,
+      post_engagement: 0, cost_per_engagement: 0, cost_per_like: 0,
+      post_shares: 0, post_comments: 0, post_reactions: 0, page_likes: 0,
+      video_views_3s: 0, video_p25: 0, video_p50: 0, video_p75: 0,
+      video_p100: 0, video_avg_time: 0, hook_rate: 0, hold_rate: 0,
+      cost_per_result: 0, rows: 0,
+    };
     const metrics: Record<string, number | null> = {};
     for (const t of templates ?? []) metrics[t.id] = getMetricValue(t.metric, a);
-    return { account_name: name, spend: a.spend, clicks: a.clicks, impressions: a.impressions, reach: a.reach, leads: a.leads, messages: a.messages, purchases: a.purchases, purchase_value: a.purchase_value, metrics };
+    return { account_name: accountLabels[i], spend: a.spend, clicks: a.clicks, impressions: a.impressions, reach: a.reach, leads: a.leads, messages: a.messages, purchases: a.purchases, purchase_value: a.purchase_value, metrics };
   });
 
   return NextResponse.json({ templates, profile, rows, presetIds, allAccounts });

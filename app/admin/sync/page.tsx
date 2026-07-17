@@ -158,10 +158,10 @@ export default function AdminSyncPage() {
         {/* Backfill */}
         <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
           <h2 className="text-base font-semibold text-gray-800 mb-1">
-            Backfill (12 เดือนย้อนหลัง)
+            Backfill (ตั้งแต่วันแรกใน DB)
           </h2>
           <p className="text-sm text-gray-500 mb-3">
-            ดึงข้อมูลรายวันย้อนหลัง 12 เดือน เฉพาะแถวที่ spend &gt; 0
+            ดึงข้อมูลตั้งแต่วันแรกใน rawdata จนถึงวันนี้ใหม่ทั้งหมด เฉพาะแถวที่ spend &gt; 0
           </p>
           <div className="flex flex-wrap gap-3 mb-4">
             {(["rawdata", "geo", "demographic", "device"] as const).map((t) => (

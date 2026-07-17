@@ -68,13 +68,6 @@ function fmt(v: number | null, metric: string): string {
   return v.toLocaleString("th-TH", { maximumFractionDigits: 0 });
 }
 
-function median(values: number[]): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-}
-
 // ── Template icon & color palette ───────────────────────────────────────────
 const PALETTE = [
   { bg: "bg-violet-600",  ring: "ring-violet-200",  bar: "#818cf8" },
@@ -110,7 +103,6 @@ function KpiCard({ tpl, rows, index }: { tpl: Template; rows: AccountRow[]; inde
 
   const values = rows.map(valOf);
   const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
-  const med = values.length > 0 ? median(values) : 0;
 
   const lights = rows.map((r) => getTrafficLight(r.metrics[tpl.id], tpl));
   const green  = lights.filter((l) => l === "green").length;
@@ -155,16 +147,11 @@ function KpiCard({ tpl, rows, index }: { tpl: Template; rows: AccountRow[]; inde
           </div>
         </div>
 
-        {/* Avg / Median / Target — 3 equal boxes */}
-        <div className="grid grid-cols-3 gap-2 mb-2.5">
+        {/* Avg / Target — 2 equal boxes */}
+        <div className="grid grid-cols-2 gap-2 mb-2.5">
           <div className="bg-gray-50 rounded-xl p-2.5">
             <p className="text-[10px] text-gray-400 font-medium mb-0.5">Average</p>
             <p className="text-sm font-bold text-gray-900 leading-tight truncate">{fmt(avg, tpl.metric)}</p>
-            {unit && <p className="text-[10px] text-gray-400">{unit}</p>}
-          </div>
-          <div className="bg-gray-50 rounded-xl p-2.5">
-            <p className="text-[10px] text-gray-400 font-medium mb-0.5">Median</p>
-            <p className="text-sm font-bold text-gray-900 leading-tight truncate">{fmt(med, tpl.metric)}</p>
             {unit && <p className="text-[10px] text-gray-400">{unit}</p>}
           </div>
           <div className={tpl.target !== null ? "bg-blue-50 rounded-xl p-2.5" : "bg-gray-50 rounded-xl p-2.5"}>

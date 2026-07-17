@@ -517,7 +517,7 @@ export async function runSync(
       ]);
 
       await Promise.all([
-        deleteAndInsert("ads_rawdata", rawItems.map(toRawdata), since, until),
+        deleteAndInsert("ads_rawdata", rawItems.map((item) => ({ ...toRawdata(item), account_id: account.id })), since, until),
         deleteByUniqueKeysAndInsert("ads_geo", geoItems.map(toGeo), [
           "ad_id",
           "date_start",

@@ -316,7 +316,7 @@ function toDevice(item: FBItem) {
 async function fbGet(
   url: string,
   params?: Record<string, unknown>,
-  retries = 7,
+  retries = 3,
 ): Promise<{ data: { data?: FBItem[]; paging?: { next?: string } } }> {
   let lastErr: unknown;
   for (let attempt = 1; attempt <= retries; attempt++) {
@@ -575,11 +575,20 @@ export async function POST(req: Request) {
   const until = new Date().toLocaleDateString("en-CA", {
     timeZone: "Asia/Bangkok",
   });
-  // ย้อนหลัง 1 ปีนับจากวันที่กด
-  const sinceDate = new Date(until);
-  sinceDate.setFullYear(sinceDate.getFullYear() - 1);
-  sinceDate.setDate(sinceDate.getDate() + 1);
-  const since = sinceDate.toISOString().slice(0, 10);
+
+  // Find earliest date_start in rawdata
+  const supabase = getSupabase();
+  const { data: firstRow } = await supabase
+    .from("ads_rawdata")
+    .select("date_start")
+    .order("date_start", { ascending: true })
+    .limit(1)
+    .single();
+  const since = firstRow?.date_start ?? (() => {
+    const d = new Date(until);
+    d.setFullYear(d.getFullYear() - 1);
+    return d.toISOString().slice(0, 10);
+  })();
   const chunks = monthChunks(since, until);
 
   console.log(
@@ -615,7 +624,7 @@ export async function POST(req: Request) {
         if (selectedTables.includes("rawdata")) {
           streamJobs.push(
             fetchMonth(account.id, accessToken, chunk.since, chunk.until, "rawdata").then(async (items) => {
-              await deleteAndInsert("ads_rawdata", items.map(toRawdata), chunk.since, chunk.until, true);
+              await deleteAndInsert("ads_rawdata", items.map((item) => ({ ...toRawdata(item), account_id: account.id })), chunk.since, chunk.until, true);
               console.log(`  ✓ rawdata saved: ${items.length} rows`);
               return { key: "rawdata" as const, count: items.length };
             }),

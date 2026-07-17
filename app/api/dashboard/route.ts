@@ -801,8 +801,8 @@ export async function GET(request: NextRequest) {
           .order("date_start", { ascending: false });
         if (from) q = q.gte("date_start", from);
         if (to) q = q.lte("date_start", to);
-        if (accounts.length > 0) {
-          q = q.in("account_name", accounts);
+        if (rawAccountIds.length > 0) {
+          q = q.in("account_id", rawAccountIds);
         } else if (allowedNames !== null) {
           q = q.in("account_name", allowedNames);
         }
@@ -828,12 +828,19 @@ export async function GET(request: NextRequest) {
       pageQuery = pageQuery.in("account_name", allowedNames);
     }
 
-    const [rows, prevRows, pageRes] = await Promise.all([
+    const pageRes = await pageQuery;
+    if (pageRes.error) throw pageRes.error;
+    const allPages = (pageRes.data ?? []) as { account_id: string; account_name: string }[];
+
+    // Build rawAccountIds for filtering rawdata by account_id (immune to name changes)
+    const filteredPages = accounts.length > 0
+      ? allPages.filter((p) => accounts.includes(p.account_name))
+      : allPages;
+    const rawAccountIds = filteredPages.map((p) => String(p.account_id ?? "").replace(/^act_/, "")).filter(Boolean);
+
+    const [rows, prevRows] = await Promise.all([
       fetchAllRows(dateFrom, dateTo),
-      prevFrom
-        ? fetchAllRows(prevFrom, prevTo)
-        : Promise.resolve([] as RawRow[]),
-      pageQuery.then((r) => r),
+      prevFrom ? fetchAllRows(prevFrom, prevTo) : Promise.resolve([] as RawRow[]),
     ]);
 
     // Aggregate helper
@@ -900,15 +907,6 @@ export async function GET(request: NextRequest) {
     const prevTotals = aggregate(prevRows);
 
     // Override reach with accurate values from Facebook Insights API (same as sync-reach-summary)
-    if (pageRes.error) throw pageRes.error;
-    const allPages = (pageRes.data ?? []) as {
-      account_id: string;
-      account_name: string;
-    }[];
-    const filteredPages =
-      accounts.length > 0
-        ? allPages.filter((p) => accounts.includes(p.account_name))
-        : allPages;
     const accountIds = filteredPages.map((p) => p.account_id);
 
     const accessToken = await getFacebookAccessToken();
