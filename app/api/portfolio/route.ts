@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
   // Fetch rawdata aggregated per account — filter by account_id (immune to name changes)
   let q = supabase
     .from("ads_rawdata")
-    .select("account_id,spend,impressions,clicks_all,reach,leads,messaging_conversations_started,purchases,purchase_value,frequency,cpm,cpc,ctr,ctr_all,inline_link_clicks,unique_inline_link_clicks,post_engagement,cost_per_engagement,cost_per_like,post_shares,post_comments,post_reactions,page_likes,video_views_3s,video_p25,video_p50,video_p75,video_p100,video_avg_time,hook_rate,hold_rate,cost_per_result")
+    .select("account_id,campaign_name,spend,impressions,clicks_all,reach,leads,messaging_conversations_started,purchases,purchase_value,frequency,cpm,cpc,ctr,ctr_all,inline_link_clicks,unique_inline_link_clicks,post_engagement,cost_per_engagement,cost_per_like,post_shares,post_comments,post_reactions,page_likes,video_views_3s,video_p25,video_p50,video_p75,video_p100,video_avg_time,hook_rate,hold_rate,cost_per_result")
     .in("account_id", rawAccountIds);
   if (dateFrom) q = q.gte("date_start", dateFrom);
   if (dateTo) q = q.lte("date_start", dateTo);
@@ -167,20 +167,61 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  const EMPTY_AGG: Agg = {
+    spend: 0, impressions: 0, clicks: 0, reach: 0, leads: 0, messages: 0, purchases: 0, purchase_value: 0,
+    frequency: 0, cpm: 0, cpc: 0, ctr: 0, ctr_all: 0,
+    inline_link_clicks: 0, unique_inline_link_clicks: 0,
+    post_engagement: 0, cost_per_engagement: 0, cost_per_like: 0,
+    post_shares: 0, post_comments: 0, post_reactions: 0, page_likes: 0,
+    video_views_3s: 0, video_p25: 0, video_p50: 0, video_p75: 0,
+    video_p100: 0, video_avg_time: 0, hook_rate: 0, hold_rate: 0,
+    cost_per_result: 0, rows: 0,
+  };
+
+  function buildAgg(rows: Record<string, unknown>[], accountId: string, campaignPrefix: string | null): Agg {
+    const a = { ...EMPTY_AGG };
+    for (const r of rows) {
+      if (r.account_id !== accountId) continue;
+      if (campaignPrefix && !(r.campaign_name as string ?? "").startsWith(campaignPrefix)) continue;
+      a.spend    += Number(r.spend ?? 0);
+      a.impressions += Number(r.impressions ?? 0);
+      a.clicks   += Number(r.clicks_all ?? 0);
+      a.reach    += Number(r.reach ?? 0);
+      a.leads    += Number(r.leads ?? 0);
+      a.messages += Number(r.messaging_conversations_started ?? 0);
+      a.purchases += Number(r.purchases ?? 0);
+      a.purchase_value += Number(r.purchase_value ?? 0);
+      a.inline_link_clicks += Number(r.inline_link_clicks ?? 0);
+      a.unique_inline_link_clicks += Number(r.unique_inline_link_clicks ?? 0);
+      a.post_engagement += Number(r.post_engagement ?? 0);
+      a.post_shares  += Number(r.post_shares ?? 0);
+      a.post_comments += Number(r.post_comments ?? 0);
+      a.post_reactions += Number(r.post_reactions ?? 0);
+      a.page_likes   += Number(r.page_likes ?? 0);
+      a.video_views_3s += Number(r.video_views_3s ?? 0);
+      a.video_p25 += Number(r.video_p25 ?? 0);
+      a.video_p50 += Number(r.video_p50 ?? 0);
+      a.video_p75 += Number(r.video_p75 ?? 0);
+      a.video_p100 += Number(r.video_p100 ?? 0);
+      a.frequency    += Number(r.frequency ?? 0);
+      a.video_avg_time += Number(r.video_avg_time ?? 0);
+      a.hook_rate    += Number(r.hook_rate ?? 0);
+      a.hold_rate    += Number(r.hold_rate ?? 0);
+      a.cost_per_result += Number(r.cost_per_result ?? 0);
+      a.rows += 1;
+    }
+    return a;
+  }
+
   const rows = rawAccountIds.map((rawId, i) => {
-    const a = agg.get(rawId) ?? {
-      spend: 0, impressions: 0, clicks: 0, reach: 0, leads: 0, messages: 0, purchases: 0, purchase_value: 0,
-      frequency: 0, cpm: 0, cpc: 0, ctr: 0, ctr_all: 0,
-      inline_link_clicks: 0, unique_inline_link_clicks: 0,
-      post_engagement: 0, cost_per_engagement: 0, cost_per_like: 0,
-      post_shares: 0, post_comments: 0, post_reactions: 0, page_likes: 0,
-      video_views_3s: 0, video_p25: 0, video_p50: 0, video_p75: 0,
-      video_p100: 0, video_avg_time: 0, hook_rate: 0, hold_rate: 0,
-      cost_per_result: 0, rows: 0,
-    };
+    const baseAgg = agg.get(rawId) ?? { ...EMPTY_AGG };
     const metrics: Record<string, number | null> = {};
-    for (const t of templates ?? []) metrics[t.id] = getMetricValue(t.metric, a);
-    return { account_name: accountLabels[i], spend: a.spend, clicks: a.clicks, impressions: a.impressions, reach: a.reach, leads: a.leads, messages: a.messages, purchases: a.purchases, purchase_value: a.purchase_value, metrics };
+    for (const t of templates ?? []) {
+      const filter = (t as Record<string, unknown>).campaign_filter as string | null ?? null;
+      const a = filter ? buildAgg(raw, rawId, filter) : baseAgg;
+      metrics[t.id] = getMetricValue(t.metric, a);
+    }
+    return { account_name: accountLabels[i], spend: baseAgg.spend, clicks: baseAgg.clicks, impressions: baseAgg.impressions, reach: baseAgg.reach, leads: baseAgg.leads, messages: baseAgg.messages, purchases: baseAgg.purchases, purchase_value: baseAgg.purchase_value, metrics };
   });
 
   return NextResponse.json({ templates, profile, rows, presetIds, allAccounts });

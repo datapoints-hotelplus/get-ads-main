@@ -14,6 +14,7 @@ type Template = {
   yellow_min: number | null;
   green_op: "<" | "<=" | ">" | ">=";
   yellow_op: "<" | "<=" | ">" | ">=";
+  campaign_filter: string | null;
 };
 
 type Profile = {
@@ -86,6 +87,7 @@ export default function AdminPortfolioPage() {
     yellow_min: "",
     green_op: ">=",
     yellow_op: ">=",
+    campaign_filter: "",
   });
 
   // ── Profiles ───────────────────────────────────────────────────────────────
@@ -153,6 +155,7 @@ export default function AdminPortfolioPage() {
         yellow_min: newTpl.yellow_min ? Number(newTpl.yellow_min) : null,
         green_op: newTpl.green_op,
         yellow_op: newTpl.yellow_op,
+        campaign_filter: newTpl.campaign_filter || null,
       }),
     });
     const data = await res.json();
@@ -167,6 +170,7 @@ export default function AdminPortfolioPage() {
         yellow_min: "",
         green_op: ">=",
         yellow_op: ">=",
+        campaign_filter: "",
       });
       await fetchTemplates();
     }
@@ -424,6 +428,19 @@ export default function AdminPortfolioPage() {
                     />
                   </div>
                 </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">
+                    Campaign Filter (prefix)
+                  </label>
+                  <input
+                    value={newTpl.campaign_filter}
+                    onChange={(e) =>
+                      setNewTpl((p) => ({ ...p, campaign_filter: e.target.value }))
+                    }
+                    placeholder="เช่น MES (เว้นว่างถ้าไม่ filter)"
+                    className="input w-full"
+                  />
+                </div>
               </div>
               {tError && <p className="text-red-600 text-sm mb-2">{tError}</p>}
               <button
@@ -463,9 +480,8 @@ export default function AdminPortfolioPage() {
                       <th className="px-4 py-3 font-medium">Target</th>
                       <th className="px-4 py-3 font-medium">🟢 Green</th>
                       <th className="px-4 py-3 font-medium">🟡 Yellow</th>
-                      <th className="px-4 py-3 font-medium text-right">
-                        Actions
-                      </th>
+                      <th className="px-4 py-3 font-medium">Campaign Filter</th>
+                      <th className="px-4 py-3 font-medium text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -627,6 +643,22 @@ export default function AdminPortfolioPage() {
                                 />
                               </div>
                             </td>
+                            <td className="px-4 py-2">
+                              <input
+                                value={editTpl.campaign_filter ?? ""}
+                                onChange={(e) =>
+                                  setEditTpl(
+                                    (p) =>
+                                      p && {
+                                        ...p,
+                                        campaign_filter: e.target.value || null,
+                                      },
+                                  )
+                                }
+                                placeholder="e.g. MES"
+                                className="input w-full text-xs"
+                              />
+                            </td>
                             <td className="px-4 py-2 text-right">
                               <button
                                 onClick={handleUpdateTemplate}
@@ -668,6 +700,9 @@ export default function AdminPortfolioPage() {
                               {t.yellow_min !== null
                                 ? `${t.yellow_op} ${t.yellow_min}`
                                 : "—"}
+                            </td>
+                            <td className="px-4 py-3 text-gray-500 font-mono text-xs">
+                              {t.campaign_filter ?? "—"}
                             </td>
                             <td className="px-4 py-3 text-right">
                               <button
