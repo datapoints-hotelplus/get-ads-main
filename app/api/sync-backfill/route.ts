@@ -460,10 +460,11 @@ async function deleteAndInsert(
   const DEL_CHUNK = 200;
 
   if (hasAccountName) {
-    // Group rows by account_name to delete only their own data
+    // Group rows by account_id (preferred) or account_name
+    const hasAccountId = rows.some((r) => r.account_id != null);
     const accountGroups = new Map<string, string[]>();
     for (const row of rows) {
-      const account = String(row.account_name ?? "");
+      const account = String(hasAccountId ? (row.account_id ?? "") : (row.account_name ?? ""));
       const adId = String(row.ad_id ?? "");
       if (!accountGroups.has(account)) accountGroups.set(account, []);
       accountGroups.get(account)!.push(adId);
@@ -476,7 +477,7 @@ async function deleteAndInsert(
         const { error: delErr } = await supabase
           .from(table)
           .delete()
-          .eq("account_name", account)
+          .eq(hasAccountId ? "account_id" : "account_name", account)
           .gte("date_start", since)
           .lte("date_start", until)
           .in("ad_id", chunk);

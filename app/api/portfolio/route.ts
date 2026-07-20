@@ -182,7 +182,11 @@ export async function GET(req: NextRequest) {
     const a = { ...EMPTY_AGG };
     for (const r of rows) {
       if (r.account_id !== accountId) continue;
-      if (campaignPrefix && !(r.campaign_name as string ?? "").startsWith(campaignPrefix)) continue;
+      if (campaignPrefix) {
+        const prefixes = campaignPrefix.split(",").map((p) => p.trim()).filter(Boolean);
+        const name = (r.campaign_name as string) ?? "";
+        if (!prefixes.some((p) => name.startsWith(p))) continue;
+      }
       a.spend    += Number(r.spend ?? 0);
       a.impressions += Number(r.impressions ?? 0);
       a.clicks   += Number(r.clicks_all ?? 0);

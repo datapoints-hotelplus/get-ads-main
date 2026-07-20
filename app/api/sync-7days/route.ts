@@ -403,7 +403,7 @@ async function deleteAndInsert(
   const supabase = getSupabase();
   const accountGroups = new Map<string, string[]>();
   for (const row of rows) {
-    const account = String(row.account_name ?? "");
+    const account = String(row.account_id ?? row.account_name ?? "");
     const adId = String(row.ad_id ?? "");
     if (!accountGroups.has(account)) accountGroups.set(account, []);
     accountGroups.get(account)!.push(adId);
@@ -414,10 +414,12 @@ async function deleteAndInsert(
     const uniqueAdIds = [...new Set(adIds)];
     for (let i = 0; i < uniqueAdIds.length; i += DEL_CHUNK) {
       const chunk = uniqueAdIds.slice(i, i + DEL_CHUNK);
+      // ponytail: prefer account_id if available (immune to name changes), fall back to account_name
+      const hasAccountId = rows.some((r) => r.account_id != null);
       const { error: delErr } = await supabase
         .from(table)
         .delete()
-        .eq("account_name", account)
+        .eq(hasAccountId ? "account_id" : "account_name", account)
         .gte("date_start", since)
         .lte("date_start", until)
         .in("ad_id", chunk);
@@ -566,10 +568,16 @@ export async function runSync(
 
 export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
     const today = new Date().toLocaleDateString("en-CA", {
       timeZone: "Asia/Bangkok",
     });
-    const result = await runSync(today, today, "sync-today");
+    const since28 = new Date();
+    since28.setDate(since28.getDate() - 28);
+    const defaultSince = since28.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
+    const since = searchParams.get("since") ?? defaultSince;
+    const until = searchParams.get("until") ?? today;
+    const result = await runSync(since, until, "sync-today");
     const response = { success: true, ...result };
 
     // Send notification to webhook
