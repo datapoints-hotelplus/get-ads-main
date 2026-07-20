@@ -43,7 +43,7 @@ const METRICS = [
   { value: "leads", label: "Leads" },
   { value: "messages", label: "Messages" },
   { value: "purchases", label: "Purchases" },
-  { value: "purchase_value", label: "Purchase Value" },
+  { value: "purchase_value", label: "Purchase Value" }, 
   { value: "cost_per_lead", label: "Cost per Lead" },
   { value: "cost_per_message", label: "Cost per Message" },
   { value: "cost_per_purchase", label: "Cost per Purchase" },

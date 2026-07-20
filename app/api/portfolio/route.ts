@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
   if (dateFrom) q = q.gte("date_start", dateFrom);
   if (dateTo) q = q.lte("date_start", dateTo);
 
-  const allRaw: typeof raw = [];
+  const allRaw: Record<string, unknown>[] = [];
   let offset = 0;
   const CHUNK = 1000;
   while (true) {
