@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
-import { fetchAccountCampaignInsights, type CampaignInsightRow } from "@/lib/facebook";
+import {
+  fetchAccountCampaignInsights,
+  fetchAccountReachByAccount,
+  type CampaignInsightRow,
+} from "@/lib/facebook";
 import { getFacebookAccessToken } from "@/lib/facebook-token";
 
 // GET /api/portfolio?profile_id=&dateFrom=&dateTo=&account_ids=id1&account_ids=id2
@@ -226,28 +230,26 @@ export async function GET(req: NextRequest) {
     return a;
   }
 
-  // ONE FB call per account (level=campaign, all in parallel → latency ≈ one call)
-  // gives per-campaign reach, impressions, spend and FB's objective-aware
-  // cost_per_result. From it we derive:
-  //  - FQ: account-wide reach/impressions (Ads Manager dedup; summed daily reach
-  //    is inflated, pinning FQ near 1.0)
-  //  - cost_per_result: total_spend/total_results over campaigns matching a prefix
+  // Two FB calls per account, all in parallel → latency ≈ one call:
+  //  - level=account reach/impressions → FQ that matches Ads Manager EXACTLY
+  //    (FB dedups a person seen across campaigns/days; only account level does this)
+  //  - level=campaign spend + objective-aware cost_per_result → CPR by name prefix
   let fbInsights = new Map<string, CampaignInsightRow[]>();
+  let fbReach = new Map<string, { reach: number; impressions: number }>();
   if (dateFrom && dateTo) {
     try {
       const token = await getFacebookAccessToken();
       if (token) {
-        fbInsights = await fetchAccountCampaignInsights(accountIds, token, dateFrom, dateTo);
+        [fbReach, fbInsights] = await Promise.all([
+          fetchAccountReachByAccount(accountIds, token, dateFrom, dateTo),
+          fetchAccountCampaignInsights(accountIds, token, dateFrom, dateTo),
+        ]);
         for (const acctId of accountIds) {
-          const camps = fbInsights.get(acctId);
+          const fb = fbReach.get(acctId);
           const a = agg.get(acctId.replace(/^act_/, ""));
-          if (a && camps && camps.length) {
-            const reach = camps.reduce((s, c) => s + c.reach, 0);
-            const impressions = camps.reduce((s, c) => s + c.impressions, 0);
-            if (reach > 0) {
-              a.reach = reach;
-              a.impressions = impressions; // same source as reach → consistent FQ
-            }
+          if (a && fb && fb.reach > 0) {
+            a.reach = fb.reach;
+            a.impressions = fb.impressions; // account-level, same source as reach
           }
         }
       }

@@ -215,6 +215,43 @@ export async function fetchAccountReachAndClicks(
   };
 }
 
+/**
+ * Fetch account-level unique reach + impressions PER account (level=account,
+ * time_increment=all_days) so FB dedups a person seen across campaigns/days.
+ * This is the ONLY level that yields FQ matching Ads Manager exactly.
+ * Returns Map<accountId, {reach, impressions}>.
+ */
+export async function fetchAccountReachByAccount(
+  accountIds: string[],
+  accessToken: string,
+  since: string,
+  until: string,
+): Promise<Map<string, { reach: number; impressions: number }>> {
+  const timeRange = encodeURIComponent(JSON.stringify({ since, until }));
+  const out = new Map<string, { reach: number; impressions: number }>();
+
+  await Promise.all(
+    accountIds.map(async (accountId) => {
+      const url =
+        `${FB_GRAPH_API_V25}/${accountId}/insights` +
+        `?fields=reach,impressions&time_range=${timeRange}` +
+        `&level=account&time_increment=all_days&access_token=${accessToken}`;
+      const res: {
+        data: { data?: { reach?: string; impressions?: string }[] };
+      } = await axios.get(url);
+      let reach = 0;
+      let impressions = 0;
+      for (const item of res.data.data ?? []) {
+        reach += parseInt(String(item.reach ?? "0"), 10);
+        impressions += parseInt(String(item.impressions ?? "0"), 10);
+      }
+      out.set(accountId, { reach, impressions });
+    }),
+  );
+
+  return out;
+}
+
 export type CampaignInsightRow = {
   campaign_name: string;
   spend: number;
