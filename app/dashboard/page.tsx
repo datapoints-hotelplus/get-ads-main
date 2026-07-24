@@ -1182,7 +1182,7 @@ export default function DashboardPage() {
     if (upper.startsWith("MES"))
       return ["messages", "cost_per_message", "ctr", "clicks", "spend"];
     if (upper.startsWith("AWN"))
-      return ["reach", "cpm", "impressions", "spend"];
+      return ["reach", "cpm", "impressions", "spend","cost_per_result"];
     if (upper.startsWith("ENG"))
       return [
         "post_engagement",

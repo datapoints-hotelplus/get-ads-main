@@ -215,6 +215,70 @@ export async function fetchAccountReachAndClicks(
   };
 }
 
+export type CampaignInsightRow = {
+  campaign_name: string;
+  spend: number;
+  reach: number;
+  impressions: number;
+  cost_per_result: number;
+};
+
+/**
+ * Fetch per-campaign insights for each account in ONE call/account (level=campaign,
+ * time_increment=all_days). Returns reach, impressions, spend, and FB's
+ * objective-aware cost_per_result (the Ads Manager "Cost per result" column) per
+ * campaign. The caller derives everything from this:
+ *   - FQ: sum reach/impressions across campaigns
+ *   - cost_per_result by campaign-name prefix: total_spend / total_results
+ * Returns Map<accountId, CampaignInsightRow[]>.
+ */
+export async function fetchAccountCampaignInsights(
+  accountIds: string[],
+  accessToken: string,
+  since: string,
+  until: string,
+): Promise<Map<string, CampaignInsightRow[]>> {
+  const timeRange = encodeURIComponent(JSON.stringify({ since, until }));
+  const out = new Map<string, CampaignInsightRow[]>();
+
+  await Promise.all(
+    accountIds.map(async (accountId) => {
+      let url: string | null =
+        `${FB_GRAPH_API_V25}/${accountId}/insights` +
+        `?fields=campaign_name,spend,reach,impressions,cost_per_result&time_range=${timeRange}` +
+        `&level=campaign&time_increment=all_days&limit=500&access_token=${accessToken}`;
+      const rows: CampaignInsightRow[] = [];
+      while (url) {
+        const res: {
+          data: {
+            data?: {
+              campaign_name?: string;
+              spend?: string;
+              reach?: string;
+              impressions?: string;
+              cost_per_result?: { values?: { value?: string }[] }[];
+            }[];
+            paging?: { next?: string };
+          };
+        } = await axios.get(url);
+        for (const item of res.data.data ?? []) {
+          rows.push({
+            campaign_name: String(item.campaign_name ?? ""),
+            spend: parseFloat(item.spend ?? "0") || 0,
+            reach: parseInt(String(item.reach ?? "0"), 10),
+            impressions: parseInt(String(item.impressions ?? "0"), 10),
+            cost_per_result: parseFloat(item.cost_per_result?.[0]?.values?.[0]?.value ?? "0") || 0,
+          });
+        }
+        url = res.data.paging?.next ?? null;
+      }
+      out.set(accountId, rows);
+    }),
+  );
+
+  return out;
+}
+
 /**
  * Fetch total leads for a list of ad account IDs directly from Facebook Insights API.
  * - time_increment=all_days  → one row per account for the whole period (no daily summing / no overlap)

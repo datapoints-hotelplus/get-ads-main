@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
+import { fetchAccountCampaignInsights, type CampaignInsightRow } from "@/lib/facebook";
+import { getFacebookAccessToken } from "@/lib/facebook-token";
 
 // GET /api/portfolio?profile_id=&dateFrom=&dateTo=&account_ids=id1&account_ids=id2
 // account_ids overrides the profile preset when provided
@@ -80,6 +82,7 @@ export async function GET(req: NextRequest) {
     video_views_3s: number; video_p25: number; video_p50: number; video_p75: number;
     video_p100: number; video_avg_time: number; hook_rate: number; hold_rate: number;
     cost_per_result: number; rows: number;
+    fb_cost_per_result?: number;
   };
   const agg = new Map<string, Agg>();
   for (const r of raw ?? []) {
@@ -150,7 +153,7 @@ export async function GET(req: NextRequest) {
       case "video_avg_time": return a.video_avg_time / n;
       case "hook_rate":    return a.hook_rate / n;
       case "hold_rate":    return a.hold_rate / n;
-      case "frequency":    return a.rows > 0 ? a.frequency / a.rows : null;
+      case "frequency":    return a.reach > 0 ? a.impressions / a.reach : null;
       // calculated from totals (weighted)
       case "roas":         return a.spend > 0 ? a.purchase_value / a.spend : null;
       case "cpc":          return a.clicks > 0 ? a.spend / a.clicks : null;
@@ -162,7 +165,10 @@ export async function GET(req: NextRequest) {
       case "cost_per_purchase": return a.purchases > 0 ? a.spend / a.purchases : null;
       case "cost_per_engagement": return a.post_engagement > 0 ? a.spend / a.post_engagement : null;
       case "cost_per_like": return a.page_likes > 0 ? a.spend / a.page_likes : null;
-      case "cost_per_result": return a.rows > 0 ? a.cost_per_result / a.rows : null;
+      case "cost_per_result":
+        // Prefer FB's objective-aware value (matches Ads Manager); fall back to DB avg.
+        if (a.fb_cost_per_result != null) return a.fb_cost_per_result;
+        return a.rows > 0 ? a.cost_per_result / a.rows : null;
       default: return null;
     }
   }
@@ -220,12 +226,65 @@ export async function GET(req: NextRequest) {
     return a;
   }
 
+  // ONE FB call per account (level=campaign, all in parallel → latency ≈ one call)
+  // gives per-campaign reach, impressions, spend and FB's objective-aware
+  // cost_per_result. From it we derive:
+  //  - FQ: account-wide reach/impressions (Ads Manager dedup; summed daily reach
+  //    is inflated, pinning FQ near 1.0)
+  //  - cost_per_result: total_spend/total_results over campaigns matching a prefix
+  let fbInsights = new Map<string, CampaignInsightRow[]>();
+  if (dateFrom && dateTo) {
+    try {
+      const token = await getFacebookAccessToken();
+      if (token) {
+        fbInsights = await fetchAccountCampaignInsights(accountIds, token, dateFrom, dateTo);
+        for (const acctId of accountIds) {
+          const camps = fbInsights.get(acctId);
+          const a = agg.get(acctId.replace(/^act_/, ""));
+          if (a && camps && camps.length) {
+            const reach = camps.reduce((s, c) => s + c.reach, 0);
+            const impressions = camps.reduce((s, c) => s + c.impressions, 0);
+            if (reach > 0) {
+              a.reach = reach;
+              a.impressions = impressions; // same source as reach → consistent FQ
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error("[portfolio] FB override failed, using DB values", e);
+    }
+  }
+
+  // Weighted cost_per_result across the campaigns whose name matches a prefix:
+  // total spend / total results, where results = spend / cpr per campaign.
+  function fbCostPerResult(acctId: string, campaignPrefix: string | null): number | null {
+    const camps = fbInsights.get(acctId);
+    if (!camps) return null;
+    const prefixes = (campaignPrefix ?? "").split(",").map((p) => p.trim()).filter(Boolean);
+    let spend = 0;
+    let results = 0;
+    for (const c of camps) {
+      if (prefixes.length && !prefixes.some((p) => c.campaign_name.startsWith(p))) continue;
+      if (c.cost_per_result > 0) {
+        spend += c.spend;
+        results += c.spend / c.cost_per_result;
+      }
+    }
+    return results > 0 ? spend / results : null;
+  }
+
   const rows = rawAccountIds.map((rawId, i) => {
+    const acctId = accountIds[i];
     const baseAgg = agg.get(rawId) ?? { ...EMPTY_AGG };
     const metrics: Record<string, number | null> = {};
     for (const t of templates ?? []) {
       const filter = (t as Record<string, unknown>).campaign_filter as string | null ?? null;
       const a = filter ? buildAgg(raw, rawId, filter) : baseAgg;
+      if (t.metric === "cost_per_result") {
+        const fbVal = fbCostPerResult(acctId, filter);
+        a.fb_cost_per_result = fbVal ?? undefined; // falls back to DB avg when null
+      }
       metrics[t.id] = getMetricValue(t.metric, a);
     }
     return { account_name: accountLabels[i], spend: baseAgg.spend, clicks: baseAgg.clicks, impressions: baseAgg.impressions, reach: baseAgg.reach, leads: baseAgg.leads, messages: baseAgg.messages, purchases: baseAgg.purchases, purchase_value: baseAgg.purchase_value, metrics };
