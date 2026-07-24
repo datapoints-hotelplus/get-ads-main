@@ -150,7 +150,7 @@ export async function GET(req: NextRequest) {
       case "video_avg_time": return a.video_avg_time / n;
       case "hook_rate":    return a.hook_rate / n;
       case "hold_rate":    return a.hold_rate / n;
-      case "frequency":    return a.impressions > 0 ? a.impressions / a.reach : null;
+      case "frequency":    return a.rows > 0 ? a.frequency / a.rows : null;
       // calculated from totals (weighted)
       case "roas":         return a.spend > 0 ? a.purchase_value / a.spend : null;
       case "cpc":          return a.clicks > 0 ? a.spend / a.clicks : null;
@@ -180,6 +180,7 @@ export async function GET(req: NextRequest) {
 
   function buildAgg(rows: Record<string, unknown>[], accountId: string, campaignPrefix: string | null): Agg {
     const a = { ...EMPTY_AGG };
+    let matched = 0;
     for (const r of rows) {
       if (r.account_id !== accountId) continue;
       if (campaignPrefix) {
@@ -187,6 +188,7 @@ export async function GET(req: NextRequest) {
         const name = (r.campaign_name as string) ?? "";
         if (!prefixes.some((p) => name.startsWith(p))) continue;
       }
+      matched++;
       a.spend    += Number(r.spend ?? 0);
       a.impressions += Number(r.impressions ?? 0);
       a.clicks   += Number(r.clicks_all ?? 0);
@@ -214,6 +216,7 @@ export async function GET(req: NextRequest) {
       a.cost_per_result += Number(r.cost_per_result ?? 0);
       a.rows += 1;
     }
+    console.log(`[buildAgg] account=${accountId} filter=${campaignPrefix} matched=${matched} spend=${a.spend} page_likes=${a.page_likes}`);
     return a;
   }
 

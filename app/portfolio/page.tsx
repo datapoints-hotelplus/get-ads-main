@@ -65,7 +65,7 @@ function fmt(v: number | null, metric: string): string {
   if (pct.includes(metric)) return v.toFixed(2) + "%";
   if (currency.includes(metric)) return v.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   if (metric === "roas") return v.toFixed(2) + "x";
-  return v.toLocaleString("th-TH", { maximumFractionDigits: 0 });
+  return v.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 // ── Template icon & color palette ───────────────────────────────────────────
