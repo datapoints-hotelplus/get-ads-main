@@ -3,6 +3,9 @@ import { getSupabase } from "@/lib/supabase";
 import {
   fetchAccountCampaignInsights,
   fetchAccountReachByAccount,
+  fetchDedupedCostPerResult,
+  __resetFbReqCount,
+  __getFbReqCount,
   type CampaignInsightRow,
 } from "@/lib/facebook";
 import { getFacebookAccessToken } from "@/lib/facebook-token";
@@ -50,6 +53,13 @@ export async function GET(req: NextRequest) {
     .eq("is_active", true)
     .order("account_name");
   const allAccounts = allAccountRows ?? [];
+
+  // Lightweight mode: return only what the filter UI needs (templates, preset,
+  // account list) without the expensive rawdata + FB insight work. Used on first
+  // page load / profile switch so nothing is fetched until the user hits Search.
+  if (searchParams.get("meta") === "1") {
+    return NextResponse.json({ templates, profile, rows: [], presetIds, allAccounts });
+  }
 
   if (accountIds.length === 0) return NextResponse.json({ templates, profile, rows: [], presetIds, allAccounts });
 
@@ -197,7 +207,6 @@ export async function GET(req: NextRequest) {
 
   function buildAgg(rows: Record<string, unknown>[], accountId: string, campaignPrefix: string | null): Agg {
     const a = { ...EMPTY_AGG };
-    let matched = 0;
     for (const r of rows) {
       if (r.account_id !== accountId) continue;
       if (campaignPrefix) {
@@ -205,7 +214,6 @@ export async function GET(req: NextRequest) {
         const name = (r.campaign_name as string) ?? "";
         if (!prefixes.some((p) => name.startsWith(p))) continue;
       }
-      matched++;
       a.spend    += Number(r.spend ?? 0);
       a.impressions += Number(r.impressions ?? 0);
       a.clicks   += Number(r.clicks_all ?? 0);
@@ -233,7 +241,6 @@ export async function GET(req: NextRequest) {
       a.cost_per_result += Number(r.cost_per_result ?? 0);
       a.rows += 1;
     }
-    console.log(`[buildAgg] account=${accountId} filter=${campaignPrefix} matched=${matched} spend=${a.spend} page_likes=${a.page_likes}`);
     return a;
   }
 
@@ -243,13 +250,15 @@ export async function GET(req: NextRequest) {
   //  - level=campaign spend + objective-aware cost_per_result → CPR by name prefix
   let fbInsights = new Map<string, CampaignInsightRow[]>();
   let fbReach = new Map<string, { reach: number; impressions: number }>();
+  let fbToken = "";
+  __resetFbReqCount();
   if (dateFrom && dateTo) {
     try {
-      const token = await getFacebookAccessToken();
-      if (token) {
+      fbToken = await getFacebookAccessToken();
+      if (fbToken) {
         [fbReach, fbInsights] = await Promise.all([
-          fetchAccountReachByAccount(accountIds, token, dateFrom, dateTo),
-          fetchAccountCampaignInsights(accountIds, token, dateFrom, dateTo),
+          fetchAccountReachByAccount(accountIds, fbToken, dateFrom, dateTo),
+          fetchAccountCampaignInsights(accountIds, fbToken, dateFrom, dateTo),
         ]);
         for (const acctId of accountIds) {
           const fb = fbReach.get(acctId);
@@ -265,20 +274,61 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Weighted cost_per_result across the campaigns whose name matches a prefix:
-  // total spend / total results, where results = spend / cpr per campaign.
-  function fbCostPerResult(acctId: string, campaignPrefix: string | null): number | null {
+  // Campaigns (from live FB, so immune to stale synced names) whose name starts
+  // with any comma-separated prefix in the template filter.
+  function matchCampaigns(acctId: string, campaignPrefix: string | null): CampaignInsightRow[] {
     const camps = fbInsights.get(acctId);
-    if (!camps) return null;
+    if (!camps) return [];
     const prefixes = (campaignPrefix ?? "").split(",").map((p) => p.trim()).filter(Boolean);
+    if (!prefixes.length) return camps;
+    return camps.filter((c) => prefixes.some((p) => c.campaign_name.startsWith(p)));
+  }
+
+  // Pre-fetch DEDUPED account-level cost_per_result for every (account, filter)
+  // that maps to 2+ campaigns. Summing per-campaign results over-counts shared
+  // results (e.g. reach), so a single account-level call per such pair gives the
+  // value Ads Manager shows. Single-campaign pairs need no extra call.
+  const dedupedCpr = new Map<string, number | null>(); // key: `${acctId}|${filter}`
+  if (fbToken && dateFrom && dateTo) {
+    const filters = new Set<string>();
+    for (const t of templates ?? []) {
+      if (!t.metric.startsWith("cost_per_")) continue;
+      filters.add(((t as Record<string, unknown>).campaign_filter as string | null) ?? "");
+    }
+    const jobs: Promise<void>[] = [];
+    for (const acctId of accountIds) {
+      for (const filter of filters) {
+        const camps = matchCampaigns(acctId, filter || null);
+        if (camps.length < 2) continue; // single campaign is already deduped
+        const ids = camps.map((c) => c.campaign_id).filter(Boolean);
+        const key = `${acctId}|${filter}`;
+        jobs.push(
+          fetchDedupedCostPerResult(acctId, ids, fbToken, dateFrom, dateTo)
+            .then((v) => { dedupedCpr.set(key, v); })
+            .catch(() => { dedupedCpr.set(key, null); }),
+        );
+      }
+    }
+    await Promise.all(jobs);
+  }
+
+  // Objective-aware cost_per_result for the campaigns matching a prefix, matching
+  // Ads Manager: single campaign → its own deduped value; multiple → the
+  // account-level deduped value fetched above (falls back to Σspend/Σresults).
+  function fbCostPerResult(acctId: string, campaignPrefix: string | null): number | null {
+    const camps = matchCampaigns(acctId, campaignPrefix);
+    if (camps.length === 0) return null;
+    if (camps.length === 1) {
+      return camps[0].cost_per_result > 0 ? camps[0].cost_per_result : null;
+    }
+    const deduped = dedupedCpr.get(`${acctId}|${campaignPrefix ?? ""}`);
+    if (deduped != null) return deduped;
+    // Fallback: total spend / total results (uses FB's results field directly).
     let spend = 0;
     let results = 0;
     for (const c of camps) {
-      if (prefixes.length && !prefixes.some((p) => c.campaign_name.startsWith(p))) continue;
-      if (c.cost_per_result > 0) {
-        spend += c.spend;
-        results += c.spend / c.cost_per_result;
-      }
+      spend += c.spend;
+      results += c.results;
     }
     return results > 0 ? spend / results : null;
   }
@@ -303,6 +353,6 @@ export async function GET(req: NextRequest) {
     return { account_name: accountLabels[i], spend: baseAgg.spend, clicks: baseAgg.clicks, impressions: baseAgg.impressions, reach: baseAgg.reach, leads: baseAgg.leads, messages: baseAgg.messages, purchases: baseAgg.purchases, purchase_value: baseAgg.purchase_value, metrics };
   });
 
-  return NextResponse.json({ templates, profile, rows, presetIds, allAccounts });
+  return NextResponse.json({ templates, profile, rows, presetIds, allAccounts, __fbReq: __getFbReqCount() });
 }
 

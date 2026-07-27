@@ -1,5 +1,10 @@
 import axios from "axios";
 
+// TEMP instrumentation: count Graph API requests made by portfolio functions.
+let __fbReqCount = 0;
+export function __resetFbReqCount() { __fbReqCount = 0; }
+export function __getFbReqCount() { return __fbReqCount; }
+
 interface FacebookPageData {
   id: string;
   name: string;
@@ -236,6 +241,7 @@ export async function fetchAccountReachByAccount(
         `${FB_GRAPH_API_V25}/${accountId}/insights` +
         `?fields=reach,impressions&time_range=${timeRange}` +
         `&level=account&time_increment=all_days&access_token=${accessToken}`;
+      __fbReqCount++;
       const res: {
         data: { data?: { reach?: string; impressions?: string }[] };
       } = await axios.get(url);
@@ -253,11 +259,13 @@ export async function fetchAccountReachByAccount(
 }
 
 export type CampaignInsightRow = {
+  campaign_id: string;
   campaign_name: string;
   spend: number;
   reach: number;
   impressions: number;
   cost_per_result: number;
+  results: number;
 };
 
 /**
@@ -282,29 +290,34 @@ export async function fetchAccountCampaignInsights(
     accountIds.map(async (accountId) => {
       let url: string | null =
         `${FB_GRAPH_API_V25}/${accountId}/insights` +
-        `?fields=campaign_name,spend,reach,impressions,cost_per_result&time_range=${timeRange}` +
+        `?fields=campaign_id,campaign_name,spend,reach,impressions,cost_per_result,results&time_range=${timeRange}` +
         `&level=campaign&time_increment=all_days&limit=500&access_token=${accessToken}`;
       const rows: CampaignInsightRow[] = [];
       while (url) {
+        __fbReqCount++;
         const res: {
           data: {
             data?: {
+              campaign_id?: string;
               campaign_name?: string;
               spend?: string;
               reach?: string;
               impressions?: string;
               cost_per_result?: { values?: { value?: string }[] }[];
+              results?: { values?: { value?: string }[] }[];
             }[];
             paging?: { next?: string };
           };
         } = await axios.get(url);
         for (const item of res.data.data ?? []) {
           rows.push({
+            campaign_id: String(item.campaign_id ?? ""),
             campaign_name: String(item.campaign_name ?? ""),
             spend: parseFloat(item.spend ?? "0") || 0,
             reach: parseInt(String(item.reach ?? "0"), 10),
             impressions: parseInt(String(item.impressions ?? "0"), 10),
             cost_per_result: parseFloat(item.cost_per_result?.[0]?.values?.[0]?.value ?? "0") || 0,
+            results: parseFloat(item.results?.[0]?.values?.[0]?.value ?? "0") || 0,
           });
         }
         url = res.data.paging?.next ?? null;
@@ -314,6 +327,41 @@ export async function fetchAccountCampaignInsights(
   );
 
   return out;
+}
+
+/**
+ * Fetch the account-level, DEDUPED objective-aware cost_per_result across a
+ * specific set of campaigns (by id). This matches the Ads Manager "Cost per
+ * result" shown when several campaigns are selected together, because FB dedups
+ * shared results (e.g. a person reached by two reach campaigns is counted once).
+ * Summing per-campaign reach/results instead over-counts and skews the cost.
+ *
+ * Only needed when a name-prefix maps to 2+ campaigns; a single campaign's
+ * campaign-level value is already deduped. Returns null if FB has no result.
+ */
+export async function fetchDedupedCostPerResult(
+  accountId: string,
+  campaignIds: string[],
+  accessToken: string,
+  since: string,
+  until: string,
+): Promise<number | null> {
+  if (campaignIds.length === 0) return null;
+  const timeRange = encodeURIComponent(JSON.stringify({ since, until }));
+  const filtering = encodeURIComponent(
+    JSON.stringify([{ field: "campaign.id", operator: "IN", value: campaignIds }]),
+  );
+  const url =
+    `${FB_GRAPH_API_V25}/${accountId}/insights` +
+    `?fields=cost_per_result&time_range=${timeRange}` +
+    `&level=account&filtering=${filtering}&time_increment=all_days&access_token=${accessToken}`;
+  __fbReqCount++;
+  const res: {
+    data: { data?: { cost_per_result?: { values?: { value?: string }[] }[] }[] };
+  } = await axios.get(url);
+  const val = res.data.data?.[0]?.cost_per_result?.[0]?.values?.[0]?.value;
+  const parsed = parseFloat(val ?? "");
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
 /**

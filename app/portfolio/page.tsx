@@ -418,24 +418,21 @@ export default function PortfolioPage() {
       });
   }, []);
 
-  // When profile changes — fetch data and pre-fill accounts from preset
+  // When profile changes — load ONLY the filter metadata (account list + preset).
+  // No metrics are fetched here; the user must hit "ค้นหา" to run the report.
   useEffect(() => {
     if (!selectedProfile) return;
-    setLoading(true);
     setError("");
-    const params = new URLSearchParams({ profile_id: selectedProfile, dateFrom, dateTo });
-    // pass currently selected accounts as override (empty = use preset on first load)
+    setData(null); // clear any previous report until the user searches again
+    const params = new URLSearchParams({ profile_id: selectedProfile, meta: "1" });
     fetch(`/api/portfolio?${params}`)
       .then((r) => r.json())
       .then((d) => {
         if (d.error) { setError(d.error); return; }
-        setData(d);
         setAllAccounts(d.allAccounts ?? []);
         // pre-fill from preset on profile switch
         setSelectedAccounts(new Set(d.presetIds ?? []));
-      })
-      .finally(() => setLoading(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+      });
   }, [selectedProfile]);
 
   function handleSearch() {
