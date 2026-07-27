@@ -7,6 +7,10 @@ import {
 } from "@/lib/facebook";
 import { getFacebookAccessToken } from "@/lib/facebook-token";
 
+// Always compute fresh — results depend on live FB insights and query params,
+// so Next.js must not cache the route response.
+export const dynamic = "force-dynamic";
+
 // GET /api/portfolio?profile_id=&dateFrom=&dateTo=&account_ids=id1&account_ids=id2
 // account_ids overrides the profile preset when provided
 export async function GET(req: NextRequest) {
@@ -133,6 +137,11 @@ export async function GET(req: NextRequest) {
 
   function getMetricValue(metric: string, a: Agg): number | null {
     const n = a.rows || 1; // number of rows for averaging
+    // All cost-per-X metrics come from FB's objective-aware cost_per_result when
+    // FB returned a value for this account (matches Ads Manager exactly).
+    if (metric.startsWith("cost_per_") && a.fb_cost_per_result != null) {
+      return a.fb_cost_per_result;
+    }
     switch (metric) {
       case "spend":        return a.spend;
       case "impressions":  return a.impressions;
@@ -170,8 +179,6 @@ export async function GET(req: NextRequest) {
       case "cost_per_engagement": return a.post_engagement > 0 ? a.spend / a.post_engagement : null;
       case "cost_per_like": return a.page_likes > 0 ? a.spend / a.page_likes : null;
       case "cost_per_result":
-        // Prefer FB's objective-aware value (matches Ads Manager); fall back to DB avg.
-        if (a.fb_cost_per_result != null) return a.fb_cost_per_result;
         return a.rows > 0 ? a.cost_per_result / a.rows : null;
       default: return null;
     }
@@ -283,9 +290,13 @@ export async function GET(req: NextRequest) {
     for (const t of templates ?? []) {
       const filter = (t as Record<string, unknown>).campaign_filter as string | null ?? null;
       const a = filter ? buildAgg(raw, rawId, filter) : baseAgg;
-      if (t.metric === "cost_per_result") {
+      // Every cost-per-X metric: prefer FB's objective-aware cost_per_result
+      // (matches Ads Manager) over the DB-derived spend/count, which is skewed
+      // because synced result counts (messages/engagement/likes) differ slightly
+      // from FB's. Falls back to the DB value when FB has no result.
+      if (t.metric.startsWith("cost_per_")) {
         const fbVal = fbCostPerResult(acctId, filter);
-        a.fb_cost_per_result = fbVal ?? undefined; // falls back to DB avg when null
+        if (fbVal != null) a.fb_cost_per_result = fbVal;
       }
       metrics[t.id] = getMetricValue(t.metric, a);
     }
