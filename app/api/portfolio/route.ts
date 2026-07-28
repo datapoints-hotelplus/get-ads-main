@@ -77,6 +77,10 @@ export async function GET(req: NextRequest) {
     .in("account_id", rawAccountIds);
   if (dateFrom) q = q.gte("date_start", dateFrom);
   if (dateTo) q = q.lte("date_start", dateTo);
+  // Stable order is REQUIRED for .range() pagination — without it Supabase does
+  // not guarantee a consistent row order across pages, so rows can be dropped or
+  // duplicated at page boundaries (e.g. a whole account vanishing from the agg).
+  q = q.order("id", { ascending: true });
 
   const allRaw: Record<string, unknown>[] = [];
   let offset = 0;
