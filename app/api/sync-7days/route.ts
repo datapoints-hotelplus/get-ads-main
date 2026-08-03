@@ -485,18 +485,33 @@ export async function runSync(
   since: string,
   until: string,
   label = "sync",
-): Promise<{ since: string; until: string; accounts: SyncSummaryItem[] }> {
+  opts: { offset?: number; limit?: number } = {},
+): Promise<{
+  since: string;
+  until: string;
+  accounts: SyncSummaryItem[];
+  total: number;
+  offset: number;
+  nextOffset: number | null;
+  done: boolean;
+}> {
   // Proactively refresh token on every sync call
   console.log(`[${label}] Refreshing token before sync...`);
   const refreshed = await refreshFacebookToken();
   // Mutable ref so a mid-run refresh propagates to subsequent fetchRange calls.
   const tokenRef = { current: refreshed.access_token };
 
-  const accounts = await getAccountIds();
-  if (accounts.length === 0) throw new Error("ไม่พบ Active Account");
+  const allAccounts = await getAccountIds();
+  if (allAccounts.length === 0) throw new Error("ไม่พบ Active Account");
+
+  // Batch slice — serverless (Vercel Hobby = 10s hard cap) can't sync all accounts
+  // in one invocation. Caller pages through with ?offset=&limit=.
+  const offset = opts.offset ?? 0;
+  const accounts =
+    opts.limit != null ? allAccounts.slice(offset, offset + opts.limit) : allAccounts;
 
   console.log(
-    `\n[${label}] START — ${since} → ${until}, ${accounts.length} accounts`,
+    `\n[${label}] START — ${since} → ${until}, ${accounts.length}/${allAccounts.length} accounts (offset ${offset})`,
   );
 
   const summary: SyncSummaryItem[] = [];
@@ -557,11 +572,21 @@ export async function runSync(
       });
     }
 
-    if (idx < accounts.length - 1) await sleep(3000);
+    if (idx < accounts.length - 1) await sleep(1000);
   }
 
-  console.log(`[${label}] DONE ✓\n`);
-  return { since, until, accounts: summary };
+  const nextOffset = offset + accounts.length;
+  const done = nextOffset >= allAccounts.length;
+  console.log(`[${label}] DONE ✓ (offset ${offset}→${nextOffset}/${allAccounts.length})\n`);
+  return {
+    since,
+    until,
+    accounts: summary,
+    total: allAccounts.length,
+    offset,
+    nextOffset: done ? null : nextOffset,
+    done,
+  };
 }
 
 // ─── GET handler — ดึงข้อมูลวันนี้ (00:00–ตอนนี้) ───────────────────────────
@@ -573,12 +598,20 @@ export async function GET(request: Request) {
       timeZone: "Asia/Bangkok",
     });
     const since3 = new Date();
-    since3.setDate(since3.getDate() - 3);
+    since3.setDate(since3.getDate() - 1);
     const defaultSince = since3.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
     const since = searchParams.get("since") ?? defaultSince;
     const until = searchParams.get("until") ?? today;
-    const result = await runSync(since, until, "sync-today");
+    const offsetParam = searchParams.get("offset");
+    const limitParam = searchParams.get("limit");
+    const result = await runSync(since, until, "sync-today", {
+      offset: offsetParam != null ? parseInt(offsetParam, 10) : undefined,
+      limit: limitParam != null ? parseInt(limitParam, 10) : undefined,
+    });
     const response = { success: true, ...result };
+
+    // Notify + trigger resync only after the FINAL batch (or a full non-batched run).
+    if (!result.done) return NextResponse.json(response);
 
     // Send notification to webhook
     try {
@@ -593,17 +626,6 @@ export async function GET(request: Request) {
       });
     } catch (notifyErr) {
       console.error('[sync-7days] Webhook notification failed:', notifyErr);
-    }
-
-    // Trigger sync-resync after sync-7days completes
-    try {
-      const origin = new URL(request.url).origin;
-      console.log('[sync-7days] Triggering sync-resync...');
-      const resyncRes = await fetch(`${origin}/api/sync-resync`, { method: 'POST' });
-      const resyncData = await resyncRes.json();
-      console.log('[sync-7days] sync-resync response:', resyncData);
-    } catch (resyncErr) {
-      console.error('[sync-7days] Failed to trigger sync-resync:', resyncErr);
     }
 
     return NextResponse.json(response);
