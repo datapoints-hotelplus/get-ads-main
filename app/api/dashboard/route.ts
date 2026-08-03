@@ -75,6 +75,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ highlights: grouped });
     }
 
+    if (type === "latest") {
+      const { data: latestRow } = await supabase
+        .from("ads_rawdata")
+        .select("date_start")
+        .order("date_start", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return NextResponse.json({ latestDate: latestRow?.date_start ?? null });
+    }
+
     if (type === "options") {
       // Return distinct filter values (cascading)
       const selectedAccounts = searchParams.getAll("account");

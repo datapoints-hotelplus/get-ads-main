@@ -1160,6 +1160,15 @@ export default function DashboardPage() {
   const [adRows, setAdRows] = useState<AdGroupRow[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [latestDate, setLatestDate] = useState<string | null>(null);
+
+  // Latest data date — for the footer. Fetched once on mount.
+  useEffect(() => {
+    fetch("/api/dashboard?type=latest")
+      .then((r) => r.json())
+      .then((d) => setLatestDate(d.latestDate ?? null))
+      .catch(() => {});
+  }, []);
   const [count, setCount] = useState(0);
 
   // Geo data state
@@ -2450,6 +2459,12 @@ export default function DashboardPage() {
               </p>
             )}
           </div>
+        )}
+
+        {latestDate && (
+          <p className="text-center text-xs text-gray-400 pt-4">
+            ข้อมูลล่าสุดถึงวันที่ {latestDate}
+          </p>
         )}
       </div>
     </div>
