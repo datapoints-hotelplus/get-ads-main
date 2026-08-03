@@ -485,33 +485,18 @@ export async function runSync(
   since: string,
   until: string,
   label = "sync",
-  opts: { offset?: number; limit?: number } = {},
-): Promise<{
-  since: string;
-  until: string;
-  accounts: SyncSummaryItem[];
-  total: number;
-  offset: number;
-  nextOffset: number | null;
-  done: boolean;
-}> {
+): Promise<{ since: string; until: string; accounts: SyncSummaryItem[] }> {
   // Proactively refresh token on every sync call
   console.log(`[${label}] Refreshing token before sync...`);
   const refreshed = await refreshFacebookToken();
   // Mutable ref so a mid-run refresh propagates to subsequent fetchRange calls.
   const tokenRef = { current: refreshed.access_token };
 
-  const allAccounts = await getAccountIds();
-  if (allAccounts.length === 0) throw new Error("ไม่พบ Active Account");
-
-  // Batch slice — serverless (Vercel Hobby = 10s hard cap) can't sync all accounts
-  // in one invocation. Caller pages through with ?offset=&limit=.
-  const offset = opts.offset ?? 0;
-  const accounts =
-    opts.limit != null ? allAccounts.slice(offset, offset + opts.limit) : allAccounts;
+  const accounts = await getAccountIds();
+  if (accounts.length === 0) throw new Error("ไม่พบ Active Account");
 
   console.log(
-    `\n[${label}] START — ${since} → ${until}, ${accounts.length}/${allAccounts.length} accounts (offset ${offset})`,
+    `\n[${label}] START — ${since} → ${until}, ${accounts.length} accounts`,
   );
 
   const summary: SyncSummaryItem[] = [];
@@ -575,18 +560,8 @@ export async function runSync(
     if (idx < accounts.length - 1) await sleep(1000);
   }
 
-  const nextOffset = offset + accounts.length;
-  const done = nextOffset >= allAccounts.length;
-  console.log(`[${label}] DONE ✓ (offset ${offset}→${nextOffset}/${allAccounts.length})\n`);
-  return {
-    since,
-    until,
-    accounts: summary,
-    total: allAccounts.length,
-    offset,
-    nextOffset: done ? null : nextOffset,
-    done,
-  };
+  console.log(`[${label}] DONE ✓\n`);
+  return { since, until, accounts: summary };
 }
 
 // ─── GET handler — ดึงข้อมูลวันนี้ (00:00–ตอนนี้) ───────────────────────────
@@ -602,16 +577,8 @@ export async function GET(request: Request) {
     const defaultSince = since3.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
     const since = searchParams.get("since") ?? defaultSince;
     const until = searchParams.get("until") ?? today;
-    const offsetParam = searchParams.get("offset");
-    const limitParam = searchParams.get("limit");
-    const result = await runSync(since, until, "sync-today", {
-      offset: offsetParam != null ? parseInt(offsetParam, 10) : undefined,
-      limit: limitParam != null ? parseInt(limitParam, 10) : undefined,
-    });
+    const result = await runSync(since, until, "sync-today");
     const response = { success: true, ...result };
-
-    // Notify + trigger resync only after the FINAL batch (or a full non-batched run).
-    if (!result.done) return NextResponse.json(response);
 
     // Send notification to webhook
     try {
