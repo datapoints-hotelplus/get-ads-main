@@ -113,7 +113,6 @@ function findVideoAction(arr: unknown, type: string): number {
   }
   return 0;
 }
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function toRawdata(item: FBItem) {
   const spend = num(item.spend);
@@ -499,17 +498,16 @@ export async function runSync(
     `\n[${label}] START — ${since} → ${until}, ${accounts.length} accounts`,
   );
 
-  const summary: SyncSummaryItem[] = [];
-
-  for (const [idx, account] of accounts.entries()) {
-    console.log(`\n[${label}] [${idx + 1}/${accounts.length}] ${account.name}`);
+  const syncOne = async (account: {
+    name: string;
+    id: string;
+  }): Promise<SyncSummaryItem> => {
     const rowCounts: Record<SheetKey, number> = {
       rawdata: 0,
       geo: 0,
       demographic: 0,
       device: 0,
     };
-
     try {
       const [rawItems, geoItems, demoItems, deviceItems] = await Promise.all([
         fetchRangeWithRetry(account.id, tokenRef, since, until, "rawdata"),
@@ -543,21 +541,23 @@ export async function runSync(
       rowCounts.device = deviceItems.length;
 
       console.log(
-        `  ✓ raw:${rawItems.length} geo:${geoItems.length} demo:${demoItems.length} device:${deviceItems.length}`,
+        `  ✓ ${account.name} raw:${rawItems.length} geo:${geoItems.length} demo:${demoItems.length} device:${deviceItems.length}`,
       );
-      summary.push({ name: account.name, id: account.id, rows: rowCounts });
+      return { name: account.name, id: account.id, rows: rowCounts };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "unknown error";
-      console.error(`  [ERROR] ${msg}`);
-      summary.push({
-        name: account.name,
-        id: account.id,
-        rows: rowCounts,
-        error: msg,
-      });
+      console.error(`  [ERROR] ${account.name}: ${msg}`);
+      return { name: account.name, id: account.id, rows: rowCounts, error: msg };
     }
+  };
 
-    if (idx < accounts.length - 1) await sleep(1000);
+  // Process accounts CONCURRENCY-at-a-time to cut wall-clock without hammering FB rate limits.
+  const summary: SyncSummaryItem[] = [];
+  const CONCURRENCY = 5;
+  for (let i = 0; i < accounts.length; i += CONCURRENCY) {
+    const chunk = accounts.slice(i, i + CONCURRENCY);
+    console.log(`\n[${label}] batch ${i}–${i + chunk.length - 1}/${accounts.length}`);
+    summary.push(...(await Promise.all(chunk.map(syncOne))));
   }
 
   console.log(`[${label}] DONE ✓\n`);
