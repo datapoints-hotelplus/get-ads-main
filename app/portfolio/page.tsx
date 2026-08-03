@@ -312,10 +312,12 @@ function AccountPicker({
   allAccounts,
   selected,
   onChange,
+  onSelectAll,
 }: {
   allAccounts: AllAccount[];
   selected: Set<string>;
   onChange: (s: Set<string>) => void;
+  onSelectAll?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -357,7 +359,10 @@ function AccountPicker({
           <div className="flex gap-2 px-3 py-2 border-b border-gray-100">
             <button
               type="button"
-              onClick={() => onChange(new Set(allAccounts.map((a) => a.account_id)))}
+              onClick={() => {
+                onChange(new Set(allAccounts.map((a) => a.account_id)));
+                onSelectAll?.();
+              }}
               className="text-xs text-secondary hover:underline font-medium"
             >
               เลือกทั้งหมด
@@ -396,10 +401,12 @@ function ProfilePicker({
   profiles,
   selected,
   onChange,
+  overrideLabel,
 }: {
   profiles: Profile[];
   selected: Set<string>;
   onChange: (s: Set<string>) => void;
+  overrideLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -419,13 +426,14 @@ function ProfilePicker({
   }
 
   const label =
-    selected.size === 0
+    overrideLabel ??
+    (selected.size === 0
       ? "-- เลือก Profile --"
       : selected.size === profiles.length
-        ? "All Hotels"
+        ? "ทั้งหมด"
         : selected.size === 1
           ? profiles.find((p) => selected.has(p.id))?.name ?? "1 profile"
-          : `${selected.size} profiles`;
+          : `${selected.size} profiles`);
 
   return (
     <div ref={ref} className="relative">
@@ -493,6 +501,9 @@ export default function PortfolioPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [latestDate, setLatestDate] = useState<string | null>(null);
+  // When "select all accounts" also selects all profiles, skip the preset-reset
+  // in the profile-change effect so the full account selection is preserved.
+  const keepAccountsRef = useRef(false);
 
   // Load profiles once
   useEffect(() => {
@@ -519,10 +530,17 @@ export default function PortfolioPage() {
     ).then((results) => {
       const bad = results.find((d) => d.error);
       if (bad) { setError(bad.error); return; }
-      setAllAccounts(results[0].allAccounts ?? []);
+      const all = results[0].allAccounts ?? [];
+      setAllAccounts(all);
       setLatestDate(results[0].latestDate ?? null);
-      // pre-fill from the union of every selected profile's preset
-      setSelectedAccounts(new Set(results.flatMap((d) => d.presetIds ?? [])));
+      if (keepAccountsRef.current) {
+        // triggered by "select all accounts" → keep every account selected
+        keepAccountsRef.current = false;
+        setSelectedAccounts(new Set(all.map((a: AllAccount) => a.account_id)));
+      } else {
+        // pre-fill from the union of every selected profile's preset
+        setSelectedAccounts(new Set(results.flatMap((d) => d.presetIds ?? [])));
+      }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profileKey]);
@@ -565,6 +583,11 @@ export default function PortfolioPage() {
               profiles={profiles}
               selected={selectedProfiles}
               onChange={setSelectedProfiles}
+              overrideLabel={
+                allAccounts.length > 0 && selectedAccounts.size === allAccounts.length
+                  ? "ทั้งหมด"
+                  : undefined
+              }
             />
           </div>
           <div>
@@ -575,6 +598,14 @@ export default function PortfolioPage() {
               allAccounts={allAccounts}
               selected={selectedAccounts}
               onChange={setSelectedAccounts}
+              onSelectAll={() => {
+                // also select every profile; keep the full account selection
+                // through the resulting meta reload
+                if (selectedProfiles.size !== profiles.length) {
+                  keepAccountsRef.current = true;
+                  setSelectedProfiles(new Set(profiles.map((p) => p.id)));
+                }
+              }}
             />
           </div>
           <button
