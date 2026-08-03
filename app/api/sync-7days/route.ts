@@ -572,9 +572,9 @@ export async function GET(request: Request) {
     const today = new Date().toLocaleDateString("en-CA", {
       timeZone: "Asia/Bangkok",
     });
-    const since28 = new Date();
-    since28.setDate(since28.getDate() - 28);
-    const defaultSince = since28.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
+    const since3 = new Date();
+    since3.setDate(since3.getDate() - 3);
+    const defaultSince = since3.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
     const since = searchParams.get("since") ?? defaultSince;
     const until = searchParams.get("until") ?? today;
     const result = await runSync(since, until, "sync-today");
