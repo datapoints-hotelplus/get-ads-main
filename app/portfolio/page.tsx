@@ -391,11 +391,96 @@ function AccountPicker({
   );
 }
 
+// Multi-select dropdown for profiles — same UX as AccountPicker.
+function ProfilePicker({
+  profiles,
+  selected,
+  onChange,
+}: {
+  profiles: Profile[];
+  selected: Set<string>;
+  onChange: (s: Set<string>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function close(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, []);
+
+  function toggle(id: string) {
+    const next = new Set(selected);
+    next.has(id) ? next.delete(id) : next.add(id);
+    onChange(next);
+  }
+
+  const label =
+    selected.size === 0
+      ? "-- เลือก Profile --"
+      : selected.size === profiles.length
+        ? "All Hotels"
+        : selected.size === 1
+          ? profiles.find((p) => selected.has(p.id))?.name ?? "1 profile"
+          : `${selected.size} profiles`;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((p) => !p)}
+        className="input flex items-center justify-between gap-3 min-w-52 text-left h-10"
+      >
+        <span className={selected.size === 0 ? "text-gray-400" : "text-gray-800"}>{label}</span>
+        <span className="text-gray-400 text-xs">{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="absolute z-50 top-full left-0 mt-1 w-72 bg-white border border-gray-200 rounded-xl shadow-lg max-h-72 overflow-y-auto">
+          <div className="flex gap-2 px-3 py-2 border-b border-gray-100">
+            <button
+              type="button"
+              onClick={() => onChange(new Set(profiles.map((p) => p.id)))}
+              className="text-xs text-secondary hover:underline font-medium"
+            >
+              เลือกทั้งหมด
+            </button>
+            <span className="text-gray-300">|</span>
+            <button
+              type="button"
+              onClick={() => onChange(new Set())}
+              className="text-xs text-gray-400 hover:underline"
+            >
+              ล้าง
+            </button>
+          </div>
+          {profiles.map((p) => (
+            <label
+              key={p.id}
+              className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                checked={selected.has(p.id)}
+                onChange={() => toggle(p.id)}
+                className="accent-secondary"
+              />
+              <span className="text-sm text-gray-700 truncate">{p.name}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Page ───────────────────────────────────────────────────────────────
 export default function PortfolioPage() {
   const router = useRouter();
   const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [selectedProfile, setSelectedProfile] = useState<string>("");
+  const [selectedProfiles, setSelectedProfiles] = useState<Set<string>>(new Set());
   const [allAccounts, setAllAccounts] = useState<AllAccount[]>([]);
   const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
   const [dateFrom, setDateFrom] = useState(() => {
@@ -407,6 +492,7 @@ export default function PortfolioPage() {
   const [data, setData] = useState<PortfolioData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [latestDate, setLatestDate] = useState<string | null>(null);
 
   // Load profiles once
   useEffect(() => {
@@ -414,32 +500,40 @@ export default function PortfolioPage() {
       .then((r) => r.json())
       .then((d) => {
         setProfiles(d.profiles ?? []);
-        if (d.profiles?.length > 0) setSelectedProfile(d.profiles[0].id);
+        if (d.profiles?.length > 0) setSelectedProfiles(new Set([d.profiles[0].id]));
       });
   }, []);
 
-  // When profile changes — load ONLY the filter metadata (account list + preset).
-  // No metrics are fetched here; the user must hit "ค้นหา" to run the report.
+  // When selected profiles change — load ONLY the filter metadata (account list +
+  // preset). All profiles share the same KPI templates, so this just unions the
+  // per-profile account presets. No metrics fetched; user must hit "ค้นหา".
+  const profileKey = [...selectedProfiles].sort().join(",");
   useEffect(() => {
-    if (!selectedProfile) return;
+    if (selectedProfiles.size === 0) return;
     setError("");
     setData(null); // clear any previous report until the user searches again
-    const params = new URLSearchParams({ profile_id: selectedProfile, meta: "1" });
-    fetch(`/api/portfolio?${params}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.error) { setError(d.error); return; }
-        setAllAccounts(d.allAccounts ?? []);
-        // pre-fill from preset on profile switch
-        setSelectedAccounts(new Set(d.presetIds ?? []));
-      });
-  }, [selectedProfile]);
+    Promise.all(
+      [...selectedProfiles].map((id) =>
+        fetch(`/api/portfolio?${new URLSearchParams({ profile_id: id, meta: "1" })}`).then((r) => r.json()),
+      ),
+    ).then((results) => {
+      const bad = results.find((d) => d.error);
+      if (bad) { setError(bad.error); return; }
+      setAllAccounts(results[0].allAccounts ?? []);
+      setLatestDate(results[0].latestDate ?? null);
+      // pre-fill from the union of every selected profile's preset
+      setSelectedAccounts(new Set(results.flatMap((d) => d.presetIds ?? [])));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profileKey]);
 
   function handleSearch() {
-    if (!selectedProfile) return;
+    if (selectedProfiles.size === 0) return;
     setLoading(true);
     setError("");
-    const params = new URLSearchParams({ profile_id: selectedProfile, dateFrom, dateTo });
+    // Templates are identical across profiles, so any selected profile_id works;
+    // the account union is what actually scopes the report.
+    const params = new URLSearchParams({ profile_id: [...selectedProfiles][0], dateFrom, dateTo });
     selectedAccounts.forEach((id) => params.append("account_ids", id));
     fetch(`/api/portfolio?${params}`)
       .then((r) => r.json())
@@ -467,22 +561,15 @@ export default function PortfolioPage() {
           </div>
           <div >
             <label className="block text-xs text-gray-500 mb-1">Profile (Preset)</label>
-            <select
-              value={selectedProfile}
-              onChange={(e) => setSelectedProfile(e.target.value)}
-              className="input h-10"
-            >
-              {profiles.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
+            <ProfilePicker
+              profiles={profiles}
+              selected={selectedProfiles}
+              onChange={setSelectedProfiles}
+            />
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">
               Accounts
-              {data?.presetIds && selectedAccounts.size !== data.presetIds.length && (
-                <span className="ml-1.5 text-indigo-500 font-medium">(แก้ไขแล้ว)</span>
-              )}
             </label>
             <AccountPicker
               allAccounts={allAccounts}
@@ -493,7 +580,7 @@ export default function PortfolioPage() {
           <button
             type="button"
             onClick={handleSearch}
-            disabled={loading || !selectedProfile}
+            disabled={loading || selectedProfiles.size === 0}
             className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? "กำลังโหลด…" : "ค้นหา"}
@@ -517,6 +604,12 @@ export default function PortfolioPage() {
               <KpiCard key={tpl.id} tpl={tpl} rows={data.rows} index={i} />
             ))}
           </div>
+        )}
+
+        {latestDate && (
+          <p className="text-center text-xs text-gray-400 pt-4">
+            ข้อมูลล่าสุดถึงวันที่ {latestDate}
+          </p>
         )}
       </div>
     </div>

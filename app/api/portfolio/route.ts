@@ -58,7 +58,20 @@ export async function GET(req: NextRequest) {
   // account list) without the expensive rawdata + FB insight work. Used on first
   // page load / profile switch so nothing is fetched until the user hits Search.
   if (searchParams.get("meta") === "1") {
-    return NextResponse.json({ templates, profile, rows: [], presetIds, allAccounts });
+    const { data: latestRow } = await supabase
+      .from("ads_rawdata")
+      .select("date_start")
+      .order("date_start", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return NextResponse.json({
+      templates,
+      profile,
+      rows: [],
+      presetIds,
+      allAccounts,
+      latestDate: latestRow?.date_start ?? null,
+    });
   }
 
   if (accountIds.length === 0) return NextResponse.json({ templates, profile, rows: [], presetIds, allAccounts });
