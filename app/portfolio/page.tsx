@@ -639,7 +639,7 @@ export default function PortfolioPage() {
 
         {latestDate && (
           <p className="text-center text-xs text-gray-400 pt-4">
-            ข้อมูลล่าสุดถึงวันที่ {latestDate}
+            ข้อมูลล่าสุดถึงวันที่ {latestDate} 23:59 น.
           </p>
         )}
       </div>
