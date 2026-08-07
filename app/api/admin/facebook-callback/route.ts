@@ -1,11 +1,16 @@
 import { cookies } from "next/headers";
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { verifySessionToken } from "@/lib/sessionToken";
 import { getSupabase } from "@/lib/supabase";
 import {
   exchangeCodeForToken,
   exchangeForLongLivedToken,
 } from "@/lib/facebook-token";
+
+// Give the background sync-catchup call (fired via `after`, below) room to
+// run past the default timeout — it can take a while if several days of
+// data need catching up across every account.
+export const maxDuration = 300;
 
 async function checkAdmin(): Promise<boolean> {
   const cookieStore = await cookies();
@@ -88,7 +93,21 @@ export async function GET(request: NextRequest) {
       return redirectToConfig(origin, { fb_login_error: dbErr.message });
     }
 
-    const res = redirectToConfig(origin, { fb_login_success: "1" });
+    // Kick off sync-catchup in the background — don't block the redirect on it.
+    after(async () => {
+      try {
+        const syncRes = await fetch(`${origin}/api/sync-catchup`);
+        const syncData = await syncRes.json().catch(() => null);
+        console.log("[facebook-callback] sync-catchup after login:", syncData);
+      } catch (e) {
+        console.error("[facebook-callback] sync-catchup after login failed:", e);
+      }
+    });
+
+    const res = redirectToConfig(origin, {
+      fb_login_success: "1",
+      sync_started: "1",
+    });
     res.cookies.delete("fb_oauth_state");
     return res;
   } catch (e: any) {

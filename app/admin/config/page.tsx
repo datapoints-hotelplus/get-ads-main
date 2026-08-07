@@ -95,10 +95,13 @@ function AdminConfigPageInner() {
   useEffect(() => {
     const success = searchParams.get("fb_login_success");
     const error = searchParams.get("fb_login_error");
+    const syncStarted = searchParams.get("sync_started");
     if (success) {
       setMessage({
         type: "success",
-        text: "Login Facebook สำเร็จ — token ใหม่บันทึกลง DB แล้ว",
+        text: syncStarted
+          ? "Login Facebook สำเร็จ — token ใหม่บันทึกลง DB แล้ว, กำลัง sync-catchup ข้อมูลต่อในพื้นหลัง"
+          : "Login Facebook สำเร็จ — token ใหม่บันทึกลง DB แล้ว",
       });
       router.replace("/admin/config");
       loadStatus();

@@ -218,6 +218,12 @@ export default function AdminPage() {
                   {fetchMessage.text}
                 </span>
               )}
+              <a
+                href="/api/admin/facebook-login"
+                className="inline-flex items-center gap-1.5 bg-[#1877F2] hover:bg-[#1461cc] text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+              >
+                🔗 Login Facebook
+              </a>
               <button
                 onClick={handleFetchFromFacebook}
                 disabled={fetchLoading}
