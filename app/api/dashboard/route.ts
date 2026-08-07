@@ -1410,7 +1410,16 @@ export async function GET(request: NextRequest) {
       count: rows.length,
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Server error";
+    // Unwrap Facebook Graph API error bodies so callers see the real reason
+    // (e.g. "Error validating access token...") instead of a generic
+    // "Request failed with status code 400" from axios.
+    let msg = err instanceof Error ? err.message : "Server error";
+    if (axios.isAxiosError(err)) {
+      const fbError = (err.response?.data as { error?: { message?: string; code?: number; error_subcode?: number } } | undefined)?.error;
+      if (fbError?.message) {
+        msg = `Facebook API error (code ${fbError.code}${fbError.error_subcode ? `/${fbError.error_subcode}` : ""}): ${fbError.message}`;
+      }
+    }
     const stack = err instanceof Error ? err.stack : "";
     console.error("Dashboard API error:", msg);
     console.error("Stack:", stack);

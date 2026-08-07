@@ -109,6 +109,79 @@ export async function refreshFacebookToken(): Promise<{
   return { access_token: newToken, expires_in: expiresIn };
 }
 
+const FB_OAUTH_DIALOG = "https://www.facebook.com/v25.0/dialog/oauth";
+const FB_LOGIN_SCOPES = ["ads_read", "business_management"];
+
+/**
+ * Build the Facebook Login dialog URL. User logs in there, Facebook then
+ * redirects back to `redirectUri` with a one-time `code` query param.
+ */
+export function buildFacebookLoginUrl(
+  appId: string,
+  redirectUri: string,
+  state: string,
+): string {
+  const params = new URLSearchParams({
+    client_id: appId,
+    redirect_uri: redirectUri,
+    scope: FB_LOGIN_SCOPES.join(","),
+    response_type: "code",
+    state,
+  });
+  return `${FB_OAUTH_DIALOG}?${params.toString()}`;
+}
+
+/**
+ * Exchange the one-time `code` from the Login dialog redirect for a
+ * short-lived user access token.
+ */
+export async function exchangeCodeForToken(
+  code: string,
+  appId: string,
+  appSecret: string,
+  redirectUri: string,
+): Promise<{ access_token: string; expires_in?: number }> {
+  const res = await axios.get(`${FB_GRAPH_API}/oauth/access_token`, {
+    params: {
+      client_id: appId,
+      client_secret: appSecret,
+      redirect_uri: redirectUri,
+      code,
+    },
+    timeout: 15_000,
+  });
+  const access_token = res.data.access_token as string | undefined;
+  if (!access_token) {
+    throw new Error("Facebook did not return an access_token for this code");
+  }
+  return { access_token, expires_in: res.data.expires_in };
+}
+
+/**
+ * Exchange any user access token (e.g. the short-lived one from the Login
+ * dialog code exchange) for a long-lived (60 day) token.
+ */
+export async function exchangeForLongLivedToken(
+  token: string,
+  appId: string,
+  appSecret: string,
+): Promise<{ access_token: string; expires_in?: number }> {
+  const res = await axios.get(`${FB_GRAPH_API}/oauth/access_token`, {
+    params: {
+      grant_type: "fb_exchange_token",
+      client_id: appId,
+      client_secret: appSecret,
+      fb_exchange_token: token,
+    },
+    timeout: 15_000,
+  });
+  const access_token = res.data.access_token as string | undefined;
+  if (!access_token) {
+    throw new Error("Facebook did not return a long-lived access_token");
+  }
+  return { access_token, expires_in: res.data.expires_in };
+}
+
 /**
  * Detect if an axios error is caused by an expired/invalid Facebook token.
  * Facebook returns OAuthException with code 190 when the token is bad.

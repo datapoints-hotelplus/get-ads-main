@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 type ConfigStatus = {
   token: {
@@ -9,6 +9,8 @@ type ConfigStatus = {
     expires_at: string | null;
     masked: string | null;
     source: "db" | "env" | "none";
+    valid: boolean | null;
+    error: string | null;
   };
   ads_rawdata: {
     latest_date: string | null;
@@ -47,7 +49,22 @@ function daysUntil(iso: string | null): { text: string; warn: boolean } {
 }
 
 export default function AdminConfigPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gray-50 p-8">
+          <div className="max-w-3xl mx-auto text-gray-500">กำลังโหลด…</div>
+        </div>
+      }
+    >
+      <AdminConfigPageInner />
+    </Suspense>
+  );
+}
+
+function AdminConfigPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [status, setStatus] = useState<ConfigStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -73,6 +90,24 @@ export default function AdminConfigPage() {
     loadStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Handle redirect back from /api/admin/facebook-callback
+  useEffect(() => {
+    const success = searchParams.get("fb_login_success");
+    const error = searchParams.get("fb_login_error");
+    if (success) {
+      setMessage({
+        type: "success",
+        text: "Login Facebook สำเร็จ — token ใหม่บันทึกลง DB แล้ว",
+      });
+      router.replace("/admin/config");
+      loadStatus();
+    } else if (error) {
+      setMessage({ type: "error", text: `Login Facebook ไม่สำเร็จ: ${error}` });
+      router.replace("/admin/config");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   async function handleRefresh() {
     setRefreshing(true);
@@ -175,15 +210,39 @@ export default function AdminConfigPage() {
             <h2 className="text-base font-semibold text-gray-900">
               Facebook Access Token
             </h2>
-            <button
-              type="button"
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="text-sm bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-4 py-1.5 rounded-lg"
-            >
-              {refreshing ? "กำลัง refresh…" : "🔄 Refresh ตอนนี้"}
-            </button>
+            <div className="flex gap-2">
+              <a
+                href="/api/admin/facebook-login"
+                className="text-sm bg-[#1877F2] hover:bg-[#1461cc] text-white px-4 py-1.5 rounded-lg"
+              >
+                🔗 Login Facebook ใหม่
+              </a>
+              <button
+                type="button"
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="text-sm bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-4 py-1.5 rounded-lg"
+              >
+                {refreshing ? "กำลัง refresh…" : "🔄 Refresh ตอนนี้"}
+              </button>
+            </div>
           </div>
+
+          {status.token.valid === false && (
+            <div className="mb-4 p-3 rounded-lg text-sm bg-red-50 border border-red-200 text-red-800">
+              <p className="font-semibold">⚠️ Token ใช้งานไม่ได้แล้ว</p>
+              <p className="mt-1">{status.token.error}</p>
+              <p className="mt-1">
+                กด &quot;🔗 Login Facebook ใหม่&quot; ด้านบน → login →
+                token ใหม่จะถูกบันทึกลง DB ให้อัตโนมัติ
+              </p>
+            </div>
+          )}
+          {status.token.valid === true && (
+            <div className="mb-4 p-2.5 rounded-lg text-sm bg-emerald-50 border border-emerald-200 text-emerald-800">
+              ✅ Token ใช้งานได้ตอนนี้
+            </div>
+          )}
 
           <dl className="grid grid-cols-2 gap-y-3 text-sm">
             <dt className="text-gray-500">Token (masked)</dt>

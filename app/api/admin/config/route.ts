@@ -1,8 +1,32 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import axios from "axios";
 import { verifySessionToken } from "@/lib/sessionToken";
 import { getSupabase } from "@/lib/supabase";
 import { refreshFacebookToken } from "@/lib/facebook-token";
+
+const FB_GRAPH_API = "https://graph.facebook.com/v25.0";
+
+// Lightweight live check — confirms the token still works against Facebook
+// right now (catches "session invalidated" cases that a stored expiry date
+// won't show, since a token can die before its expiry).
+async function checkTokenValid(
+  token: string,
+): Promise<{ valid: boolean; error: string | null }> {
+  try {
+    await axios.get(`${FB_GRAPH_API}/me`, {
+      params: { access_token: token, fields: "id" },
+      timeout: 8_000,
+    });
+    return { valid: true, error: null };
+  } catch (e: any) {
+    const fbErr = e?.response?.data?.error;
+    return {
+      valid: false,
+      error: fbErr?.message ?? e?.message ?? "Unknown error",
+    };
+  }
+}
 
 async function checkAdmin(): Promise<boolean> {
   const cookieStore = await cookies();
@@ -26,12 +50,17 @@ export async function GET() {
     expires_at: string | null;
     masked: string | null;
     source: "db" | "env" | "none";
+    valid: boolean | null;
+    error: string | null;
   } = {
     refreshed_at: null,
     expires_at: null,
     masked: null,
     source: "none",
+    valid: null,
+    error: null,
   };
+  let liveToken: string | null = null;
 
   try {
     const { data } = await supabase
@@ -40,13 +69,15 @@ export async function GET() {
       .eq("id", 1)
       .single();
     if (data?.access_token) {
-      console.log("[config] current token:", data.access_token);
       token = {
         refreshed_at: data.refreshed_at as string | null,
         expires_at: data.expires_at as string | null,
         masked: maskToken(data.access_token as string),
         source: "db",
+        valid: null,
+        error: null,
       };
+      liveToken = data.access_token as string;
     }
   } catch {
     // Table missing or query failed
@@ -58,7 +89,16 @@ export async function GET() {
       expires_at: null,
       masked: maskToken(process.env.FB_ACCESS_TOKEN),
       source: "env",
+      valid: null,
+      error: null,
     };
+    liveToken = process.env.FB_ACCESS_TOKEN;
+  }
+
+  if (liveToken) {
+    const check = await checkTokenValid(liveToken);
+    token.valid = check.valid;
+    token.error = check.error;
   }
 
   // Latest date in ads_rawdata
