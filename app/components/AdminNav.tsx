@@ -9,6 +9,7 @@ const ADMIN_LINKS = [
   { href: "/admin/portfolio", label: "Portfolio" },
   { href: "/admin/sync", label: "Sync Panel" },
   { href: "/admin/docs", label: "วิธีใช้" },
+  { href: "/admin/change-password", label: "เปลี่ยนรหัสผ่าน" },
 ];
 
 type Props = {

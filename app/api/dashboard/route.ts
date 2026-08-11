@@ -1414,15 +1414,26 @@ export async function GET(request: NextRequest) {
     // (e.g. "Error validating access token...") instead of a generic
     // "Request failed with status code 400" from axios.
     let msg = err instanceof Error ? err.message : "Server error";
+    let sessionExpired = false;
     if (axios.isAxiosError(err)) {
-      const fbError = (err.response?.data as { error?: { message?: string; code?: number; error_subcode?: number } } | undefined)?.error;
+      const fbError = (err.response?.data as { error?: { message?: string; code?: number; error_subcode?: number; type?: string } } | undefined)?.error;
       if (fbError?.message) {
         msg = `Facebook API error (code ${fbError.code}${fbError.error_subcode ? `/${fbError.error_subcode}` : ""}): ${fbError.message}`;
+        // code 190 / OAuthException = Facebook access token dead (session
+        // invalidated, revoked, etc). Show a friendly message to end users;
+        // full detail still goes to server logs for the admin to diagnose.
+        sessionExpired = fbError.code === 190 || fbError.type === "OAuthException";
       }
     }
     const stack = err instanceof Error ? err.stack : "";
     console.error("Dashboard API error:", msg);
     console.error("Stack:", stack);
+    if (sessionExpired) {
+      return NextResponse.json(
+        { error: "Session Expired กรุณาแจ้ง admin", code: "FB_SESSION_EXPIRED" },
+        { status: 401 },
+      );
+    }
     return NextResponse.json({ error: msg, stack }, { status: 500 });
   }
 }
