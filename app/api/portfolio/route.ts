@@ -164,9 +164,14 @@ export async function GET(req: NextRequest) {
 
   function getMetricValue(metric: string, a: Agg): number | null {
     const n = a.rows || 1; // number of rows for averaging
-    // All cost-per-X metrics come from FB's objective-aware cost_per_result when
-    // FB returned a value for this account (matches Ads Manager exactly).
-    if (metric.startsWith("cost_per_") && a.fb_cost_per_result != null) {
+    // Most cost-per-X metrics come from FB's objective-aware cost_per_result when
+    // FB returned a value for this account (matches Ads Manager's "Result" column
+    // exactly) — but NOT cost_per_engagement: for Engagement-objective campaigns
+    // FB's "Result" indicator is actions:post_interaction_gross, a different
+    // (smaller) count than the actions:post_engagement Ads Manager actually shows
+    // in its "Post Engagement" / "Cost per Engagement" columns. Using cost_per_result
+    // there overstates cost per engagement, so fall through to spend/post_engagement.
+    if (metric.startsWith("cost_per_") && metric !== "cost_per_engagement" && a.fb_cost_per_result != null) {
       return a.fb_cost_per_result;
     }
     switch (metric) {
@@ -309,7 +314,7 @@ export async function GET(req: NextRequest) {
   if (fbToken && dateFrom && dateTo) {
     const filters = new Set<string>();
     for (const t of templates ?? []) {
-      if (!t.metric.startsWith("cost_per_")) continue;
+      if (!t.metric.startsWith("cost_per_") || t.metric === "cost_per_engagement") continue;
       filters.add(((t as Record<string, unknown>).campaign_filter as string | null) ?? "");
     }
     const jobs: Promise<void>[] = [];
@@ -361,7 +366,7 @@ export async function GET(req: NextRequest) {
       // (matches Ads Manager) over the DB-derived spend/count, which is skewed
       // because synced result counts (messages/engagement/likes) differ slightly
       // from FB's. Falls back to the DB value when FB has no result.
-      if (t.metric.startsWith("cost_per_")) {
+      if (t.metric.startsWith("cost_per_") && t.metric !== "cost_per_engagement") {
         const fbVal = fbCostPerResult(acctId, filter);
         if (fbVal != null) a.fb_cost_per_result = fbVal;
       }
