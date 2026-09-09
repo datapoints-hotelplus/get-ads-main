@@ -12,10 +12,12 @@ import {
 } from "@tanstack/react-table";
 import { Chart } from "react-google-charts";
 import ReactSelect from "react-select";
-import FrequencyGauge from "../FrequencyGauge";
-import ThaiGeoChart from "../ThaiGeoChart";
-import ErrorBoundary from "../ErrorBoundary";
+import FrequencyGauge from "../../FrequencyGauge";
+import ThaiGeoChart from "../../ThaiGeoChart";
+import ErrorBoundary from "../../ErrorBoundary";
 import UserNav from "@/app/components/UserNav";
+import { isoToDisplay } from "@/app/components/dateFormat";
+import { buildCsv, downloadCsv } from "@/app/components/csv";
 
 // ─── Checkbox Filter Component ────────────────────────────────────────────────
 
@@ -314,12 +316,6 @@ function today() {
 function firstOfMonth() {
   const d = new Date();
   return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split("T")[0];
-}
-
-function isoToDisplay(iso: string): string {
-  if (!iso || iso.length < 10) return iso;
-  const [y, m, d] = iso.split("-");
-  return `${d}/${m}/${y}`;
 }
 
 // ─── Chart Color Palette (CI) ─────────────────────────────────────────────────
@@ -1425,6 +1421,66 @@ export default function DashboardPage() {
     fetchDemographics();
   };
 
+  // ── CSV export ──────────────────────────────────────────────────────────
+  // Exports every row currently loaded for the chosen filters, not just the
+  // table page on screen — `rows`/`adRows` already hold the full result set
+  // (the tables paginate client-side), so no refetch is needed.
+  //
+  // Ad Set rows and Ad rows share one file with a `level` column rather than
+  // two downloads: they carry the same metrics, and one sheet is what you
+  // want when pivoting. Ad rows only exist when an ad set is selected, so
+  // most exports are Ad Set rows alone.
+  const canExport = rows.length > 0 || adRows.length > 0;
+  const handleExportCsv = () => {
+    // Spend is hidden from non-admins in both tables (see hideSpend below);
+    // the export follows the same rule so it can't become a side door around
+    // it. NOTE: the API still sends spend to every role — the restriction is
+    // presentational here and on the tables, not a server-side guarantee.
+    const showSpend = currentUser?.role === "admin";
+
+    const header = [
+      "level", "campaign_name", "adset_name", "ad_name",
+      ...(showSpend ? ["spend"] : []),
+      "reach", "impressions", "clicks", "clicks_all", "unique_clicks",
+      "purchases", "revenue", "roas", "ctr", "cpc", "cost_per_purchase",
+      "post_engagement", "cost_per_engagement", "cost_per_like",
+    ];
+
+    const line = (
+      level: string,
+      r: GroupRow | AdGroupRow,
+      adName: string,
+    ) => [
+      level, r.campaign_name, r.adset_name, adName,
+      ...(showSpend ? [r.spend] : []),
+      r.reach, r.impressions, r.clicks, r.clicks_all, r.unique_clicks,
+      r.purchases, r.revenue, r.roas, r.ctr, r.cpc, r.cost_per_purchase,
+      r.post_engagement, r.cost_per_engagement, r.cost_per_like,
+    ];
+
+    const csv = buildCsv(header, [
+      ...rows.map((r) => line("adset", r, "")),
+      ...adRows.map((r) => line("ad", r, r.ad_name)),
+    ]);
+
+    // Filters in the filename so a folder of exports stays tellable apart.
+    const scope = [
+      accounts.length === 1 ? accounts[0] : accounts.length > 1 ? `${accounts.length}accounts` : null,
+      campaigns.length === 1 ? campaigns[0] : campaigns.length > 1 ? `${campaigns.length}campaigns` : null,
+      adset || null,
+    ]
+      .filter(Boolean)
+      .join("_")
+      // Strip whatever a campaign name might contain that a filesystem won't take.
+      .replace(/[^\w\-ก-๙]+/g, "-")
+      .slice(0, 60);
+
+    downloadCsv(
+      `facebook-ads_${dateFrom}_to_${dateTo}${scope ? `_${scope}` : ""}.csv`,
+      csv,
+    );
+  };
+
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-100">
@@ -1522,6 +1578,16 @@ export default function DashboardPage() {
                   className="bg-secondary hover:bg-secondary-light text-white text-sm px-4 py-2 rounded-lg transition-colors"
                 >
                   รีเซ็ต
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleExportCsv}
+                  disabled={!canExport}
+                  title={canExport ? "ดาวน์โหลดทุกแถวตาม filter ที่เลือก" : "ยังไม่มีข้อมูล — กดค้นหาก่อน"}
+                  className="bg-white border border-secondary/30 hover:bg-secondary/5 disabled:border-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed text-secondary text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+                >
+                  Export CSV
                 </button>
               </div>
             </div>

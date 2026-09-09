@@ -30,5 +30,12 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    // *.check.ts are standalone self-checks run directly by node
+    // (`node --experimental-strip-types <file>`), never bundled. They import
+    // with explicit .ts extensions, which node requires and the app's
+    // bundler-style moduleResolution rejects.
+    "**/*.check.ts"
+  ]
 }
