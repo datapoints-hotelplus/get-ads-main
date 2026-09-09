@@ -15,7 +15,7 @@ export default function LoginPage() {
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (data?.user) {
-          window.location.href = "/dashboard";
+          window.location.href = "/facebook/dashboard";
         } else {
           setChecking(false);
         }
@@ -36,7 +36,7 @@ export default function LoginPage() {
       });
 
       if (res.ok) {
-        window.location.href = "/dashboard";
+        window.location.href = "/facebook/dashboard";
         return;
       } else {
         const data = await res.json();

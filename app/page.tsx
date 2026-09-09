@@ -8,7 +8,7 @@ export default async function Home() {
   if (token) {
     const session = await verifySessionToken(token);
     if (session) {
-      redirect("/dashboard");
+      redirect("/facebook/dashboard");
     }
   }
   redirect("/login");

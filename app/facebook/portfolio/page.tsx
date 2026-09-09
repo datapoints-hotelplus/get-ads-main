@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import UserNav from "@/app/components/UserNav";
+import DateInput from "@/app/components/DateInput";
 
 type Template = {
   id: string;
@@ -571,11 +572,11 @@ export default function PortfolioPage() {
         <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex flex-wrap gap-4 items-end">
           <div>
             <label className="block text-xs text-gray-500 mb-1">วันเริ่มต้น</label>
-            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="input" />
+            <DateInput value={dateFrom} onChange={setDateFrom} className="input pr-7" aria-label="วันเริ่มต้น" />
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">วันสิ้นสุด</label>
-            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="input" />
+            <DateInput value={dateTo} onChange={setDateTo} className="input pr-7" aria-label="วันสิ้นสุด" />
           </div>
           <div >
             <label className="block text-xs text-gray-500 mb-1">Profile (Preset)</label>

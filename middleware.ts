@@ -27,14 +27,37 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // ── TikTok routes (/tiktok/* and /api/tiktok/*) — admin only ────────────
+  // ── TikTok dashboard (view-only) — any logged-in role, same split as the
+  //    Facebook /dashboard block below: middleware only checks "logged in",
+  //    the page itself hides Settings/Export for role !== "admin" (AC10).
+  const isTikTokDashboardPage = pathname.startsWith("/tiktok/dashboard");
+  const isTikTokDashboardApi =
+    pathname === "/api/tiktok/dashboard" ||
+    pathname.startsWith("/api/tiktok/dashboard/") ||
+    pathname === "/api/tiktok/status";
+
+  if (isTikTokDashboardPage || isTikTokDashboardApi) {
+    if (!session) {
+      if (isTikTokDashboardPage) return NextResponse.redirect(new URL("/admin/login", req.url));
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const requestHeaders = new Headers(req.headers);
+    requestHeaders.set("x-user-id", session.userId);
+    requestHeaders.set("x-user-role", session.role);
+    return NextResponse.next({ request: { headers: requestHeaders } });
+  }
+
+  // ── Every other TikTok route (/tiktok/sync — Settings — and every
+  //    mutating/API-secret-bearing endpoint) — admin only, unchanged ──────
   const isTikTokPage = pathname.startsWith("/tiktok");
   const isTikTokApi = pathname.startsWith("/api/tiktok");
 
   if (isTikTokPage || isTikTokApi) {
     if (!session || session.role !== "admin") {
       if (isTikTokPage) {
-        return NextResponse.redirect(new URL("/admin/login", req.url));
+        // A logged-in Viewer landing on the Settings page gets bounced to
+        // the dashboard they DO have access to, not a login loop.
+        return NextResponse.redirect(new URL(session ? "/tiktok/dashboard" : "/admin/login", req.url));
       }
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -42,7 +65,7 @@ export async function middleware(req: NextRequest) {
   }
 
   // ── User-facing routes (dashboard, summary, sync and their APIs) ────────
-  const isUserPage = pathname.startsWith("/dashboard");
+  const isUserPage = pathname.startsWith("/facebook/dashboard");
   const isUserApi =
     pathname.startsWith("/api/dashboard") ||
     pathname.startsWith("/api/insights") ||
@@ -71,8 +94,8 @@ export const config = {
   matcher: [
     "/admin/:path*",
     "/api/admin/:path*",
-    "/dashboard",
-    "/dashboard/:path*",
+    "/facebook/dashboard",
+    "/facebook/dashboard/:path*",
     "/summary",
     "/summary/:path*",
     "/sync",
