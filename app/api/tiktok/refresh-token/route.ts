@@ -2,78 +2,48 @@
  * app/api/tiktok/refresh-token/route.ts
  * POST /api/tiktok/refresh-token
  *
- * แลก Refresh Token (rft.xxx) เป็น Access Token (act.xxx)
- * แสดงผล access_token ใหม่ให้ copy ไปใส่ใน .env
+ * Manual "refresh now" for the Settings page. Delegates to
+ * refreshTikTokAccessToken() so it behaves exactly like the automatic
+ * refresh: reads the refresh token from tiktok_token_store (falling back to
+ * env), and writes the rotated pair straight back to the store.
+ *
+ * It used to call TikTok directly and hand the new tokens to the operator to
+ * paste into .env. That bricked the integration: TikTok single-uses and
+ * rotates refresh_token on every exchange (see the BUG FIX note in
+ * lib/tiktok-token.ts), so the moment this ran, the refresh token in .env was
+ * dead. Copy the access token but miss the new refresh token — easy, they
+ * were two fields on a results panel — and every later refresh failed with
+ * `code=40002 Invalid refresh_token`, permanently, with no way back except
+ * re-authorising from scratch. Nothing should produce a credential that only
+ * exists on screen.
  */
 
 import { NextResponse } from "next/server";
-import axios, { AxiosError } from "axios";
+import { refreshTikTokAccessToken } from "@/lib/tiktok-token";
 
 export async function POST() {
-  const appId = process.env.TIKTOK_CLIENT_ID;
-  const secret = process.env.TIKTOK_CLIENT_SECRET;
-  // Prefer dedicated TIKTOK_REFRESH_TOKEN; fall back to TIKTOK_ACCESS_TOKEN if it's a rft.
-  const refreshToken =
-    process.env.TIKTOK_REFRESH_TOKEN ||
-    (process.env.TIKTOK_ACCESS_TOKEN?.startsWith("rft.")
-      ? process.env.TIKTOK_ACCESS_TOKEN
-      : null);
-
-  const missing: string[] = [];
-  if (!appId) missing.push("TIKTOK_CLIENT_ID");
-  if (!secret) missing.push("TIKTOK_CLIENT_SECRET");
-  if (!refreshToken) missing.push("TIKTOK_REFRESH_TOKEN (หรือ TIKTOK_ACCESS_TOKEN=rft.xxx)");
-  if (missing.length > 0) {
-    return NextResponse.json(
-      { error: `ไม่พบ env: ${missing.join(", ")}` },
-      { status: 500 },
-    );
-  }
-
   try {
-    const res = await axios.post(
-      "https://business-api.tiktok.com/open_api/v1.3/oauth2/refresh_token/",
-      {
-        app_id: appId,
-        secret,
-        refresh_token: refreshToken,
-      },
-      { headers: { "Content-Type": "application/json" } },
-    );
-
-    const body = res.data;
-    if (body.code !== 0) {
-      return NextResponse.json(
-        { error: `TikTok error code=${body.code} msg=${body.message}` },
-        { status: 502 },
-      );
-    }
-
-    const data = body.data;
+    const { access_token } = await refreshTikTokAccessToken();
     return NextResponse.json({
       ok: true,
-      access_token: data.access_token,
-      access_token_expires_in: data.access_token_expire_in,
-      new_refresh_token: data.refresh_token,
-      refresh_token_expires_in: data.refresh_token_expire_in,
-      advertiser_ids: data.advertiser_ids ?? [],
-      instruction:
-        'อัปเดต .env: TIKTOK_ACCESS_TOKEN=act.xxx และ TIKTOK_REFRESH_TOKEN=new_refresh_token (ระบบจะ auto-refresh ครั้งต่อไปเมื่อ token หมดอายุ)',
+      // Enough to confirm it worked; the value itself is already saved and
+      // deliberately not echoed in full.
+      access_token_preview: `${access_token.slice(0, 6)}…${access_token.slice(-4)}`,
+      message: "ต่ออายุสำเร็จ — บันทึกลง tiktok_token_store แล้ว ไม่ต้องแก้ .env",
     });
   } catch (err) {
-    if (err instanceof AxiosError) {
-      const d = err.response?.data;
-      return NextResponse.json(
-        {
-          error: `HTTP ${err.response?.status} code=${d?.code} msg=${d?.message}`,
-          raw: d,
-        },
-        { status: 502 },
-      );
-    }
+    const msg = err instanceof Error ? err.message : String(err);
+    // 40002 here means the stored refresh token is spent or revoked, and no
+    // amount of retrying fixes it — say what actually resolves it.
+    const needsReconnect = /40002|invalid refresh_token|No TikTok refresh_token/i.test(msg);
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : String(err) },
-      { status: 500 },
+      {
+        error: msg,
+        ...(needsReconnect
+          ? { hint: 'Refresh token ใช้ไม่ได้แล้ว — กด "Connect TikTok Account" ด้านบนเพื่อเชื่อมต่อใหม่' }
+          : {}),
+      },
+      { status: 502 },
     );
   }
 }

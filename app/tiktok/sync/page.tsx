@@ -69,11 +69,12 @@ type CheckResult = {
 
 type RefreshResult = {
   ok: boolean;
-  access_token: string;
-  access_token_expires_in: number;
-  new_refresh_token: string;
-  advertiser_ids: string[];
-  instruction: string;
+  // The token itself is saved server-side into tiktok_token_store and never
+  // sent back in full — there is nothing here for anyone to copy, which is
+  // the point: the old flow handed over a rotated refresh token that only
+  // existed on this screen.
+  access_token_preview: string;
+  message: string;
 };
 
 export default function TikTokSyncPage() {
@@ -116,13 +117,11 @@ export default function TikTokSyncPage() {
     null,
   );
   const [refreshError, setRefreshError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
 
   const handleRefreshToken = async () => {
     setRefreshing(true);
     setRefreshError(null);
     setRefreshResult(null);
-    setCopied(false);
     try {
       const res = await fetch("/api/tiktok/refresh-token", { method: "POST" });
       const data = await safeJson<RefreshResult & { error?: string }>(res);
@@ -133,12 +132,6 @@ export default function TikTokSyncPage() {
     } finally {
       setRefreshing(false);
     }
-  };
-
-  const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
 
   // ── Check Ad Account state ─────────────────────────────────────────────
@@ -439,22 +432,22 @@ export default function TikTokSyncPage() {
             <span className="text-amber-500 text-lg">🔑</span>
             <div>
               <h2 className="text-base font-semibold text-gray-800">
-                แลก Refresh Token → Access Token
+                ต่ออายุ Access Token ทันที
               </h2>
               <p className="text-xs text-gray-500 mt-0.5">
-                TikTok ใช้ token 2 แบบ: <span className="font-mono">Refresh Token</span> อายุยืน
-                ใช้แลก token ใหม่ได้เรื่อยๆ กับ <span className="font-mono">Access Token</span> อายุสั้น
-                (~1-2 วัน) ที่แอปใช้เรียก TikTok API จริงๆ ปุ่มนี้เอา Refresh Token ที่ตั้งไว้ใน
-                env ไปแลกเป็น Access Token ใหม่ — <strong>นี่คือเส้นทางแบบ manual</strong>{" "}
-                สำหรับกู้คืนตอน token เก่าหมดอายุ ต่างจาก &quot;Connect TikTok Account&quot;
-                ด้านบนที่ auto-refresh ให้เองไม่ต้องยุ่ง
+                ปกติ<strong>ไม่ต้องกดปุ่มนี้</strong> — cron{" "}
+                <span className="font-mono">check-token-expiry</span>{" "}
+                ต่ออายุให้เองอยู่แล้ว มีไว้บังคับต่ออายุเดี๋ยวนั้นตอนไล่หาปัญหา
               </p>
               <p className="text-xs text-gray-500 mt-1">
-                สังเกตว่าต้องใช้ตอนไหน: ถ้า <span className="font-mono">TIKTOK_ACCESS_TOKEN</span>{" "}
-                ขึ้นต้นด้วย <span className="font-mono text-amber-600">rft.</span> (แปลว่าตอนนี้
-                ตั้งเป็น Refresh Token ไว้) หรือ sync เริ่ม error เพราะ token หมดอายุ — กดแล้ว
-                <strong>ต้องก็อปโค้ดที่ได้ไปแปะใน .env เอง + restart server</strong> ไม่ได้บันทึกให้
-                อัตโนมัติ
+                Token ใหม่ถูก<strong>บันทึกลงฐานข้อมูลให้อัตโนมัติ</strong> ไม่ต้องก็อปอะไร
+                ไม่ต้องแก้ <span className="font-mono">.env</span> และไม่ต้อง restart
+              </p>
+              <p className="text-xs text-amber-700 mt-1">
+                ถ้าขึ้น <span className="font-mono">40002 Invalid refresh_token</span> แปลว่า
+                refresh token ถูกใช้ไปแล้วหรือถูกเพิกถอน — TikTok ออก refresh token ใหม่ทุกครั้ง
+                ที่ใช้ ตัวเก่าตายทันที เคสนี้กดซ้ำกี่ครั้งก็ไม่หาย ต้องกด{" "}
+                &quot;Connect TikTok Account&quot; ด้านบนเพื่อเชื่อมต่อใหม่
               </p>
             </div>
           </div>
@@ -501,58 +494,13 @@ export default function TikTokSyncPage() {
           )}
 
           {refreshResult && (
-            <div className="mt-3 p-4 bg-green-50 border border-green-200 rounded-xl space-y-3">
-              <p className="text-green-800 font-semibold text-sm">
-                ได้ Access Token แล้ว ✓
+            <div className="mt-3 p-4 bg-green-50 border border-green-200 rounded-xl space-y-2">
+              <p className="text-green-800 font-semibold text-sm">ต่ออายุ Token สำเร็จ ✓</p>
+              <p className="text-xs text-gray-600">{refreshResult.message}</p>
+              <p className="text-xs text-gray-500">
+                Access token ใหม่:{" "}
+                <span className="font-mono">{refreshResult.access_token_preview}</span>
               </p>
-
-              <div>
-                <p className="text-xs text-gray-500 mb-1">
-                  คัดลอก token ด้านล่างไปใส่ใน{" "}
-                  <span className="font-mono">.env</span> →{" "}
-                  <span className="font-mono">TIKTOK_ACCESS_TOKEN=</span>
-                </p>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 text-xs bg-white border border-gray-200 rounded-lg px-3 py-2 font-mono break-all text-gray-800">
-                    {refreshResult.access_token}
-                  </code>
-                  <button
-                    onClick={() => handleCopy(refreshResult.access_token)}
-                    className="shrink-0 text-xs bg-secondary text-white px-3 py-2 rounded-lg hover:bg-secondary-light transition-colors font-medium"
-                  >
-                    {copied ? "Copied!" : "Copy"}
-                  </button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
-                <div className="bg-white border border-gray-100 rounded-lg px-3 py-2">
-                  <p className="text-gray-400">หมดอายุใน</p>
-                  <p className="font-semibold">
-                    {Math.round(refreshResult.access_token_expires_in / 86400)}{" "}
-                    วัน
-                  </p>
-                </div>
-                <div className="bg-white border border-gray-100 rounded-lg px-3 py-2">
-                  <p className="text-gray-400">Advertiser IDs</p>
-                  <p className="font-mono font-semibold truncate">
-                    {refreshResult.advertiser_ids.join(", ") || "—"}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <p className="flex-1 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                  อัปเดต .env ด้วย token ด้านบน แล้ว restart server
-                </p>
-                <button
-                  onClick={() => handleCheck(refreshResult.access_token)}
-                  disabled={checking}
-                  className="shrink-0 text-xs bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white font-semibold px-3 py-2 rounded-lg transition-colors"
-                >
-                  {checking ? "กำลังเทส…" : "Test Token นี้เลย"}
-                </button>
-              </div>
             </div>
           )}
         </div>
