@@ -68,10 +68,15 @@ export async function GET() {
   // show a warning banner even before the daily sync's email alert fires.
   const { data: tokenRow } = await sb
     .from("tiktok_token_store")
-    .select("refresh_expires_at")
+    .select("refresh_expires_at, refresh_token")
     .eq("id", 1)
     .maybeSingle();
   const refreshExpiresAt = tokenRow?.refresh_expires_at ?? null;
+  // Whether a refresh token exists at all — NOT its value. The Marketing API's
+  // /oauth2/access_token/ returns an access token with no refresh_token and no
+  // expiry (confirmed live 2026-10-02), so this is normally false and the UI
+  // uses it to stop offering a "refresh now" action that cannot ever succeed.
+  const hasRefreshToken = Boolean(tokenRow?.refresh_token);
   const refreshDaysLeft = refreshExpiresAt
     ? Math.round((new Date(refreshExpiresAt).getTime() - Date.now()) / 86400000)
     : null;
@@ -93,6 +98,7 @@ export async function GET() {
     outage_minutes: outageMinutes,
     refresh_expires_at: refreshExpiresAt,
     refresh_days_left: refreshDaysLeft,
+    has_refresh_token: hasRefreshToken,
     syncing,
     status_detail: statusDetail,
     rate_limited: rateLimited,

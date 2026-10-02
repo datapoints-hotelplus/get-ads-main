@@ -134,7 +134,15 @@ async function doRefresh(): Promise<{ access_token: string; expires_in?: number 
   }
   const refreshToken = await getRefreshToken();
   if (!refreshToken) {
-    throw new Error("No TikTok refresh_token available — connect via /tiktok/sync first");
+    // Not a misconfiguration and not something reconnecting fixes: the
+    // Marketing API simply does not issue refresh tokens (confirmed live —
+    // a successful connect stores access_token with refresh_token and
+    // access_expires_at both null, and that access token keeps working).
+    // Saying "connect again" here sent people round a loop that could not
+    // end, since another connect returns no refresh token either.
+    throw new Error(
+      "TikTok ไม่ได้ออก refresh token ให้ API ชุดนี้ (access token ไม่มีวันหมดอายุ) — ไม่มีอะไรต้องต่ออายุ",
+    );
   }
 
   const res = await axios.post(

@@ -30,6 +30,8 @@ type StatusResult = {
   consecutive_failures: number;
   outage_minutes: number | null;
   refresh_days_left: number | null;
+  /** False on the Marketing API, which issues no refresh token — see the Refresh card. */
+  has_refresh_token: boolean;
   // EC5/EC8/EC9/AC13
   syncing: boolean;
   status_detail: string | null;
@@ -426,84 +428,92 @@ export default function TikTokSyncPage() {
           </div>
         )}
 
-        {/* ── Refresh Token Card ────────────────────────────────────────── */}
-        <div className="bg-white border border-amber-200 rounded-xl p-5 shadow-sm">
-          <div className="flex items-start gap-3 mb-3">
-            <span className="text-amber-500 text-lg">🔑</span>
-            <div>
-              <h2 className="text-base font-semibold text-gray-800">
-                ต่ออายุ Access Token ทันที
-              </h2>
-              <p className="text-xs text-gray-500 mt-0.5">
-                ปกติ<strong>ไม่ต้องกดปุ่มนี้</strong> — cron{" "}
-                <span className="font-mono">check-token-expiry</span>{" "}
-                ต่ออายุให้เองอยู่แล้ว มีไว้บังคับต่ออายุเดี๋ยวนั้นตอนไล่หาปัญหา
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                Token ใหม่ถูก<strong>บันทึกลงฐานข้อมูลให้อัตโนมัติ</strong> ไม่ต้องก็อปอะไร
-                ไม่ต้องแก้ <span className="font-mono">.env</span> และไม่ต้อง restart
-              </p>
-              <p className="text-xs text-amber-700 mt-1">
-                ถ้าขึ้น <span className="font-mono">40002 Invalid refresh_token</span> แปลว่า
-                refresh token ถูกใช้ไปแล้วหรือถูกเพิกถอน — TikTok ออก refresh token ใหม่ทุกครั้ง
-                ที่ใช้ ตัวเก่าตายทันที เคสนี้กดซ้ำกี่ครั้งก็ไม่หาย ต้องกด{" "}
-                &quot;Connect TikTok Account&quot; ด้านบนเพื่อเชื่อมต่อใหม่
-              </p>
+        {/* Manual refresh card — hidden unless TikTok actually issued a
+            refresh token. The Marketing API does not: connecting returns an
+            access token with no refresh token and no expiry, so there is
+            nothing this card can do, and a button that always errors is worse
+            than no button. It reappears on its own if that ever changes. */}
+        {status?.has_refresh_token && (
+          <div className="bg-white border border-amber-200 rounded-xl p-5 shadow-sm">
+            <div className="flex items-start gap-3 mb-3">
+              <span className="text-amber-500 text-lg">🔑</span>
+              <div>
+                <h2 className="text-base font-semibold text-gray-800">
+                  ต่ออายุ Access Token ทันที
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  ปกติ<strong>ไม่ต้องกดปุ่มนี้</strong> — cron{" "}
+                  <span className="font-mono">check-token-expiry</span>{" "}
+                  ต่ออายุให้เองอยู่แล้ว มีไว้บังคับต่ออายุเดี๋ยวนั้นตอนไล่หาปัญหา
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Token ใหม่ถูก<strong>บันทึกลงฐานข้อมูลให้อัตโนมัติ</strong> ไม่ต้องก็อปอะไร
+                  ไม่ต้องแก้ <span className="font-mono">.env</span> และไม่ต้อง restart
+                </p>
+                {status && !status.has_refresh_token && (
+                  <p className="text-xs text-gray-600 mt-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                    <strong>ไม่ต้องใช้ปุ่มนี้กับบัญชีนี้</strong> — TikTok Marketing API
+                    ไม่ได้ออก refresh token มาให้ และ access token ที่ได้ตอน Connect
+                    ไม่มีวันหมดอายุ จึงไม่มีอะไรต้องต่ออายุ (ปุ่มจะเปิดใช้งานเองถ้าวันหนึ่ง
+                    TikTok เริ่มส่ง refresh token มา)
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
 
-          <button
-            onClick={handleRefreshToken}
-            disabled={refreshing}
-            className="w-full bg-amber-400 hover:bg-amber-500 disabled:bg-gray-300 text-secondary font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm"
-          >
-            {refreshing ? (
-              <>
-                <svg
-                  className="animate-spin w-4 h-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8v8H4z"
-                  />
-                </svg>
-                กำลังแลก Token…
-              </>
-            ) : (
-              "Refresh Token"
+            <button
+              onClick={handleRefreshToken}
+              disabled={refreshing || (status != null && !status.has_refresh_token)}
+              className="w-full bg-amber-400 hover:bg-amber-500 disabled:bg-gray-300 text-secondary font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm"
+            >
+              {refreshing ? (
+                <>
+                  <svg
+                    className="animate-spin w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8v8H4z"
+                    />
+                  </svg>
+                  กำลังแลก Token…
+                </>
+              ) : (
+                "Refresh Token"
+              )}
+            </button>
+
+            {refreshError && (
+              <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-xl">
+                <p className="text-red-700 text-xs font-mono break-all">
+                  {refreshError}
+                </p>
+              </div>
             )}
-          </button>
 
-          {refreshError && (
-            <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-xl">
-              <p className="text-red-700 text-xs font-mono break-all">
-                {refreshError}
-              </p>
-            </div>
-          )}
-
-          {refreshResult && (
-            <div className="mt-3 p-4 bg-green-50 border border-green-200 rounded-xl space-y-2">
-              <p className="text-green-800 font-semibold text-sm">ต่ออายุ Token สำเร็จ ✓</p>
-              <p className="text-xs text-gray-600">{refreshResult.message}</p>
-              <p className="text-xs text-gray-500">
-                Access token ใหม่:{" "}
-                <span className="font-mono">{refreshResult.access_token_preview}</span>
-              </p>
-            </div>
-          )}
-        </div>
+            {refreshResult && (
+              <div className="mt-3 p-4 bg-green-50 border border-green-200 rounded-xl space-y-2">
+                <p className="text-green-800 font-semibold text-sm">ต่ออายุ Token สำเร็จ ✓</p>
+                <p className="text-xs text-gray-600">{refreshResult.message}</p>
+                <p className="text-xs text-gray-500">
+                  Access token ใหม่:{" "}
+                  <span className="font-mono">{refreshResult.access_token_preview}</span>
+                </p>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── Check Ad Account Card ─────────────────────────────────────── */}
         <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
