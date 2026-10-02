@@ -70,16 +70,33 @@ export async function getTikTokAccessToken(): Promise<string> {
     return cachedToken;
   }
 
-  const envToken = process.env.TIKTOK_ACCESS_TOKEN ?? "";
-  cachedToken = envToken;
-  cachedAt = now;
-  return envToken;
+  // DB only — no env fallback. Two tokens for one integration meant the
+  // stored one could be live and healthy while a stale .env value shadowed it
+  // on some other deploy, and nothing said which was in play. The store is now
+  // the single source: connect once at /tiktok/sync and it is filled in.
+  throw new Error(
+    "ยังไม่ได้เชื่อมต่อ TikTok — ไปที่ /tiktok/sync แล้วกด \"Connect TikTok Account\" (ระบบอ่าน token จาก tiktok_token_store เท่านั้น ไม่ใช้ค่าใน .env แล้ว)",
+  );
 }
 
-/** Refresh token to use, DB first then env (for the manual/legacy flow). */
+/** Refresh token to use. DB only — see the note inside. */
 async function getRefreshToken(): Promise<string | null> {
   const row = await readTokenRow();
-  return row?.refresh_token ?? process.env.TIKTOK_REFRESH_TOKEN ?? null;
+  // DB only — no env fallback, on purpose.
+  //
+  // Confirmed live (2026-10-02): the Marketing API's /oauth2/access_token/
+  // returns an access token with NO refresh_token and NO expiry — the stored
+  // row has access_token set and both refresh_token and access_expires_at
+  // null, and that access token authenticates fine. There is nothing to
+  // refresh on this API, which also explains why tiktok_error_log has never
+  // once recorded a 40105 (token expired).
+  //
+  // TIKTOK_REFRESH_TOKEN in env is an "rft."-prefixed token from TikTok's
+  // other OAuth product and this endpoint rejects it outright. Falling back
+  // to it meant every hourly check-token-expiry resurrected a credential that
+  // cannot work and failed with `code=40002 Invalid refresh_token` forever.
+  // Returning null instead makes the refresh path a clean no-op.
+  return row?.refresh_token ?? null;
 }
 
 // BUG FIX: TikTok single-uses/rotates refresh_token on every exchange — the

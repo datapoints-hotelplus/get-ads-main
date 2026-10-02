@@ -9,6 +9,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { fetchAllAdvertisers, formatTikTokError } from "@/lib/tiktok-ads";
+import { getTikTokAccessToken } from "@/lib/tiktok-token";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
@@ -33,7 +34,10 @@ export async function GET(req: NextRequest) {
   try {
     const advertisers = await fetchAllAdvertisers();
 
-    const token = process.env.TIKTOK_ACCESS_TOKEN ?? "";
+    // Preview the token actually in use (the stored one), not whatever .env
+    // happens to hold — showing the env value here made this check report a
+    // different credential than every real API call was using.
+    const token = await getTikTokAccessToken();
     return NextResponse.json({
       ok: true,
       strategy: process.env.TIKTOK_ADVERTISER_IDS
