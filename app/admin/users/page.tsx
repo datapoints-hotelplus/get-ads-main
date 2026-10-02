@@ -19,6 +19,11 @@ type Account = {
   account_name: string;
 };
 
+type TikTokAdvertiser = {
+  advertiser_id: string;
+  advertiser_name: string;
+};
+
 type LogEntry = {
   id: number;
   username: string;
@@ -69,6 +74,9 @@ export default function AdminUsersPage() {
   const [permUser, setPermUser] = useState<User | null>(null);
   const [allAccounts, setAllAccounts] = useState<Account[]>([]);
   const [granted, setGranted] = useState<Set<string>>(new Set());
+  const [allTiktokAdvertisers, setAllTiktokAdvertisers] = useState<TikTokAdvertiser[]>([]);
+  const [tiktokGranted, setTiktokGranted] = useState<Set<string>>(new Set());
+  const [permSearch, setPermSearch] = useState(""); // filters both lists below
   const [permLoading, setPermLoading] = useState(false);
   const [permSaving, setPermSaving] = useState(false);
 
@@ -177,20 +185,23 @@ export default function AdminUsersPage() {
   async function openPermissions(user: User) {
     setPermUser(user);
     setView("permissions");
+    setPermSearch("");
     setPermLoading(true);
     const res = await fetch(`/api/admin/users/${user.id}/permissions`);
     const data = await res.json();
     setAllAccounts(data.allAccounts ?? []);
     setGranted(new Set(data.granted ?? []));
+    setAllTiktokAdvertisers(data.allTiktokAdvertisers ?? []);
+    setTiktokGranted(new Set(data.tiktokGranted ?? []));
     setPermLoading(false);
   }
 
-  // ── Toggle a single page permission ───────────────────────────────────────
-  function togglePerm(accountId: string) {
-    setGranted((prev) => {
+  // ── Toggle a single permission (Facebook page or TikTok advertiser) ────────
+  function toggleInSet(setter: typeof setGranted, id: string) {
+    setter((prev) => {
       const next = new Set(prev);
-      if (next.has(accountId)) next.delete(accountId);
-      else next.add(accountId);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   }
@@ -202,7 +213,7 @@ export default function AdminUsersPage() {
     await fetch(`/api/admin/users/${permUser.id}/permissions`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ account_ids: [...granted] }),
+      body: JSON.stringify({ account_ids: [...granted], tiktok_advertiser_ids: [...tiktokGranted] }),
     });
     setPermSaving(false);
     setView("users");
@@ -466,41 +477,89 @@ export default function AdminUsersPage() {
                 {permUser.username}
               </span>
             </p>
-            <p className="text-sm text-gray-500 mb-6">
+            <p className="text-sm text-gray-500 mb-4">
               Check the ad accounts this user is allowed to view on the
-              dashboard.
+              dashboard — Facebook pages and TikTok advertisers are separate.
             </p>
+
+            <input
+              type="text"
+              value={permSearch}
+              onChange={(e) => setPermSearch(e.target.value)}
+              placeholder="ค้นหาเพจ/บัญชี…"
+              className="input mb-5"
+            />
 
             {permLoading ? (
               <p className="text-gray-400">Loading accounts…</p>
-            ) : allAccounts.length === 0 ? (
-              <p className="text-gray-400">
-                No accounts found. Add accounts from the Accounts page first.
-              </p>
             ) : (
-              <div className="space-y-2 mb-6">
-                {allAccounts.map((acc) => (
-                  <label
-                    key={acc.account_id}
-                    className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={granted.has(acc.account_id)}
-                      onChange={() => togglePerm(acc.account_id)}
-                      className="h-4 w-4 text-primary rounded"
-                    />
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">
-                        {acc.account_name}
-                      </p>
-                      <p className="text-xs text-gray-400 font-mono">
-                        {acc.account_id}
-                      </p>
-                    </div>
-                  </label>
-                ))}
-              </div>
+              <>
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">Facebook</h3>
+                {allAccounts.length === 0 ? (
+                  <p className="text-gray-400 text-sm mb-6">
+                    No accounts found. Add accounts from the Accounts page first.
+                  </p>
+                ) : (
+                  <div className="space-y-2 mb-3">
+                    {allAccounts
+                      .filter((acc) => acc.account_name.toLowerCase().includes(permSearch.toLowerCase()))
+                      .map((acc) => (
+                        <label
+                          key={acc.account_id}
+                          className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={granted.has(acc.account_id)}
+                            onChange={() => toggleInSet(setGranted, acc.account_id)}
+                            className="h-4 w-4 text-primary rounded"
+                          />
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">
+                              {acc.account_name}
+                            </p>
+                            <p className="text-xs text-gray-400 font-mono">
+                              {acc.account_id}
+                            </p>
+                          </div>
+                        </label>
+                      ))}
+                  </div>
+                )}
+
+                <h3 className="text-sm font-semibold text-gray-700 mb-2 mt-6">TikTok</h3>
+                {allTiktokAdvertisers.length === 0 ? (
+                  <p className="text-gray-400 text-sm mb-6">
+                    No TikTok advertisers found — connect one from /tiktok/sync first.
+                  </p>
+                ) : (
+                  <div className="space-y-2 mb-6">
+                    {allTiktokAdvertisers
+                      .filter((a) => a.advertiser_name.toLowerCase().includes(permSearch.toLowerCase()))
+                      .map((a) => (
+                        <label
+                          key={a.advertiser_id}
+                          className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={tiktokGranted.has(a.advertiser_id)}
+                            onChange={() => toggleInSet(setTiktokGranted, a.advertiser_id)}
+                            className="h-4 w-4 text-primary rounded"
+                          />
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">
+                              {a.advertiser_name}
+                            </p>
+                            <p className="text-xs text-gray-400 font-mono">
+                              {a.advertiser_id}
+                            </p>
+                          </div>
+                        </label>
+                      ))}
+                  </div>
+                )}
+              </>
             )}
 
             <div className="flex items-center gap-3">

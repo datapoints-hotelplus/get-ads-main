@@ -1,0 +1,278 @@
+// ============================================================
+// Facebook / Meta Ads schema — paste into https://dbdiagram.io
+//
+// Built from supabase/migrations 001-011 and 016-021. The TikTok side
+// (012-015, 022-037) is a separate integration and is not in this diagram.
+//
+// Columns added by later ALTER migrations are folded into their table here,
+// so this is the shape the tables have today rather than what 001 created.
+// ============================================================
+
+Table ads_allpage {
+  id           bigint      [pk, increment]
+  account_name text        [not null]
+  account_id   text        [not null, unique, note: 'Facebook act_XXXX identifier']
+  is_active    boolean     [not null, default: true, note: 'false = skipped by sync']
+  created_at   timestamptz [not null, default: `now()`]
+
+  Note: 'The Facebook ad accounts an admin has registered. account_id is the natural key everything else joins on, not id.'
+}
+
+Table ads_rawdata {
+  id                              bigint [pk, increment]
+
+  // identity
+  account_name                    text
+  account_id                      text
+  campaign_name                   text
+  campaign_id                     text
+  adset_name                      text
+  adset_id                        text
+  ad_name                         text
+  ad_id                           text
+  objective                       text
+
+  // period
+  date_start                      date
+  date_stop                       date
+
+  // delivery
+  impressions                     numeric [default: 0]
+  reach                           numeric [default: 0]
+  frequency                       numeric [default: 0]
+  spend                           numeric [default: 0]
+
+  // clicks
+  inline_link_clicks              numeric [default: 0]
+  unique_inline_link_clicks       numeric [default: 0]
+  clicks_all                      numeric [default: 0, note: 'All clicks — the CPC denominator']
+
+  // outcomes
+  purchases                       numeric [default: 0]
+  purchase_value                  numeric [default: 0]
+  leads                           numeric [default: 0]
+  messaging_conversations_started numeric [default: 0]
+  roas                            numeric [default: 0]
+
+  // engagement
+  post_shares                     numeric [default: 0]
+  post_comments                   numeric [default: 0]
+  post_reactions                  numeric [default: 0]
+  post_engagement                 numeric [default: 0]
+  page_likes                      numeric [default: 0]
+
+  // video
+  video_views_3s                  numeric [default: 0]
+  video_p25                       numeric [default: 0]
+  video_p50                       numeric [default: 0]
+  video_p75                       numeric [default: 0]
+  video_p100                      numeric [default: 0]
+  video_avg_time                  numeric [default: 0]
+  hook_rate                       numeric [default: 0]
+  hold_rate                       numeric [default: 0]
+
+  // rates and costs
+  cpc                             numeric [default: 0]
+  cpm                             numeric [default: 0]
+  ctr                             numeric [default: 0]
+  ctr_all                         numeric [default: 0]
+  cost_per_result                 numeric [default: 0]
+  cost_per_engagement             numeric [default: 0]
+  cost_per_like                   numeric [default: 0]
+  cost_per_message                numeric [default: 0]
+
+  created_at                      timestamptz [not null, default: `now()`]
+
+  indexes {
+    account_id
+    account_name
+    date_start
+    campaign_name
+    clicks_all
+  }
+
+  Note: '''
+One row per ad per day, from the Meta Insights API.
+
+Campaign, ad set and ad live here as plain columns repeated on every row —
+there is no campaigns or adsets table for them to reference.
+
+No unique constraint on (account_name, ad_id, date_start), so a re-sync
+inserts rather than replaces. Migration 007 exists purely to delete the
+duplicates that produced. Adding that constraint and upserting would remove
+the class of problem; until then duplicates are possible.
+'''
+}
+
+Table ads_geo {
+  id                 bigint [pk, increment]
+  ad_id              text
+  ad_name            text
+  date_start         date
+  date_stop          date
+  region             text
+  impressions        numeric [default: 0]
+  clicks             numeric [default: 0]
+  clicks_all         numeric [default: 0]
+  inline_link_clicks numeric [default: 0]
+  spend              numeric [default: 0]
+  reach              numeric [default: 0]
+  purchases          numeric [default: 0]
+  purchase_value     numeric [default: 0]
+  created_at         timestamptz [not null, default: `now()`]
+
+  Note: 'Per-ad, per-day breakdown by region. reach here is deduplicated within its own slice and must not be summed across rows.'
+}
+
+Table ads_demographic {
+  id                 bigint [pk, increment]
+  ad_id              text
+  ad_name            text
+  date_start         date
+  date_stop          date
+  age                text
+  gender             text
+  impressions        numeric [default: 0]
+  clicks             numeric [default: 0]
+  clicks_all         numeric [default: 0]
+  inline_link_clicks numeric [default: 0]
+  spend              numeric [default: 0]
+  reach              numeric [default: 0]
+  purchases          numeric [default: 0]
+  purchase_value     numeric [default: 0]
+  created_at         timestamptz [not null, default: `now()`]
+
+  Note: 'Per-ad, per-day breakdown by age band and gender.'
+}
+
+Table ads_device {
+  id                 bigint [pk, increment]
+  ad_id              text
+  ad_name            text
+  date_start         date
+  date_stop          date
+  impression_device  text
+  impressions        numeric [default: 0]
+  clicks             numeric [default: 0]
+  clicks_all         numeric [default: 0]
+  inline_link_clicks numeric [default: 0]
+  spend              numeric [default: 0]
+  reach              numeric [default: 0]
+  purchases          numeric [default: 0]
+  purchase_value     numeric [default: 0]
+  created_at         timestamptz [not null, default: `now()`]
+
+  Note: 'Per-ad, per-day breakdown by the device an impression was served on.'
+}
+
+Table ads_campaign_highlights {
+  id            bigint [pk, increment]
+  campaign_name text   [not null]
+  metric_key    text   [not null, note: 'e.g. messages, cost_per_message, ctr']
+  created_at    timestamptz [not null, default: `now()`]
+
+  indexes {
+    (campaign_name, metric_key) [unique]
+    campaign_name
+  }
+
+  Note: 'Which metrics an admin has pinned for a campaign. Keyed by campaign NAME, not campaign_id — renaming a campaign in Meta silently orphans its highlights.'
+}
+
+Table ads_users {
+  id            uuid   [pk, default: `gen_random_uuid()`]
+  username      text   [not null, unique]
+  password_hash text   [not null, note: 'scrypt, stored as "salt_hex:hash_hex"']
+  display_name  text
+  role          text   [not null, default: 'user', note: "'user' or 'admin'"]
+  is_active     boolean [not null, default: true]
+  created_at    timestamptz [not null, default: `now()`]
+  updated_at    timestamptz [not null, default: `now()`, note: 'maintained by the users_set_updated_at trigger']
+}
+
+Table ads_user_page_permissions {
+  id         bigint [pk, increment]
+  user_id    uuid   [not null]
+  account_id text   [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, account_id) [unique]
+    user_id
+  }
+
+  Note: 'Which ad accounts each non-admin user may see. An empty set means no access, not full access.'
+}
+
+Table ads_user_access_logs {
+  id          bigint [pk, increment]
+  user_id     uuid   [not null]
+  username    text   [not null, note: 'denormalised, so the log survives the user row being deleted — though the FK cascade deletes it anyway']
+  page        text   [not null, note: 'e.g. dashboard, summary']
+  ip_address  text
+  user_agent  text
+  accessed_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    user_id
+    accessed_at
+  }
+}
+
+Table fb_token_store {
+  id           int  [pk, default: 1, note: 'singleton — CHECK (id = 1)']
+  access_token text [not null]
+  expires_at   timestamptz
+  refreshed_at timestamptz [default: `now()`]
+
+  Note: 'Joined to nothing. The current Meta long-lived token, exchanged for a fresh 60-day one before expiry. RLS is ON here, unlike every other table in this diagram; only the service role reads it.'
+}
+
+Table ads_portfolio_templates {
+  id              uuid    [pk, default: `gen_random_uuid()`]
+  name            text    [not null]
+  metric          text    [not null]
+  direction       text    [not null, default: 'higher_better', note: "'higher_better' or 'lower_better'"]
+  target          numeric
+  green_min       numeric
+  yellow_min      numeric
+  green_op        text    [not null, default: '>=', note: "'<', '<=', '>', '>='"]
+  yellow_op       text    [not null, default: '>=', note: "'<', '<=', '>', '>='"]
+  campaign_filter text
+  created_at      timestamptz [not null, default: `now()`]
+
+  Note: 'Scorecard thresholds. Joined to nothing — matched to campaigns by the campaign_filter string at read time. green_op/yellow_op superseded `direction`, which is still stored and still defaulted, so two columns express the same rule.'
+}
+
+Table ads_portfolio_profiles {
+  id         uuid [pk, default: `gen_random_uuid()`]
+  name       text [not null]
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table ads_portfolio_profile_accounts {
+  profile_id uuid [not null]
+  account_id text [not null]
+
+  indexes {
+    (profile_id, account_id) [pk]
+  }
+
+  Note: 'Join table: which ad accounts belong to a portfolio profile.'
+}
+
+// ── Real foreign keys, enforced by the database ──────────────────────────
+Ref: ads_user_page_permissions.user_id > ads_users.id [delete: cascade]
+Ref: ads_user_page_permissions.account_id > ads_allpage.account_id [delete: cascade]
+Ref: ads_user_access_logs.user_id > ads_users.id [delete: cascade]
+Ref: ads_portfolio_profile_accounts.profile_id > ads_portfolio_profiles.id [delete: cascade]
+Ref: ads_portfolio_profile_accounts.account_id > ads_allpage.account_id [delete: cascade]
+
+// ── Joins the application relies on, with NO constraint behind them ──────
+// Nothing stops a row here from pointing at an account or ad that does not
+// exist, and nothing cleans these up when the parent goes away.
+Ref: ads_rawdata.account_id > ads_allpage.account_id
+Ref: ads_geo.ad_id > ads_rawdata.ad_id
+Ref: ads_demographic.ad_id > ads_rawdata.ad_id
+Ref: ads_device.ad_id > ads_rawdata.ad_id
+Ref: ads_campaign_highlights.campaign_name > ads_rawdata.campaign_name

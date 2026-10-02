@@ -1,10 +1,11 @@
 "use client";
 
 import { useRouter, usePathname } from "next/navigation";
+import { useTikTokStatus } from "@/app/hooks/useTikTokStatus";
 
 const USER_LINKS = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/portfolio", label: "Portfolio" },
+  { href: "/facebook/dashboard", label: "Facebook" },
+  { href: "/facebook/portfolio", label: "Portfolio" },
 ];
 
 type User = { display_name?: string | null; username: string };
@@ -20,6 +21,7 @@ type Props = {
 export default function UserNav({ subtitle, user, authLoading, onLogout, children }: Props) {
   const router = useRouter();
   const pathname = usePathname();
+  const tiktokConnected = useTikTokStatus();
 
   async function handleLogout() {
     if (onLogout) { onLogout(); return; }
@@ -54,6 +56,18 @@ export default function UserNav({ subtitle, user, authLoading, onLogout, childre
                 {link.label}
               </button>
             ))}
+            <button
+              onClick={() => router.push("/tiktok/dashboard")}
+              title={tiktokConnected == null ? undefined : tiktokConnected ? "TikTok: Connected" : "TikTok: Disconnected"}
+              className="flex items-center gap-1.5 text-sm text-secondary/70 hover:text-secondary font-medium transition-colors"
+            >
+              {tiktokConnected != null && (
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${tiktokConnected ? "bg-green-400" : "bg-red-400"}`}
+                />
+              )}
+              TikTok
+            </button>
             {authLoading ? (
               <span className="text-xs text-gray-400">...</span>
             ) : user ? (

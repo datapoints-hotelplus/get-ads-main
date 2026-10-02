@@ -196,4 +196,4 @@ CREATE INDEX IF NOT EXISTS idx_ads_rawdata_clicks_all
 -- Note: Migration 007 (remove duplicates) is not included in this combined file
 -- as it performs data cleanup that should only be run once on existing data.
 -- If you need to clean duplicates, run the original 007_remove_duplicates.sql separately.
--- ─────────────────────────────────────────────────────────────
+-- ───────────────────────────────────────────────────────────── 

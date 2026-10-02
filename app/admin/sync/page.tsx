@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import AdminNav from "@/app/components/AdminNav";
+import DateInput from "@/app/components/DateInput";
 
 export default function AdminSyncPage() {
   const router = useRouter();
@@ -317,22 +318,22 @@ export default function AdminSyncPage() {
               <label className="block text-xs text-gray-500 mb-1">
                 วันเริ่มต้น (ไม่บังคับ)
               </label>
-              <input
-                type="date"
+              <DateInput
                 value={clearDateFrom}
-                onChange={(e) => setClearDateFrom(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                onChange={setClearDateFrom}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 pr-7 text-sm"
+                aria-label="วันเริ่มต้น"
               />
             </div>
             <div className="flex-1">
               <label className="block text-xs text-gray-500 mb-1">
                 วันสิ้นสุด (ไม่บังคับ)
               </label>
-              <input
-                type="date"
+              <DateInput
                 value={clearDateTo}
-                onChange={(e) => setClearDateTo(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                onChange={setClearDateTo}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 pr-7 text-sm"
+                aria-label="วันสิ้นสุด"
               />
             </div>
           </div>
