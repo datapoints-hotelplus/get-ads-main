@@ -11,6 +11,7 @@
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 import { isAuthorizedSyncCaller } from "@/lib/syncAuth";
+import { daysAgoIn } from "@/lib/adDate";
 import { fetchHourlyEngagement, formatTikTokError } from "@/lib/tiktok-ads";
 
 export const maxDuration = 300; // hourly-granularity pulls across many advertisers — see /api/tiktok/sync
@@ -34,13 +35,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No active advertisers to sync" }, { status: 404 });
   }
 
-  const today = new Date();
-  const endDate = new Date(today);
-  endDate.setDate(endDate.getDate() - 1);
-  const startDate = new Date(today);
-  startDate.setDate(startDate.getDate() - ROLLING_WINDOW_DAYS);
-  const startStr = startDate.toISOString().slice(0, 10);
-  const endStr = endDate.toISOString().slice(0, 10);
+  // Account-timezone dates — see lib/adDate.
+  const endStr = daysAgoIn(1);
+  const startStr = daysAgoIn(ROLLING_WINDOW_DAYS);
 
   const results: { advertiser_id: string; advertiser_name: string; rows: number; error?: string }[] = [];
   let totalRows = 0;

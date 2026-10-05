@@ -22,6 +22,7 @@
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 import { isAuthorizedSyncCaller } from "@/lib/syncAuth";
+import { daysAgoIn } from "@/lib/adDate";
 import { sendAlertEmail } from "@/lib/email";
 
 // A first-ever (3-year) backfill across several advertisers easily runs past
@@ -195,7 +196,6 @@ async function checkConsecutiveFailures() {
 async function syncOneAdvertiser(
   sb: SupabaseClient,
   adv: TikTokAdvertiser,
-  today: Date,
   endStr: string,
   lookbackOverride: number | null,
 ): Promise<{ advertiser_id: string; advertiser_name: string; rows: number; error?: string; startStr: string }> {
@@ -210,9 +210,7 @@ async function syncOneAdvertiser(
   // "ทั้งหมด") instead of always relying on the isFirstSync guess.
   const lookbackDays = lookbackOverride ?? (isFirstSync ? FIRST_SYNC_LOOKBACK_DAYS : DEFAULT_LOOKBACK_DAYS);
 
-  const startDate = new Date(today);
-  startDate.setDate(startDate.getDate() - lookbackDays);
-  const startStr = startDate.toISOString().slice(0, 10);
+  const startStr = daysAgoIn(lookbackDays);
   const chunks = chunkDateRange(startStr, endStr, CHUNK_DAYS);
 
   let totalRows = 0;
@@ -662,10 +660,11 @@ export async function POST(req: Request) {
     error?: string;
   }[] = [];
 
-  const today = new Date();
-  const endDate = new Date(today);
-  endDate.setDate(endDate.getDate() - 1);
-  const endStr = endDate.toISOString().slice(0, 10);
+  // Yesterday in the ad account's timezone, not the server's — see lib/adDate.
+  // Ads Manager's day boundary is the account's midnight, so this is what makes
+  // the synced range line up with what TikTok shows on screen regardless of
+  // when the cron fires.
+  const endStr = daysAgoIn(1);
 
   let grandTotalRows = 0;
   let anyAdvertiserSucceeded = false;
@@ -741,7 +740,7 @@ export async function POST(req: Request) {
     }
     const batch = activeAdvertisers.slice(i, i + ADVERTISER_CONCURRENCY);
     const batchResults = await Promise.all(
-      batch.map((adv) => syncOneAdvertiser(sb, adv, today, endStr, lookbackOverride)),
+      batch.map((adv) => syncOneAdvertiser(sb, adv, endStr, lookbackOverride)),
     );
 
     for (const r of batchResults) {

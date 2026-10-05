@@ -27,6 +27,7 @@
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 import { isAuthorizedSyncCaller } from "@/lib/syncAuth";
+import { daysAgoIn } from "@/lib/adDate";
 import {
   fetchBusinessAccounts,
   fetchAccountDailyMetrics,
@@ -42,10 +43,6 @@ export const maxDuration = 300;
 const DEFAULT_LOOKBACK_DAYS = 30;
 const MAX_LOOKBACK_DAYS = 365;
 const CHUNK_DAYS = 30;
-
-function isoDay(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
 
 export async function POST(req: Request) {
   if (!(await isAuthorizedSyncCaller(req))) {
@@ -79,16 +76,12 @@ export async function POST(req: Request) {
   // yesterday. One extra day is fetched before the window purely as the
   // baseline that the first real day's follower delta is measured against;
   // it's dropped before writing.
-  const end = new Date();
-  end.setDate(end.getDate() - 1);
-  const start = new Date(end);
-  start.setDate(start.getDate() - lookbackDays);
-  const baseline = new Date(start);
-  baseline.setDate(baseline.getDate() - 1);
+  // Dates in the ad account's timezone, not the server's — see lib/adDate.
+  const endStr = daysAgoIn(1);
+  const startStr = daysAgoIn(1 + lookbackDays);
+  const baselineStr = daysAgoIn(2 + lookbackDays);
 
-  const endStr = isoDay(end);
-  const startStr = isoDay(start);
-  const chunks = chunkDateRange(isoDay(baseline), endStr, CHUNK_DAYS);
+  const chunks = chunkDateRange(baselineStr, endStr, CHUNK_DAYS);
 
   // `data` carries the days themselves, not just a count, and `raw` carries
   // TikTok's untouched response. Storing is a separate, non-fatal step below:
