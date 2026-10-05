@@ -47,6 +47,16 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next({ request: { headers: requestHeaders } });
   }
 
+  // ── n8n cron endpoints — no auth (called without a session cookie) ──────
+  if (
+    pathname === "/api/tiktok/sync" ||
+    pathname === "/api/tiktok/sync-heatmap" ||
+    pathname === "/api/tiktok/sync-windsor" ||
+    pathname === "/api/tiktok/check-token-expiry"
+  ) {
+    return NextResponse.next();
+  }
+
   // ── Every other TikTok route (/tiktok/sync — Settings — and every
   //    mutating/API-secret-bearing endpoint) — admin only, unchanged ──────
   const isTikTokPage = pathname.startsWith("/tiktok");

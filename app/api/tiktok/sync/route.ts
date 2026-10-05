@@ -21,6 +21,7 @@
 
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
+import { isAuthorizedSyncCaller } from "@/lib/syncAuth";
 import { daysAgoIn } from "@/lib/adDate";
 import { sendAlertEmail } from "@/lib/email";
 
@@ -553,8 +554,15 @@ async function syncOneAdvertiser(
 
 export async function POST(req: Request) {
   const syncStartedAt = Date.now();
+  if (!(await isAuthorizedSyncCaller(req))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const url = new URL(req.url);
-  const triggeredBy = url.searchParams.get("source") ?? "manual";
+  const usedSecret =
+    req.headers.get("authorization") === `Bearer ${process.env.SYNC_TRIGGER_SECRET}` &&
+    !!process.env.SYNC_TRIGGER_SECRET;
+  const triggeredBy = url.searchParams.get("source") ?? (usedSecret ? "n8n" : "manual");
 
   // Optional lookback override from the sync page's "3 เดือน / ทั้งหมด"
   // select — clamped to a sane range so a bad query param can't ask for

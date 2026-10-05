@@ -25,6 +25,7 @@
 
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
+import { isAuthorizedSyncCaller } from "@/lib/syncAuth";
 
 export const maxDuration = 300;
 
@@ -140,6 +141,10 @@ async function windsorGet(apiKey: string, datePreset: string, fields: string[]):
 const SIXTY_DAY_CAP_MARKER = "last 60 days";
 
 export async function POST(req: Request) {
+  if (!(await isAuthorizedSyncCaller(req))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const apiKey = process.env.WINDSOR_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ error: "WINDSOR_API_KEY not set" }, { status: 501 });

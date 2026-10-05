@@ -10,6 +10,7 @@
 
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
+import { isAuthorizedSyncCaller } from "@/lib/syncAuth";
 import { daysAgoIn } from "@/lib/adDate";
 import { fetchHourlyEngagement, formatTikTokError } from "@/lib/tiktok-ads";
 
@@ -20,6 +21,10 @@ const INTER_ADVERTISER_DELAY_MS = 1000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export async function POST(req: Request) {
+  if (!(await isAuthorizedSyncCaller(req))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const sb = getSupabase();
   const { data: advertisers } = await sb
     .from("tiktok_advertisers")
