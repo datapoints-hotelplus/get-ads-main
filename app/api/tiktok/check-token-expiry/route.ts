@@ -17,13 +17,9 @@
  */
 
 import { NextResponse } from "next/server";
-import { isAuthorizedSyncCaller } from "@/lib/syncAuth";
 import { checkTokenExpiryAndAlert, getTikTokAccessToken } from "@/lib/tiktok-token";
 
-export async function POST(req: Request) {
-  if (!(await isAuthorizedSyncCaller(req))) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+export async function POST() {
   await getTikTokAccessToken();
   await checkTokenExpiryAndAlert();
   return NextResponse.json({ success: true });
