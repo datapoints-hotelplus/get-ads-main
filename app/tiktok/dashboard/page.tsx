@@ -10,6 +10,7 @@ import {
   Cell,
   ComposedChart,
   Legend,
+  LabelList,
   Line,
   Pie,
   PieChart,
@@ -24,22 +25,11 @@ import {
   ZAxis,
 } from "recharts";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Poppins } from "next/font/google";
 import ThaiGeoChart from "../../ThaiGeoChart";
 import SortableTable from "@/app/components/SortableTable";
 import DateInput from "@/app/components/DateInput";
 import AdminNav from "@/app/components/AdminNav";
 import UserNav from "@/app/components/UserNav";
-
-// The bold rounded numerals/headings in the reference mockup — Poppins has
-// no Thai glyphs (no "thai" subset exists for it), so Thai text on this
-// heavily-Thai-labeled page falls through to `fallback` per character
-// instead of erroring at build time or going tofu.
-const poppins = Poppins({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  fallback: ["-apple-system", "BlinkMacSystemFont", "Segoe UI", "Roboto", "sans-serif"],
-});
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -290,12 +280,12 @@ type ViewRateMode = "view_2s_rate" | "view_6s_rate" | "view_50_rate" | "view_100
 // report, less rounded consumer-app card — with the shadow strengthened to
 // carry the depth that the roundness used to.  Colors unchanged on purpose.
 const SECTION_CARD =
-  "bg-white border border-gray-300 rounded-lg shadow-[0_2px_14px_rgba(0,0,0,0.14)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.24)] transition-shadow duration-200 p-5";
+  "bg-white border border-gray-300 rounded-lg shadow-[0_2px_14px_rgba(0,0,0,0.14)] p-5";
 // Individual metric tiles (KpiTile, Scorecard) sit inside a SECTION_CARD —
 // gray-50 against the card's white keeps each one a visibly separate
 // "sub-card" instead of blending into the white it sits on.
 const TILE_CARD =
-  "bg-gray-50 border border-gray-300 rounded-lg shadow-[0_1px_8px_rgba(0,0,0,0.12)] hover:shadow-[0_8px_20px_rgba(0,0,0,0.2)] transition-shadow duration-200 p-3";
+  "bg-gray-50 border border-gray-300 rounded-lg shadow-[0_1px_8px_rgba(0,0,0,0.12)] p-3";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -409,7 +399,7 @@ const provinceColumns: ColumnDef<ProvinceRow>[] = [
     enableSorting: false,
     cell: ({ row }) => (
       <div className="h-2 rounded-full bg-gray-100 overflow-hidden min-w-28">
-        <div className="h-full rounded-full bg-[#fe2c55]" style={{ width: `${Math.min(100, row.original.percentage)}%` }} />
+        <div className="h-full rounded-full bg-[#1a2b4a]" style={{ width: `${Math.min(100, row.original.percentage)}%` }} />
       </div>
     ),
   },
@@ -753,7 +743,7 @@ function TimingHeatmapChart({ d }: { d: DashboardData }) {
                         style={{
                           backgroundColor: `rgba(254,44,85,${0.08 + intensity * 0.85})`,
                           outline: "2px solid",
-                          outlineColor: isPinned ? "#fe2c55" : isHovered ? "#111827" : "transparent",
+                          outlineColor: isPinned ? "#1a2b4a" : isHovered ? "#111827" : "transparent",
                         }}
                       />
                     </td>
@@ -1152,26 +1142,6 @@ function defaultDateRange() {
 }
 
 // ─── Info dot — hover explanation for a metric label ──────────────────────
-// Every KPI tile is a jargon term (CPM, CTR, Reach, "View Rate 50%") with
-// nothing on the page saying what it means or how it's computed — previously
-// answered one at a time in chat (see the Engagement tile's history). Native
-// `title` tooltip, same tradeoff as the Timing Heatmap originally made and
-// then reversed for a 7×24 grid — but here it's one static icon per tile,
-// not 168 cells the mouse sweeps across, so the slow/plain native tooltip
-// doesn't read as "broken" the way it did there.
-function InfoDot({ text, dark }: { text: string; dark?: boolean }) {
-  return (
-    <span
-      title={text}
-      className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded-full text-[9px] font-bold cursor-help shrink-0 ${
-        dark ? "bg-white/20 text-white/70" : "bg-gray-200 text-gray-500"
-      }`}
-    >
-      i
-    </span>
-  );
-}
-
 // ─── Scorecard — flat, no card chrome: label / big number / thin-ruled delta ──
 
 function Scorecard({
@@ -1179,21 +1149,16 @@ function Scorecard({
   value,
   sub,
   change,
-  info,
 }: {
   label: string;
   value: string;
   sub?: string;
   change?: number | null;
-  // Short Thai explanation of what the metric means / how it's computed —
-  // see InfoDot's comment for why every tile gets one of these now.
-  info?: string;
 }) {
   return (
     <div className={TILE_CARD}>
       <div className="flex items-center gap-1 mb-1">
         <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">{label}</p>
-        {info && <InfoDot text={info} />}
       </div>
       <p className="text-2xl font-bold text-black mb-1.5">{value}</p>
       {(sub || change != null) && (
@@ -1221,7 +1186,6 @@ function KpiTile({
   lastMonth,
   scope,
   breakdown,
-  info,
 }: {
   label: string;
   value: string;
@@ -1237,16 +1201,12 @@ function KpiTile({
   // comparison. Used where a tile's headline figure is made of parts the
   // reader needs — paid versus organic — rather than a single source.
   breakdown?: { label: string; value: string }[];
-  // Short Thai explanation of what the metric means / how it's computed —
-  // see InfoDot's comment for why every tile gets one of these now.
-  info?: string;
 }) {
   return (
     <div className={TILE_CARD}>
       <div className="flex items-center gap-1 mb-1">
         <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">{label}</p>
         {scope && <span className="text-[10px] text-gray-400">({scope})</span>}
-        {info && <InfoDot text={info} />}
       </div>
       <p className="text-2xl font-bold text-black mb-1.5">{value}</p>
       {breakdown && breakdown.length > 0 && (
@@ -1295,14 +1255,10 @@ function HeroSpend({
   asOf: string | null;
 }) {
   return (
-    <div className="bg-black rounded-lg shadow-[0_4px_18px_rgba(0,0,0,0.3)] hover:shadow-[0_16px_38px_rgba(0,0,0,0.4)] transition-shadow duration-200 px-6 py-5 flex items-center justify-between flex-wrap gap-4">
+    <div className="bg-black rounded-lg shadow-[0_4px_18px_rgba(0,0,0,0.3)] px-6 py-5 flex items-center justify-between flex-wrap gap-4">
       <div>
         <div className="flex items-center gap-1.5 mb-1">
           <p className="text-xs text-white/50">Total Spend · {monthLabel}</p>
-          <InfoDot
-            dark
-            text="ยอดใช้จ่ายโฆษณารวมทุกแอดในช่วงที่เลือก (เฉพาะ Ads ไม่รวม Organic)"
-          />
         </div>
         <p className="text-3xl font-bold text-white">{fmtCurrency(spend)}</p>
         {asOf && <p className="text-xs text-white/40 mt-1">ข้อมูล ณ {asOf}</p>}
@@ -1604,10 +1560,8 @@ function TikTokDashboardPageInner() {
   };
 
   return (
-    // Poppins (see the import above) for the rounded-geometric look from
-    // the reference mockup — scoped to this page only via its className,
-    // same reasoning as SECTION_CARD/TILE_CARD below.
-    <div className={`min-h-screen bg-gray-100 ${poppins.className}`}>
+    // LINE Seed Sans TH (see @font-face in globals.css), scoped to this page.
+    <div className="min-h-screen bg-gray-100 font-line-seed">
       {/* EC3/AC6: token revoked/expired — a blocking modal, not a dismissible
           banner, so it can't be missed. Dashboard content still renders
           underneath (old data stays visible, nothing is deleted). */}
@@ -1759,7 +1713,6 @@ function TikTokDashboardPageInner() {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <KpiTile
                 label="Impressions"
-                info="จำนวนครั้งที่โฆษณาแสดงผล นับซ้ำได้ถ้าคนเดิมเห็นหลายครั้ง (ต่างจาก Reach ที่นับคนไม่ซ้ำ)"
                 value={fmt(totals.impressions)}
                 thisMonth={data && deltaOf(totals.impressions, data.prev_totals.impressions, fmt)}
                 lastMonth={data && fmt(data.prev_totals.impressions)}
@@ -1773,21 +1726,18 @@ function TikTokDashboardPageInner() {
               <KpiTile
                 label="Reach"
                 scope={data?.reach_source === "summed_fallback" ? "⚠️ ประมาณการ" : undefined}
-                info="จำนวนคนที่เห็นโฆษณาจริง นับไม่ซ้ำคนในช่วงวันที่เลือก (ดึงตรงจาก TikTok ไม่ได้รวมเองจากข้อมูลรายวัน)"
                 value={fmt(totals.reach)}
                 thisMonth={data && deltaOf(totals.reach, data.prev_totals.reach, fmt)}
                 lastMonth={data && fmt(data.prev_totals.reach)}
               />
               <KpiTile
                 label="CPM"
-                info="ต้นทุนต่อการแสดงผล 1,000 ครั้ง = Spend ÷ Impressions × 1000"
                 value={fmtCurrency(totals.cpm)}
                 thisMonth={data && deltaOf(totals.cpm, data.prev_totals.cpm, fmtCurrency)}
                 lastMonth={data && fmtCurrency(data.prev_totals.cpm)}
               />
               <KpiTile
                 label="CPC"
-                info="ต้นทุนต่อคลิก 1 ครั้ง = Spend ÷ Clicks (นับ Clicks (all) รวมคลิกที่ไม่ได้ไปปลายทาง เช่น กดเพลง/โปรไฟล์ ด้วย)"
                 value={fmtCurrency(totals.cpc)}
                 thisMonth={data && deltaOf(totals.cpc, data.prev_totals.cpc, fmtCurrency)}
                 lastMonth={data && fmtCurrency(data.prev_totals.cpc)}
@@ -1813,7 +1763,6 @@ function TikTokDashboardPageInner() {
               <KpiTile
                 label="Video view"
                 scope={data?.profile_metrics.video_views != null ? "ทั้งบัญชี" : "Ads"}
-                info="ยอดดูวิดีโอทั้งบัญชี (Ads + Organic) แยกด้านล่างว่ามาจากแอดเท่าไหร่ ที่เหลือคือ Organic"
                 value={fmt(data?.profile_metrics.video_views ?? totals.video_views)}
                 breakdown={
                   data?.profile_metrics.video_views != null
@@ -1846,7 +1795,6 @@ function TikTokDashboardPageInner() {
               <KpiTile
                 label="Profile view"
                 scope="ทั้งบัญชี"
-                info="จำนวนครั้งที่มีคนเข้าไปดูหน้าโปรไฟล์ TikTok ทั้งบัญชี แยก Ads/Organic ไม่ได้ เพราะ TikTok นับคนละฐานกับ Profile Views"
                 value={data?.profile_metrics.profile_views != null ? fmt(data.profile_metrics.profile_views) : "—"}
                 thisMonth={
                   data?.profile_metrics.profile_views != null && data.profile_metrics.prev_profile_views != null
@@ -1862,7 +1810,6 @@ function TikTokDashboardPageInner() {
               <KpiTile
                 label="followers"
                 scope="ทั้งบัญชี"
-                info="ยอดผู้ติดตามสะสมทั้งบัญชี ณ ปัจจุบัน — This month คือยอดเพิ่มสุทธิในช่วงที่เลือก (ติดลบได้ถ้ามีคนเลิกติดตามมากกว่าคนติดตามใหม่)"
                 value={data?.profile_metrics.followers != null ? fmt(data.profile_metrics.followers) : "—"}
                 thisMonth={
                   data?.profile_metrics.new_followers != null
@@ -1883,7 +1830,6 @@ function TikTokDashboardPageInner() {
               <KpiTile
                 label="New followers"
                 scope={data?.profile_metrics.new_followers != null ? "ทั้งบัญชี" : "Ads"}
-                info="ผู้ติดตามใหม่ทั้งบัญชีในช่วงที่เลือก แยกด้านล่างว่ามาจากแอดกี่คน ที่เหลือคือ Organic (ติดลบได้ถ้าแอดซื้อผู้ติดตามมามากกว่าที่บัญชีโตจริง)"
                 value={fmt(data?.profile_metrics.new_followers ?? totals.follows)}
                 breakdown={
                   data?.profile_metrics.new_followers != null
@@ -1922,28 +1868,24 @@ function TikTokDashboardPageInner() {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <KpiTile
                 label="Like"
-                info="ยอดไลก์จากโฆษณาเท่านั้น (ไม่รวม Organic) ในช่วงที่เลือก"
                 value={fmt(totals.likes)}
                 thisMonth={data && deltaOf(totals.likes, data.prev_totals.likes, fmt)}
                 lastMonth={data && fmt(data.prev_totals.likes)}
               />
               <KpiTile
                 label="Comment"
-                info="ยอดคอมเมนต์จากโฆษณาเท่านั้น (ไม่รวม Organic) ในช่วงที่เลือก"
                 value={fmt(totals.comments)}
                 thisMonth={data && deltaOf(totals.comments, data.prev_totals.comments, fmt)}
                 lastMonth={data && fmt(data.prev_totals.comments)}
               />
               <KpiTile
                 label="Shares"
-                info="ยอดแชร์จากโฆษณาเท่านั้น (ไม่รวม Organic) ในช่วงที่เลือก"
                 value={fmt(totals.shares)}
                 thisMonth={data && deltaOf(totals.shares, data.prev_totals.shares, fmt)}
                 lastMonth={data && fmt(data.prev_totals.shares)}
               />
               <KpiTile
                 label="Engagement"
-                info="ผลรวม Like + Comment + Shares จากโฆษณาในช่วงที่เลือก (ไม่รวม Organic)"
                 value={fmt(totals.likes + totals.comments + totals.shares)}
                 thisMonth={
                   data &&
@@ -1960,21 +1902,18 @@ function TikTokDashboardPageInner() {
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
               <KpiTile
                 label="Avg. Watch Time"
-                info="เวลาดูวิดีโอเฉลี่ยต่อคน ถ่วงน้ำหนักตามจำนวน Video Views ของแต่ละแอด (แอดที่มีคนดูเยอะมีผลต่อค่าเฉลี่ยมากกว่า)"
                 value={`${totals.avg_watch_time.toFixed(1)}s`}
                 thisMonth={data && deltaOf(totals.avg_watch_time, data.prev_totals.avg_watch_time, (n) => `${n.toFixed(1)}s`)}
                 lastMonth={data && `${data.prev_totals.avg_watch_time.toFixed(1)}s`}
               />
               <KpiTile
                 label="Avg. View Rate (50%)"
-                info="% คนที่ดูถึงครึ่งคลิป จากยอด Video Views ทั้งหมด = video_view_p50 ÷ video_views × 100"
                 value={`${totals.view_50_rate.toFixed(1)}%`}
                 thisMonth={data && deltaOf(totals.view_50_rate, data.prev_totals.view_50_rate, (n) => `${n.toFixed(1)}%`)}
                 lastMonth={data && `${data.prev_totals.view_50_rate.toFixed(1)}%`}
               />
               <KpiTile
                 label="100% Views"
-                info="จำนวนคนที่ดูจนจบคลิป (100%) นับเป็นจำนวนคน ไม่ใช่ %"
                 value={fmt(totals.video_view_p100)}
                 thisMonth={data && deltaOf(totals.video_view_p100, data.prev_totals.video_view_p100, fmt)}
                 lastMonth={data && fmt(data.prev_totals.video_view_p100)}
@@ -1986,7 +1925,6 @@ function TikTokDashboardPageInner() {
                   label fix). */}
               <KpiTile
                 label="Ads with Data"
-                info="จำนวนแอดที่มี delivery (มี impression อย่างน้อย 1 ครั้ง) ในช่วงที่เลือก — แอดที่เปิดอยู่แต่ยอด 0 ไม่ถูกนับ"
                 value={fmt(data?.by_ad.length ?? 0)}
                 thisMonth={data && deltaOf(data.by_ad.length, data.prev_video_count, fmt)}
                 lastMonth={data && fmt(data.prev_video_count)}
@@ -2000,7 +1938,6 @@ function TikTokDashboardPageInner() {
               <KpiTile
                 label="Videos Posted"
                 scope="Organic"
-                info="จำนวนคลิป Organic ที่โพสต์ในช่วงวันที่เลือก นับจากวันที่โพสต์จริง ไม่ใช่วันที่มีคนดู"
                 value={data?.video_engagement_summary != null ? fmt(data.video_engagement_summary.post_count) : "—"}
                 thisMonth={
                   data?.video_engagement_summary != null
@@ -2046,7 +1983,7 @@ function TikTokDashboardPageInner() {
 
         {/* Tabs — iOS segmented control: gray track, active = white pill */}
         <div>
-          <div className="flex gap-1 bg-gray-200/70 rounded-full p-1">
+          <div className="flex gap-1 bg-gray-200/70 border border-gray-300 rounded-md p-1">
             {(
               [
                 { key: "overview", label: "KPI Overview" },
@@ -2058,7 +1995,7 @@ function TikTokDashboardPageInner() {
               <button
                 key={t.key}
                 onClick={() => setActiveTab(t.key)}
-                className={`flex-1 px-3 py-1.5 rounded-full text-sm font-semibold transition-all duration-200 ${
+                className={`flex-1 px-3 py-1.5 rounded text-sm font-semibold transition-all duration-200 ${
                   activeTab === t.key
                     ? "bg-white text-black shadow-[0_1px_4px_rgba(0,0,0,0.15)]"
                     : "text-gray-500 hover:text-black"
@@ -2195,7 +2132,7 @@ function TikTokDashboardPageInner() {
                       <Tooltip />
                       <Legend />
                       {showVideos && (
-                        <Bar yAxisId="left" dataKey="videos" name="Ads delivering" fill="#fe2c55" />
+                        <Bar yAxisId="left" dataKey="videos" name="Ads delivering" fill="#1a2b4a" />
                       )}
                       {showLikes && (
                         <Line
@@ -2254,7 +2191,6 @@ function TikTokDashboardPageInner() {
                       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                         <Scorecard
                           label="Profile Views"
-                          info="จำนวนครั้งที่มีคนเข้าไปดูหน้าโปรไฟล์ TikTok ทั้งบัญชี (Ads + Organic รวมกัน แยกไม่ได้)"
                           value={d.profile_metrics.profile_views != null ? fmt(d.profile_metrics.profile_views) : "—"}
                           sub={
                             d.profile_metrics.prev_profile_views != null
@@ -2265,7 +2201,6 @@ function TikTokDashboardPageInner() {
                         />
                         <Scorecard
                           label="Followers"
-                          info="ยอดผู้ติดตามสะสมทั้งบัญชี ณ สิ้นช่วงที่เลือก — % เปลี่ยนแปลงเทียบกับช่วงก่อนหน้า"
                           value={d.profile_metrics.followers != null ? fmt(d.profile_metrics.followers) : "—"}
                           sub={
                             d.profile_metrics.prev_followers != null
@@ -2276,7 +2211,6 @@ function TikTokDashboardPageInner() {
                         />
                         <Scorecard
                           label="New Followers"
-                          info="ผู้ติดตามใหม่สุทธิทั้งบัญชีในช่วงที่เลือก (Ads + Organic รวมกัน)"
                           value={d.profile_metrics.new_followers != null ? fmt(d.profile_metrics.new_followers) : "—"}
                           sub={
                             d.profile_metrics.prev_new_followers != null
@@ -2287,7 +2221,6 @@ function TikTokDashboardPageInner() {
                         />
                         <Scorecard
                           label="Engagement Rate"
-                          info="Likes ของวันล่าสุดที่มีข้อมูล ÷ จำนวนผู้ติดตามทั้งหมด × 100 — เป็นค่าของวันล่าสุด ไม่ใช่ค่าเฉลี่ยทั้งช่วงที่เลือก"
                           value={d.profile_metrics.engagement_rate != null ? `${d.profile_metrics.engagement_rate.toFixed(1)}%` : "—"}
                         />
                       </div>
@@ -2375,7 +2308,6 @@ function TikTokDashboardPageInner() {
                             <Scorecard
                               key={key}
                               label={label}
-                              info="ยอดสะสมตลอดชีพของคลิปที่โพสต์ในช่วงที่เลือก — ads คือส่วนที่มาจากตอนยิงแอด ที่เหลือ (Organic) คือยอดที่เกิดเองไม่ผ่านแอด"
                               value={fmt(m.total)}
                               sub={`ads ${fmt(m.paid ?? 0)} · Organic ${organicNeg ? "−" : ""}${fmt(Math.abs(m.organic ?? 0))}`}
                             />
@@ -2403,12 +2335,17 @@ function TikTokDashboardPageInner() {
                     return (
                       <div style={{ width: "100%", height: 280 }}>
                         <ResponsiveContainer>
-                          <BarChart data={weekly}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                          <BarChart data={weekly} margin={{ top: 20 }}>
+                            <CartesianGrid vertical={false} stroke="#e5e7eb" />
                             <XAxis dataKey="day" tick={{ fontSize: 12, fill: "#000" }} />
                             <YAxis tick={{ fontSize: 11, fill: "#000" }} />
                             <Tooltip />
-                            <Bar dataKey="value" name="Engagement" radius={[8, 8, 0, 0]} fill="#fe2c55" />
+                            <Bar dataKey="value" name="Engagement" radius={[2, 2, 0, 0]} fill="#2a4a73">
+                              {weekly.map((w, i) => (
+                                <Cell key={i} fill={w.value === Math.max(...weekly.map((x) => x.value)) ? "#0f2540" : "#2a4a73"} />
+                              ))}
+                              <LabelList dataKey="value" position="top" style={{ fontSize: 12, fontWeight: 700, fill: "#1a2b4a" }} />
+                            </Bar>
                           </BarChart>
                         </ResponsiveContainer>
                       </div>
@@ -2513,7 +2450,7 @@ function TikTokDashboardPageInner() {
                             <Bar
                               dataKey="percentage"
                               name="% Audience"
-                              fill="#fe2c55"
+                              fill="#1a2b4a"
                               radius={[0, 8, 8, 0]}
                             />
                           </BarChart>
