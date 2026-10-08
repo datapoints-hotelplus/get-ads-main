@@ -2587,7 +2587,7 @@ function TikTokDashboardPageInner() {
                           <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#000" }} />
                           <YAxis tick={{ fontSize: 11, fill: "#000" }} />
                           <Tooltip itemSorter={(item) => VIDEO_FUNNEL_ORDER.indexOf(String(item.dataKey))} />
-                          <Legend />
+                          <Legend itemSorter={(item) => VIDEO_FUNNEL_ORDER.indexOf(String(item.dataKey))} />
                           {/* Stack order IS the funnel order (2s→6s→50%→100%,
                               bottom to top) — each bar is the exclusive band
                               between two watch-depth stages, not the raw
