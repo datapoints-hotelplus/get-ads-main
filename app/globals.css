@@ -67,7 +67,12 @@ label:has(input[type="checkbox"], input[type="radio"]) {
   --color-accent-light: #ff4d40;
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  --font-line-seed: "LINE Seed Sans TH", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  /* "Sukhumvit Set" is Apple's own Thai system font — ships with macOS/iOS,
+     not something we can self-host (no file to bundle, and redistributing
+     it off-Apple-platforms isn't licensed). Named here so Apple devices
+     that already have it just use it; everyone else falls through to
+     LINE Seed Sans TH exactly as before. */
+  --font-line-seed: "Sukhumvit Set", "LINE Seed Sans TH", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 html {
