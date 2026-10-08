@@ -1561,7 +1561,7 @@ function TikTokDashboardPageInner() {
 
   return (
     // LINE Seed Sans TH (see @font-face in globals.css), scoped to this page.
-    <div className="min-h-screen bg-gray-100 font-line-seed">
+    <div className="min-h-screen bg-gray-100">
       {/* EC3/AC6: token revoked/expired — a blocking modal, not a dismissible
           banner, so it can't be missed. Dashboard content still renders
           underneath (old data stays visible, nothing is deleted). */}

@@ -26,6 +26,7 @@
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 import { isAuthorizedSyncCaller } from "@/lib/syncAuth";
+import { persistThumbnail, fetchOEmbedThumbnail } from "@/lib/tiktok-ads";
 
 export const maxDuration = 300;
 
@@ -172,6 +173,7 @@ export async function POST(req: Request) {
     // — the post-level sync and its date_preset above are unaffected.
     account_date_capped: boolean;
     errors: string[];
+    stale_covers_refreshed: number;
   } = {
     date_preset: datePreset,
     account_rows: 0,
@@ -180,6 +182,7 @@ export async function POST(req: Request) {
     dropped_video_fields: [],
     account_date_capped: false,
     errors: [],
+    stale_covers_refreshed: 0,
   };
 
   // ── Account level, one row per day ───────────────────────────────────────
@@ -300,11 +303,18 @@ export async function POST(req: Request) {
       if (itemId) byItem.set(itemId, r);
     }
 
-    const payload = [...byItem.entries()].map(([itemId, r]) => ({
+    // Windsor's thumbnail_url is a signed TikTok CDN URL that expires ~2 days
+    // after being issued — same as the ad-creative covers in lib/tiktok-ads.ts
+    // (persistThumbnail's own doc comment). Stored as-is, every post's
+    // thumbnail went dead a couple days after its last sync; the #1 Best
+    // Video (synced longest ago, since it's sorted by views) was the first
+    // to hit that and show the "unavailable" placeholder. Re-hosting it
+    // through the same helper the ad creatives use fixes both the same way.
+    const payload = await Promise.all([...byItem.entries()].map(async ([itemId, r]) => ({
       business_id: businessId,
       item_id: itemId,
       caption: (r.video_caption as string) || null,
-      thumbnail_url: (r.video_thumbnail_url as string) || null,
+      thumbnail_url: r.video_thumbnail_url ? await persistThumbnail(String(r.video_thumbnail_url), itemId) : null,
       share_url: (r.video_share_url as string) || null,
       create_time: (r.video_create_datetime as string) || null,
       video_duration: numOrNull(r.video_duration),
@@ -320,7 +330,7 @@ export async function POST(req: Request) {
       average_time_watched: numOrNull(r.video_average_time_watched),
       total_time_watched: numOrNull(r.video_total_time_watched),
       fetched_at: new Date().toISOString(),
-    }));
+    })));
 
     if (payload.length > 0) {
       const { error } = await sb
@@ -328,6 +338,29 @@ export async function POST(req: Request) {
         .upsert(payload, { onConflict: "business_id,item_id" });
       if (error) throw new Error(error.message);
       result.post_rows = payload.length;
+    }
+
+    // Catch-up for posts Windsor has stopped returning. Windsor's window is
+    // rolling (confirmed: last_120d+ all reject — 90 days is the most it will
+    // ever cover), so a post published long enough ago ages out and this
+    // sync's upsert above never touches it again. If its thumbnail_url
+    // expired before that happened, nothing would ever re-host it — which is
+    // exactly what happened to the single highest-viewed post: oldest, so
+    // first to age out, so stuck with a dead URL forever. Re-hosting is keyed
+    // by item_id alone (same oEmbed call the Spark Ad covers use), so it
+    // needs Windsor for nothing here. Only 24 posts total on this account —
+    // no batching, see lib/tiktok-ads.ts's OEMBED_BATCH if that stops being true.
+    const { data: staleRows } = await sb
+      .from("tiktok_post_totals")
+      .select("item_id")
+      .eq("business_id", businessId)
+      .not("thumbnail_url", "ilike", `%/storage/v1/object/public/tiktok-thumbnails/%`);
+    for (const row of staleRows ?? []) {
+      const fresh = await fetchOEmbedThumbnail(row.item_id);
+      if (!fresh) continue;
+      const hosted = await persistThumbnail(fresh, row.item_id);
+      await sb.from("tiktok_post_totals").update({ thumbnail_url: hosted }).eq("business_id", businessId).eq("item_id", row.item_id);
+      result.stale_covers_refreshed += 1;
     }
   } catch (err) {
     result.errors.push(`video: ${err instanceof Error ? err.message : String(err)}`);

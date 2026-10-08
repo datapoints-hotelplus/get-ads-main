@@ -1520,7 +1520,7 @@ export async function debugFindPreviewEndpoint(advertiserId: string, adId: strin
  * the Ads API's 10 QPS app-wide cap, and this is a different service entirely.
  * Callers batch it instead (see fetchAdCreatives).
  */
-async function fetchOEmbedThumbnail(tiktokItemId: string): Promise<string | null> {
+export async function fetchOEmbedThumbnail(tiktokItemId: string): Promise<string | null> {
   try {
     const res = await axios.get("https://www.tiktok.com/oembed", {
       params: { url: `https://www.tiktok.com/@_/video/${tiktokItemId}` },
@@ -1543,7 +1543,7 @@ const THUMBNAIL_BUCKET = "tiktok-thumbnails";
 // and re-hosts it in Supabase Storage under a permanent URL instead.
 // Falls back to the original (still-fresh-for-now) TikTok URL if the
 // download/upload fails — a thumbnail that expires in 2 days beats none.
-async function persistThumbnail(sourceUrl: string, adId: string): Promise<string> {
+export async function persistThumbnail(sourceUrl: string, adId: string): Promise<string> {
   try {
     const res = await axios.get<ArrayBuffer>(sourceUrl, { responseType: "arraybuffer", timeout: 10000 });
     const contentType = (res.headers["content-type"] as string) || "image/jpeg";
