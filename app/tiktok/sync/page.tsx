@@ -233,6 +233,8 @@ export default function TikTokSyncPage() {
     dropped_video_fields: string[];
     account_date_capped: boolean;
     errors: string[];
+    stale_covers_found: number;
+    stale_covers_refreshed: number;
   };
   const [windsorSyncing, setWindsorSyncing] = useState(false);
   const [windsorResult, setWindsorResult] = useState<WindsorSyncResult | null>(null);
@@ -857,6 +859,17 @@ export default function TikTokSyncPage() {
                   <span className="text-green-800 font-medium">ยอดรายคลิป</span>
                   <span className="text-green-600 font-mono text-xs bg-green-100 px-2 py-0.5 rounded-full">
                     {windsorResult.post_rows.toLocaleString()} rows
+                  </span>
+                </li>
+                {/* Posts that have aged out of Windsor's ~90-day window and
+                    so never get touched by the row above — this is the pass
+                    that re-hosts a thumbnail before the whole post goes dark
+                    forever. Shown even at 0/0 so "nothing was stale" and
+                    "the pass never ran" are visibly different outcomes. */}
+                <li className="flex items-center justify-between">
+                  <span className="text-green-800 font-medium">รูปปกคลิปเก่าที่ต้องกู้</span>
+                  <span className="text-green-600 font-mono text-xs bg-green-100 px-2 py-0.5 rounded-full">
+                    {windsorResult.stale_covers_refreshed.toLocaleString()}/{windsorResult.stale_covers_found.toLocaleString()} rows
                   </span>
                 </li>
               </ul>

@@ -173,6 +173,7 @@ export async function POST(req: Request) {
     // — the post-level sync and its date_preset above are unaffected.
     account_date_capped: boolean;
     errors: string[];
+    stale_covers_found: number;
     stale_covers_refreshed: number;
   } = {
     date_preset: datePreset,
@@ -182,6 +183,7 @@ export async function POST(req: Request) {
     dropped_video_fields: [],
     account_date_capped: false,
     errors: [],
+    stale_covers_found: 0,
     stale_covers_refreshed: 0,
   };
 
@@ -355,12 +357,30 @@ export async function POST(req: Request) {
       .select("item_id")
       .eq("business_id", businessId)
       .not("thumbnail_url", "ilike", `%/storage/v1/object/public/tiktok-thumbnails/%`);
+    result.stale_covers_found = staleRows?.length ?? 0;
+    // Each item gets its own try/catch — one post's oEmbed call or storage
+    // upload throwing used to abort every item after it in the loop AND get
+    // reported as an opaque "video: ..." error indistinguishable from the
+    // Windsor fetch above failing, which is what made this impossible to
+    // debug from the sync page alone the first time it didn't work.
     for (const row of staleRows ?? []) {
-      const fresh = await fetchOEmbedThumbnail(row.item_id);
-      if (!fresh) continue;
-      const hosted = await persistThumbnail(fresh, row.item_id);
-      await sb.from("tiktok_post_totals").update({ thumbnail_url: hosted }).eq("business_id", businessId).eq("item_id", row.item_id);
-      result.stale_covers_refreshed += 1;
+      try {
+        const fresh = await fetchOEmbedThumbnail(row.item_id);
+        if (!fresh) {
+          result.errors.push(`cover:${row.item_id}: oEmbed ไม่คืนภาพ (วิดีโออาจถูกลบ/ตั้ง private, หรือโดน rate limit)`);
+          continue;
+        }
+        const hosted = await persistThumbnail(fresh, row.item_id);
+        if (hosted === fresh) {
+          // persistThumbnail falls back to the source URL on download/upload
+          // failure — same signed URL in means it didn't actually re-host.
+          result.errors.push(`cover:${row.item_id}: ดาวน์โหลด/อัปโหลดไป Supabase Storage ไม่สำเร็จ`);
+        }
+        await sb.from("tiktok_post_totals").update({ thumbnail_url: hosted }).eq("business_id", businessId).eq("item_id", row.item_id);
+        result.stale_covers_refreshed += 1;
+      } catch (err) {
+        result.errors.push(`cover:${row.item_id}: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
   } catch (err) {
     result.errors.push(`video: ${err instanceof Error ? err.message : String(err)}`);

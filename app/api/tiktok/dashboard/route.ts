@@ -323,7 +323,18 @@ export async function GET(req: NextRequest) {
         item_id: p.item_id,
         caption: p.caption ?? null,
         create_time: p.create_time ?? null,
-        video_cover_url: p.thumbnail_url ?? itemCover.get(p.item_id) ?? null,
+        // Ad-side cover first, not organic second: itemCover comes from
+        // tiktok_ad_creatives, which the main TikTok sync re-hosts to a
+        // permanent Supabase URL on every run (lib/tiktok-ads.ts's
+        // persistThumbnail) — it never goes dead once set. p.thumbnail_url
+        // is Windsor's signed TikTok URL, which expires in ~2 days and only
+        // gets re-hosted for posts Windsor still returns (see sync-windsor's
+        // catch-up pass) or refreshed via TikTok's public oEmbed, which can
+        // itself be rate-limited. `??` picked whichever was non-null, so a
+        // dead-but-non-null organic URL always won over a live ad-side one
+        // that was sitting right there — confirmed live: the #1 Best Video
+        // had exactly this, a working ad cover ignored in favor of a 403.
+        video_cover_url: itemCover.get(p.item_id) ?? p.thumbnail_url ?? null,
         video_link: p.share_url ?? videoLink(p.item_id),
         views: split(num(p.video_views), paid ? paid.views : null),
         likes: split(num(p.likes), paid ? paid.likes : null),
