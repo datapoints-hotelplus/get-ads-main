@@ -1210,6 +1210,8 @@ export interface TikTokHourlyRow {
   advertiser_id: string;
   campaign_id: string;
   campaign_name: string;
+  ad_id: string;
+  ad_name: string;
   stat_time_hour: string; // "YYYY-MM-DD HH:00:00"
   spend: number;
   impressions: number;
@@ -1225,14 +1227,14 @@ export async function fetchHourlyEngagement(
   endDate: string,
 ): Promise<TikTokHourlyRow[]> {
   const results: TikTokHourlyRow[] = [];
-  // campaign_id as a dimension (data_level AUCTION_CAMPAIGN, was
-  // AUCTION_ADVERTISER) — per F18, hovering a Timing Heatmap cell needs to
-  // say which campaign it's coming from, not just the account-wide total.
-  // Same paginated call pattern as every other report here, just more rows
-  // per page (one row per campaign × hour instead of one per hour) — not a
-  // new request shape.
-  const metrics = ["campaign_name", "spend", "impressions", "video_play_actions", "likes", "comments", "shares"];
-  const dimensions = ["campaign_id", "stat_time_hour"];
+  // ad_id as a dimension (data_level AUCTION_AD, was AUCTION_CAMPAIGN) — a
+  // Timing Heatmap cell needs to say which video (ad) it's coming from, not
+  // just which campaign. campaign_id/campaign_name/ad_name come back as
+  // metrics at this level (same as the daily ad report above). Same
+  // paginated call pattern as every other report here, just more rows per
+  // page (one row per ad × hour) — not a new request shape.
+  const metrics = ["ad_name", "campaign_id", "campaign_name", "spend", "impressions", "video_play_actions", "likes", "comments", "shares"];
+  const dimensions = ["ad_id", "stat_time_hour"];
 
   // Confirmed live: TikTok caps stat_time_hour reports at a 1-day span
   // ("max time span is 1 day when use stat_time_hour") — unlike
@@ -1245,7 +1247,7 @@ export async function fetchHourlyEngagement(
       const body = await tikTokGet("/report/integrated/get/", {
         advertiser_id: advertiserId,
         report_type: "BASIC",
-        data_level: "AUCTION_CAMPAIGN",
+        data_level: "AUCTION_AD",
         dimensions: JSON.stringify(dimensions),
         metrics: JSON.stringify(metrics),
         start_date: start,
@@ -1265,8 +1267,10 @@ export async function fetchHourlyEngagement(
         if (!dim.stat_time_hour) continue;
         results.push({
           advertiser_id: advertiserId,
-          campaign_id: dim.campaign_id ?? "",
+          campaign_id: m.campaign_id ?? "",
           campaign_name: m.campaign_name ?? "",
+          ad_id: dim.ad_id ?? "",
+          ad_name: m.ad_name ?? "",
           stat_time_hour: dim.stat_time_hour,
           spend: num(m.spend),
           impressions: num(m.impressions),

@@ -51,6 +51,8 @@ export async function POST(req: Request) {
           advertiser_id: r.advertiser_id,
           campaign_id: r.campaign_id,
           campaign_name: r.campaign_name,
+          ad_id: r.ad_id,
+          ad_name: r.ad_name,
           stat_time_hour: r.stat_time_hour,
           spend: r.spend,
           impressions: r.impressions,
@@ -62,7 +64,7 @@ export async function POST(req: Request) {
         }));
         const { error: upsertErr } = await sb
           .from("tiktok_hourly_stats")
-          .upsert(batch, { onConflict: "advertiser_id,campaign_id,stat_time_hour" });
+          .upsert(batch, { onConflict: "advertiser_id,ad_id,stat_time_hour" });
         if (!upsertErr) totalRows += batch.length;
       }
       results.push({ advertiser_id: adv.advertiser_id, advertiser_name: adv.advertiser_name, rows: rows.length });

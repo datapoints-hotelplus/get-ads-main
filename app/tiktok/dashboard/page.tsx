@@ -189,7 +189,12 @@ interface DashboardData {
     engagement_rate: number;
     // F18: every campaign with engagement > 0, sorted by engagement, that made up this cell —
     // lets the hover say *who* drove it instead of just the account total.
-    top_campaigns: { campaign_name: string; engagement_rate: number }[];
+    top_campaigns: {
+      campaign_name: string;
+      engagement_rate: number;
+      // Per-ad (video) split of this campaign in the cell, engagement > 0 only.
+      videos: { ad_name: string; caption: string | null; video_link: string | null; engagement_rate: number }[];
+    }[];
   }[];
   profile_metrics: {
     followers: number | null;
@@ -784,9 +789,26 @@ function TimingHeatmapChart({ d }: { d: DashboardData }) {
             {shownCell && shownCell.top_campaigns.length > 0 ? (
               <div className="mt-1.5 space-y-1 border-t border-gray-200 pt-1.5">
                 {shownCell.top_campaigns.map((c) => (
-                  <div key={c.campaign_name} className="flex items-center justify-between gap-3 text-gray-500">
-                    <span className="truncate">{c.campaign_name}</span>
-                    <span className="font-medium text-black shrink-0">{c.engagement_rate.toFixed(2)}%</span>
+                  <div key={c.campaign_name}>
+                    <div className="flex items-center justify-between gap-3 text-gray-500">
+                      <span className="truncate">{c.campaign_name}</span>
+                      <span className="font-medium text-black shrink-0">{c.engagement_rate.toFixed(2)}%</span>
+                    </div>
+                    {c.videos.map((v) => {
+                      const label = v.caption || v.ad_name;
+                      return (
+                        <div key={v.ad_name} className="flex items-center justify-between gap-3 pl-4 text-gray-400">
+                          {v.video_link ? (
+                            <a href={v.video_link} target="_blank" rel="noreferrer" className="truncate hover:underline text-secondary">
+                              🎬 {label}
+                            </a>
+                          ) : (
+                            <span className="truncate">🎬 {label}</span>
+                          )}
+                          <span className="shrink-0">{v.engagement_rate.toFixed(2)}%</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 ))}
               </div>

@@ -106,7 +106,71 @@ export async function GET(req: NextRequest) {
   if (dateFrom) query = query.gte("stat_time_day", dateFrom);
   if (dateTo) query = query.lte("stat_time_day", dateTo);
 
-  const { data: rawRows, error } = await query;
+  // ── Prefetch: every read that doesn't depend on another result starts now and
+  //    runs alongside the main query (previously ~15 sequential round trips) ──
+  let audienceQuery = sb
+    .from("tiktok_audience_demographics")
+    .select("dimension_type, dimension_value, spend, impressions, reach, video_views, likes, clicks, video_watched_2s, video_watched_6s, video_views_p50, video_views_p100, stat_time_day, advertiser_id");
+  if (advFilter && advFilter.length > 0) audienceQuery = audienceQuery.in("advertiser_id", advFilter);
+  if (dateFrom) audienceQuery = audienceQuery.gte("stat_time_day", dateFrom);
+  if (dateTo) audienceQuery = audienceQuery.lte("stat_time_day", dateTo);
+  const audienceQueryP = Promise.resolve(audienceQuery);
+  let locQuery = sb
+    .from("tiktok_audience_locations")
+    .select("province_id, province_name, reach, impressions, video_views, advertiser_id, stat_time_day");
+  if (advFilter && advFilter.length > 0) locQuery = locQuery.in("advertiser_id", advFilter);
+  if (dateFrom) locQuery = locQuery.gte("stat_time_day", dateFrom);
+  if (dateTo) locQuery = locQuery.lte("stat_time_day", dateTo);
+  const locQueryP = Promise.resolve(locQuery);
+  let snapQuery = sb
+    .from("tiktok_business_snapshot")
+    .select("advertiser_id, snapshot_date, followers_count, likes_count")
+    .order("snapshot_date", { ascending: false })
+    .limit(200); // a handful of recent days across all advertisers is plenty
+  if (advFilter && advFilter.length > 0) snapQuery = snapQuery.in("advertiser_id", advFilter);
+  const snapQueryP = Promise.resolve(snapQuery);
+  let permQuery = sb.from("tiktok_metric_permissions").select("metric, advertiser_id");
+  if (advFilter && advFilter.length > 0) permQuery = permQuery.in("advertiser_id", advFilter);
+  const permQueryP = Promise.resolve(permQuery);
+  let advListQuery = sb.from("tiktok_advertisers").select("advertiser_id, advertiser_name").order("advertiser_name");
+  if (allowedAdvertiserIds) advListQuery = advListQuery.in("advertiser_id", allowedAdvertiserIds);
+  const advListQueryP = Promise.resolve(advListQuery);
+  let heatmapQuery = sb
+    .from("tiktok_hourly_stats")
+    .select("stat_time_hour, impressions, likes, comments, shares, advertiser_id, campaign_id, campaign_name, ad_id, ad_name");
+  if (advFilter && advFilter.length > 0) heatmapQuery = heatmapQuery.in("advertiser_id", advFilter);
+  heatmapQuery = heatmapQuery.gte("stat_time_hour", `${dateFrom}T00:00:00`).lte("stat_time_hour", `${dateTo}T23:59:59`);
+  const heatmapQueryP = Promise.resolve(heatmapQuery);
+  const periodDays = daysBetween(dateFrom, dateTo) + 1;
+  const prevTo = addDays(dateFrom, -1);
+  const prevFrom = addDays(prevTo, -(periodDays - 1));
+
+  let prevQuery = sb
+    .from("tiktok_ads_rawdata")
+    .select("spend,impressions,reach,video_views,video_watched_2s,video_watched_6s,video_view_p50,video_view_p100,likes,comments,shares,follows,clicks,average_video_play,stat_time_day,advertiser_id,ad_id")
+    .gte("stat_time_day", prevFrom)
+    .lte("stat_time_day", prevTo);
+  if (advFilter && advFilter.length > 0) prevQuery = prevQuery.in("advertiser_id", advFilter);
+  const lastLogP = Promise.resolve(sb
+    .from("tiktok_sync_log")
+    .select("finished_at")
+    .eq("status", "success")
+    .order("finished_at", { ascending: false })
+    .limit(1)
+    .maybeSingle());
+  const interestNamesP = Promise.resolve(sb.from("tiktok_interest_category_names").select("category_id, category_name"));
+  const postP = Promise.resolve(sb
+    .from("tiktok_post_totals")
+    .select("item_id, caption, thumbnail_url, share_url, create_time, video_views, likes, comments, shares")
+    .order("video_views", { ascending: false })
+    .limit(50));
+  const quadrantP = Promise.resolve(sb
+    .from("tiktok_quadrant_settings")
+    .select("spend_threshold, rate_threshold")
+    .eq("id", 1)
+    .maybeSingle());
+
+  const [{ data: rawRows, error }, { data: prevRawRows }] = await Promise.all([query, prevQuery]);
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -119,17 +183,6 @@ export async function GET(req: NextRequest) {
   //    immediately before dateFrom. If the account's data doesn't reach
   //    back that far, say so instead of silently comparing against a
   //    shorter/empty window.
-  const periodDays = daysBetween(dateFrom, dateTo) + 1;
-  const prevTo = addDays(dateFrom, -1);
-  const prevFrom = addDays(prevTo, -(periodDays - 1));
-
-  let prevQuery = sb
-    .from("tiktok_ads_rawdata")
-    .select("spend,impressions,reach,video_views,video_watched_2s,video_watched_6s,video_view_p50,video_view_p100,likes,comments,shares,follows,clicks,average_video_play,stat_time_day,advertiser_id,ad_id")
-    .gte("stat_time_day", prevFrom)
-    .lte("stat_time_day", prevTo);
-  if (advFilter && advFilter.length > 0) prevQuery = prevQuery.in("advertiser_id", advFilter);
-  const { data: prevRawRows } = await prevQuery;
   const prevRows = (prevRawRows ?? []) as unknown as Row[];
   const prevTotals = computeTotals(prevRows);
 
@@ -144,12 +197,27 @@ export async function GET(req: NextRequest) {
   // fallback and reach_source says which one the numbers came from.
   const advertiserIdsOf = (list: Row[]) =>
     [...new Set(list.map((r) => String(r.advertiser_id ?? "")).filter(Boolean))];
+  const { data: quadrantSettingsRow } = await quadrantP;
+  const { byAd, spendThreshold, rateThreshold } = computeAdMetrics(rows, quadrantSettingsRow);
+  // Everything slow and independent starts here and is awaited where it was
+  // before — live TikTok reach (totals + per ad) overlaps with the remaining
+  // DB reads started above; interests chain after the reach totals so the
+  // TikTok call count and peak concurrency stay what they were.
+  const reachP = Promise.all([
+    fetchDedupedReach(advertiserIdsOf(rows), dateFrom, dateTo),
+    fetchDedupedReach(advertiserIdsOf(prevRows), prevFrom, prevTo),
+  ]);
+  reachP.catch(() => {}); // handled at the await below; avoids an unhandled-rejection warning in between
+  const applyReachP = applyDedupedReachToAds(byAd, advertiserIdsOf(rows), dateFrom, dateTo);
+  applyReachP.catch(() => {});
+  const interestsP = reachP
+    .then(() => undefined, () => undefined)
+    .then(() => Promise.all(advertiserIdsOf(rows).map((id) => fetchAudienceInterests(id, dateFrom, dateTo))));
+  interestsP.catch(() => {});
+
   let reachSource: "api_deduped" | "summed_fallback" = "api_deduped";
   try {
-    const [currentReach, previousReach] = await Promise.all([
-      fetchDedupedReach(advertiserIdsOf(rows), dateFrom, dateTo),
-      fetchDedupedReach(advertiserIdsOf(prevRows), prevFrom, prevTo),
-    ]);
+    const [currentReach, previousReach] = await reachP;
     totals.reach = currentReach;
     prevTotals.reach = previousReach;
   } catch (err) {
@@ -179,20 +247,13 @@ export async function GET(req: NextRequest) {
 
   // ── Per-ad aggregation + F17 quadrant classification (shared with the CSV
   //    export route so both report the exact same numbers) ──────────────────
-  const { data: quadrantSettingsRow } = await sb
-    .from("tiktok_quadrant_settings")
-    .select("spend_threshold, rate_threshold")
-    .eq("id", 1)
-    .maybeSingle();
-
-  const { byAd, spendThreshold, rateThreshold } = computeAdMetrics(rows, quadrantSettingsRow);
   // Same "reach can't be summed" fix as the account-level tile above, one
   // level down: byAd's reach came from summing per-ad-per-day rows, which
   // overcounts anyone the ad reached on more than one day. Overwritten in
   // place with TikTok's own deduped figure per ad where the live call
   // succeeds; best-effort, so a hiccup here leaves the summed (inflated)
   // value rather than breaking the table.
-  await applyDedupedReachToAds(byAd, advertiserIdsOf(rows), dateFrom, dateTo);
+  await applyReachP;
 
   // Creative thumbnails + video meta (caption/create_time/duration — best-effort, see lib/tiktok-ads.ts fetchAdCreatives)
   const adIds = byAd.map((a) => a.ad_id).filter(Boolean);
@@ -239,11 +300,7 @@ export async function GET(req: NextRequest) {
   // make organic (total − paid) read far too high: The Athenee's post has
   // ~262k lifetime views against ~248k paid impressions in a 30-day window
   // alone. The UI says so under the table.
-  const { data: postRows, error: postErr } = await sb
-    .from("tiktok_post_totals")
-    .select("item_id, caption, thumbnail_url, share_url, create_time, video_views, likes, comments, shares")
-    .order("video_views", { ascending: false })
-    .limit(50);
+  const { data: postRows, error: postErr } = await postP;
   if (postErr) console.error("[tiktok/dashboard] tiktok_post_totals read failed (non-fatal):", postErr.message);
 
   let bestVideos;
@@ -491,12 +548,7 @@ export async function GET(req: NextRequest) {
   // ── Timing heatmap: engagement rate by weekday × hour (F14) ────────────────
   // Synced separately/less often (see /api/tiktok/sync-heatmap) — only a
   // rolling recent window exists, so this may not cover the full date range.
-  let heatmapQuery = sb
-    .from("tiktok_hourly_stats")
-    .select("stat_time_hour, impressions, likes, comments, shares, advertiser_id, campaign_id, campaign_name");
-  if (advFilter && advFilter.length > 0) heatmapQuery = heatmapQuery.in("advertiser_id", advFilter);
-  heatmapQuery = heatmapQuery.gte("stat_time_hour", `${dateFrom}T00:00:00`).lte("stat_time_hour", `${dateTo}T23:59:59`);
-  const { data: hourlyRows } = await heatmapQuery;
+  const { data: hourlyRows } = await heatmapQueryP;
 
   // F18: per-cell campaign breakdown — same aggregation as before, plus a
   // by_campaign bucket (keyed on campaign_id so two campaigns that happen to
@@ -504,8 +556,33 @@ export async function GET(req: NextRequest) {
   // campaign it's coming from instead of just the account-wide rate.
   const heatmapCells = new Map<
     string,
-    { impressions: number; engagement: number; byCampaign: Map<string, { name: string; impressions: number; engagement: number }> }
+    {
+      impressions: number;
+      engagement: number;
+      byCampaign: Map<
+        string,
+        {
+          name: string;
+          impressions: number;
+          engagement: number;
+          byAd: Map<string, { name: string; impressions: number; engagement: number }>;
+        }
+      >;
+    }
   >();
+  // Video meta for the ads that show up in the cells (caption + link) —
+  // same tiktok_ad_creatives table the ad rows above use.
+  const hourlyAdIds = [...new Set(((hourlyRows ?? []) as Row[]).map((r) => String(r.ad_id ?? "")).filter(Boolean))];
+  const hourlyCreatives = new Map<string, { caption: string | null; item_id: string | null }>();
+  if (hourlyAdIds.length > 0) {
+    const { data: rows } = await sb
+      .from("tiktok_ad_creatives")
+      .select("ad_id, caption, tiktok_item_id")
+      .in("ad_id", hourlyAdIds);
+    for (const c of rows ?? []) {
+      hourlyCreatives.set(String(c.ad_id), { caption: c.caption ?? null, item_id: c.tiktok_item_id ?? null });
+    }
+  }
   for (const r of (hourlyRows ?? []) as Row[]) {
     const ts = new Date(String(r.stat_time_hour ?? ""));
     if (isNaN(ts.getTime())) continue;
@@ -519,9 +596,21 @@ export async function GET(req: NextRequest) {
     e.engagement += engagement;
     const campaignId = String(r.campaign_id ?? "");
     if (campaignId) {
-      const c = e.byCampaign.get(campaignId) ?? { name: String(r.campaign_name ?? campaignId), impressions: 0, engagement: 0 };
+      const c = e.byCampaign.get(campaignId) ?? {
+        name: String(r.campaign_name ?? campaignId),
+        impressions: 0,
+        engagement: 0,
+        byAd: new Map(),
+      };
       c.impressions += impressions;
       c.engagement += engagement;
+      const adId = String(r.ad_id ?? "");
+      if (adId) {
+        const a = c.byAd.get(adId) ?? { name: String(r.ad_name ?? adId), impressions: 0, engagement: 0 };
+        a.impressions += impressions;
+        a.engagement += engagement;
+        c.byAd.set(adId, a);
+      }
       e.byCampaign.set(campaignId, c);
     }
     heatmapCells.set(key, e);
@@ -533,7 +622,23 @@ export async function GET(req: NextRequest) {
         ? [...cell.byCampaign.values()]
             .filter((c) => c.impressions > 0)
             .sort((a, b) => b.engagement - a.engagement)
-            .map((c) => ({ campaign_name: c.name, engagement_rate: round2((c.engagement / c.impressions) * 100) }))
+            .map((c) => ({
+              campaign_name: c.name,
+              engagement_rate: round2((c.engagement / c.impressions) * 100),
+              videos: [...c.byAd.entries()]
+                .filter(([, a]) => a.impressions > 0)
+                .sort((x, y) => y[1].engagement - x[1].engagement)
+                .map(([adId, a]) => {
+                  const meta = hourlyCreatives.get(adId);
+                  return {
+                    ad_name: a.name,
+                    caption: meta?.caption ?? null,
+                    video_link: videoLink(meta?.item_id ?? null),
+                    engagement_rate: round2((a.engagement / a.impressions) * 100),
+                  };
+                })
+                .filter((v) => v.engagement_rate > 0),
+            }))
             // Drop what the panel would print as 0.00% — a campaign with a stray
             // like over tens of thousands of impressions is >0 but still shows 0.00%.
             .filter((c) => c.engagement_rate > 0)
@@ -582,13 +687,7 @@ export async function GET(req: NextRequest) {
   }
 
   // ── Audience demographics (gender + age) ──────────────────────────────────
-  let audienceQuery = sb
-    .from("tiktok_audience_demographics")
-    .select("dimension_type, dimension_value, spend, impressions, reach, video_views, likes, clicks, video_watched_2s, video_watched_6s, video_views_p50, video_views_p100, stat_time_day, advertiser_id");
-  if (advFilter && advFilter.length > 0) audienceQuery = audienceQuery.in("advertiser_id", advFilter);
-  if (dateFrom) audienceQuery = audienceQuery.gte("stat_time_day", dateFrom);
-  if (dateTo) audienceQuery = audienceQuery.lte("stat_time_day", dateTo);
-  const { data: audRows } = await audienceQuery;
+  const { data: audRows } = await audienceQueryP;
 
   const genderTotals: Record<string, number> = { MALE: 0, FEMALE: 0, UNKNOWN: 0 };
   const ageTotals: Record<string, number> = {};
@@ -690,13 +789,7 @@ export async function GET(req: NextRequest) {
   });
 
   // ── Audience by province (TH) ─────────────────────────────────────────────
-  let locQuery = sb
-    .from("tiktok_audience_locations")
-    .select("province_id, province_name, reach, impressions, video_views, advertiser_id, stat_time_day");
-  if (advFilter && advFilter.length > 0) locQuery = locQuery.in("advertiser_id", advFilter);
-  if (dateFrom) locQuery = locQuery.gte("stat_time_day", dateFrom);
-  if (dateTo) locQuery = locQuery.lte("stat_time_day", dateTo);
-  const { data: locRows } = await locQuery;
+  const { data: locRows } = await locQueryP;
 
   const provinceMap = new Map<string, { id: string; name: string; reach: number }>();
   for (const r of (locRows ?? []) as Row[]) {
@@ -749,9 +842,7 @@ export async function GET(req: NextRequest) {
   let interestSource: "api_range" | "stored_latest_chunk" = "api_range";
 
   try {
-    const perAdvertiser = await Promise.all(
-      advertiserIdsOf(rows).map((id) => fetchAudienceInterests(id, dateFrom, dateTo)),
-    );
+    const perAdvertiser = await interestsP;
     for (const row of perAdvertiser.flat()) {
       const cat = row.interest_category;
       if (!cat) continue;
@@ -807,7 +898,7 @@ export async function GET(req: NextRequest) {
   // interest_category id → name — best-effort lookup, see
   // fetchInterestCategoryNames in lib/tiktok-ads.ts. Unresolved ids just
   // keep showing as their raw numeric code, same as before this existed.
-  const { data: interestNameRows, error: interestNameErr } = await sb.from("tiktok_interest_category_names").select("category_id, category_name");
+  const { data: interestNameRows, error: interestNameErr } = await interestNamesP;
   if (interestNameErr) console.error("[tiktok/dashboard] tiktok_interest_category_names lookup failed:", interestNameErr.message);
   const interestNameMap = new Map((interestNameRows ?? []).map((r) => [r.category_id, r.category_name]));
 
@@ -844,13 +935,7 @@ export async function GET(req: NextRequest) {
 
   // ── Profile metrics snapshot (F15 — see /api/tiktok/sync-profile's file
   //    comment: unverified against a live account, best-effort only) ────────
-  let snapQuery = sb
-    .from("tiktok_business_snapshot")
-    .select("advertiser_id, snapshot_date, followers_count, likes_count")
-    .order("snapshot_date", { ascending: false })
-    .limit(200); // a handful of recent days across all advertisers is plenty
-  if (advFilter && advFilter.length > 0) snapQuery = snapQuery.in("advertiser_id", advFilter);
-  const { data: snapRows } = await snapQuery;
+  const { data: snapRows } = await snapQueryP;
 
   const byDate = new Map<string, number>(); // date -> total followers across advertisers
   const likesByDate = new Map<string, number>();
@@ -900,8 +985,10 @@ export async function GET(req: NextRequest) {
     };
   };
 
-  const accountNow = await readAccountTotals(dateFrom, dateTo);
-  const accountPrev = await readAccountTotals(prevFrom, prevTo);
+  const [accountNow, accountPrev] = await Promise.all([
+    readAccountTotals(dateFrom, dateTo),
+    readAccountTotals(prevFrom, prevTo),
+  ]);
 
   const profileMetrics = {
     // Account totals first, the older F15 snapshot as the fallback.
@@ -928,25 +1015,15 @@ export async function GET(req: NextRequest) {
   // ── Restricted metrics (EC4) — which report metrics TikTok is rejecting
   //    with permission_denied for the advertiser(s) in scope, so the UI can
   //    say *why* a KPI reads 0 instead of leaving it unexplained ─────────
-  let permQuery = sb.from("tiktok_metric_permissions").select("metric, advertiser_id");
-  if (advFilter && advFilter.length > 0) permQuery = permQuery.in("advertiser_id", advFilter);
-  const { data: permRows } = await permQuery;
+  const { data: permRows } = await permQueryP;
   const restrictedMetrics = [...new Set((permRows ?? []).map((r) => String(r.metric)))].sort();
 
   // ── Advertiser list (dropdown options) — Viewer only sees advertisers
   //    they've been granted, same restriction as the data above. ───────────
-  let advListQuery = sb.from("tiktok_advertisers").select("advertiser_id, advertiser_name").order("advertiser_name");
-  if (allowedAdvertiserIds) advListQuery = advListQuery.in("advertiser_id", allowedAdvertiserIds);
-  const { data: advRows } = await advListQuery;
+  const { data: advRows } = await advListQueryP;
 
   // F26: last successful sync timestamp, so the UI can label stale/cached data.
-  const { data: lastSuccessLog } = await sb
-    .from("tiktok_sync_log")
-    .select("finished_at")
-    .eq("status", "success")
-    .order("finished_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const { data: lastSuccessLog } = await lastLogP;
 
   return NextResponse.json({
     totals,

@@ -2,7 +2,7 @@
 -- Combined Supabase Migration: TikTok Ads module
 -- Project: get-ads TikTok Ads Dashboard
 -- ============================================================
--- Merges migrations 012-039 (every tiktok_* file) into final-state
+-- Merges migrations 012-040 (every tiktok_* file) into final-state
 -- CREATE TABLE statements. prod.sql has zero tiktok_* tables today,
 -- so this is the full first deploy of the module, not an incremental one.
 -- Depends on public.ads_users (already live, from the Facebook ads
@@ -221,8 +221,8 @@ create table if not exists public.tiktok_quadrant_settings (
 alter table public.tiktok_quadrant_settings disable row level security;
 
 -- ─────────────────────────────────────────────────────────────
--- 11. tiktok_hourly_stats  (025, +039)
---     Timing Heatmap: engagement by weekday x hour, per campaign.
+-- 11. tiktok_hourly_stats  (025, +039, +040)
+--     Timing Heatmap: engagement by weekday x hour, per ad (video).
 --     Rolling 30-day sync cache, not source-of-truth history.
 -- ─────────────────────────────────────────────────────────────
 create table if not exists public.tiktok_hourly_stats (
@@ -231,6 +231,8 @@ create table if not exists public.tiktok_hourly_stats (
   stat_time_hour timestamptz not null,
   campaign_id    text        not null default '', -- 039
   campaign_name  text        not null default '', -- 039
+  ad_id          text        not null default '', -- 040
+  ad_name        text        not null default '', -- 040
   spend          numeric     not null default 0,
   impressions    numeric     not null default 0,
   video_views    numeric     not null default 0,
@@ -239,7 +241,7 @@ create table if not exists public.tiktok_hourly_stats (
   shares         numeric     not null default 0,
   updated_at     timestamptz not null default now(),
 
-  constraint tiktok_hourly_stats_unique unique (advertiser_id, campaign_id, stat_time_hour)
+  constraint tiktok_hourly_stats_unique unique (advertiser_id, ad_id, stat_time_hour)
 );
 create index if not exists idx_tiktok_hourly_stats_hour on public.tiktok_hourly_stats (stat_time_hour desc);
 alter table public.tiktok_hourly_stats disable row level security;
