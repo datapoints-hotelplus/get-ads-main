@@ -1665,7 +1665,8 @@ function TikTokDashboardPageInner() {
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-5">
         {/* Filters — flat pill row, no card/labels: placeholder text alone
             ("ทุก Advertiser" etc.) says what each control is. */}
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-start gap-3">
+        <div className="flex flex-wrap items-start gap-3 flex-1 min-w-0">
           <div className="min-w-45">
             <ReactSelect
               isMulti
@@ -1702,28 +1703,32 @@ function TikTokDashboardPageInner() {
             />
           </div>
 
-          <span className="text-gray-300">|</span>
+          <span className="text-gray-300 h-[38px] flex items-center">|</span>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 h-[38px]">
             <DateInput
               value={dateFrom}
               onChange={setDateFrom}
-              className="border border-gray-300 rounded-full px-3 py-1.5 pr-7 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              className="h-[38px] border border-gray-300 rounded px-3 pr-7 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               aria-label="ตั้งแต่วันที่"
             />
             <span className="text-gray-400">—</span>
             <DateInput
               value={dateTo}
               onChange={setDateTo}
-              className="border border-gray-300 rounded-full px-3 py-1.5 pr-7 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              className="h-[38px] border border-gray-300 rounded px-3 pr-7 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               aria-label="ถึงวันที่"
             />
           </div>
 
+        </div>
+
+          {/* Pinned to the top-right of the row: stays put when a multi-select
+              grows taller and the filters wrap, instead of dropping to a new line. */}
           <button
             onClick={fetchData}
             disabled={loading}
-            className="bg-primary hover:bg-primary/80 disabled:bg-gray-300 text-secondary font-semibold px-5 py-1.5 rounded-full transition-colors text-sm ml-auto"
+            className="shrink-0 h-[38px] bg-primary hover:bg-primary/80 disabled:bg-gray-300 text-secondary font-semibold px-5 rounded transition-colors text-sm"
           >
             {loading ? "กำลังโหลด…" : "Apply"}
           </button>
