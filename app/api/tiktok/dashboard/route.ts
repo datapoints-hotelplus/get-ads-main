@@ -34,6 +34,18 @@ export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
 
   const advertiserIds = searchParams.get("advertiser_id");
+  // Staged loading: the page asks for `sections=overview` first, then
+  // `audience` and `quadrant` once the first tabs are on screen. Absent =
+  // everything (the per-section date overrides and anything else that calls
+  // this endpoint keep getting the full payload). Skipped sections skip their
+  // I/O (the slow reads and live TikTok calls) and are left out of the response.
+  const sectionsParam = searchParams.get("sections");
+  const sections = sectionsParam ? new Set(sectionsParam.split(",").map((x) => x.trim()).filter(Boolean)) : null;
+  const want = (k: "overview" | "audience" | "quadrant") => sections === null || sections.has(k);
+  // Starts the read only when its section is wanted; otherwise an empty result
+  // of the same type, so the code that consumes it needs no special case.
+  const gate = <T,>(on: boolean, start: () => PromiseLike<T>): Promise<T> =>
+    on ? Promise.resolve(start()) : (Promise.resolve({ data: [], error: null }) as unknown as Promise<T>);
   // F19: default to the last 30 days so "% change" always has a period to
   // compare against, even when the caller sends no date filter at all.
   const defaultTo = new Date();
@@ -114,21 +126,21 @@ export async function GET(req: NextRequest) {
   if (advFilter && advFilter.length > 0) audienceQuery = audienceQuery.in("advertiser_id", advFilter);
   if (dateFrom) audienceQuery = audienceQuery.gte("stat_time_day", dateFrom);
   if (dateTo) audienceQuery = audienceQuery.lte("stat_time_day", dateTo);
-  const audienceQueryP = Promise.resolve(audienceQuery);
+  const audienceQueryP = gate(want("audience"), () => audienceQuery);
   let locQuery = sb
     .from("tiktok_audience_locations")
     .select("province_id, province_name, reach, impressions, video_views, advertiser_id, stat_time_day");
   if (advFilter && advFilter.length > 0) locQuery = locQuery.in("advertiser_id", advFilter);
   if (dateFrom) locQuery = locQuery.gte("stat_time_day", dateFrom);
   if (dateTo) locQuery = locQuery.lte("stat_time_day", dateTo);
-  const locQueryP = Promise.resolve(locQuery);
+  const locQueryP = gate(want("audience"), () => locQuery);
   let snapQuery = sb
     .from("tiktok_business_snapshot")
     .select("advertiser_id, snapshot_date, followers_count, likes_count")
     .order("snapshot_date", { ascending: false })
     .limit(200); // a handful of recent days across all advertisers is plenty
   if (advFilter && advFilter.length > 0) snapQuery = snapQuery.in("advertiser_id", advFilter);
-  const snapQueryP = Promise.resolve(snapQuery);
+  const snapQueryP = gate(want("overview"), () => snapQuery);
   let permQuery = sb.from("tiktok_metric_permissions").select("metric, advertiser_id");
   if (advFilter && advFilter.length > 0) permQuery = permQuery.in("advertiser_id", advFilter);
   const permQueryP = Promise.resolve(permQuery);
@@ -140,7 +152,7 @@ export async function GET(req: NextRequest) {
     .select("stat_time_hour, impressions, likes, comments, shares, advertiser_id, campaign_id, campaign_name, ad_id, ad_name");
   if (advFilter && advFilter.length > 0) heatmapQuery = heatmapQuery.in("advertiser_id", advFilter);
   heatmapQuery = heatmapQuery.gte("stat_time_hour", `${dateFrom}T00:00:00`).lte("stat_time_hour", `${dateTo}T23:59:59`);
-  const heatmapQueryP = Promise.resolve(heatmapQuery);
+  const heatmapQueryP = gate(want("audience"), () => heatmapQuery);
   const periodDays = daysBetween(dateFrom, dateTo) + 1;
   const prevTo = addDays(dateFrom, -1);
   const prevFrom = addDays(prevTo, -(periodDays - 1));
@@ -158,12 +170,16 @@ export async function GET(req: NextRequest) {
     .order("finished_at", { ascending: false })
     .limit(1)
     .maybeSingle());
-  const interestNamesP = Promise.resolve(sb.from("tiktok_interest_category_names").select("category_id, category_name"));
-  const postP = Promise.resolve(sb
-    .from("tiktok_post_totals")
-    .select("item_id, caption, thumbnail_url, share_url, create_time, video_views, likes, comments, shares")
-    .order("video_views", { ascending: false })
-    .limit(50));
+  const interestNamesP = gate(want("audience"), () =>
+    sb.from("tiktok_interest_category_names").select("category_id, category_name"),
+  );
+  const postP = gate(want("overview"), () =>
+    sb
+      .from("tiktok_post_totals")
+      .select("item_id, caption, thumbnail_url, share_url, create_time, video_views, likes, comments, shares")
+      .order("video_views", { ascending: false })
+      .limit(50),
+  );
   const quadrantP = Promise.resolve(sb
     .from("tiktok_quadrant_settings")
     .select("spend_threshold, rate_threshold")
@@ -203,16 +219,24 @@ export async function GET(req: NextRequest) {
   // before — live TikTok reach (totals + per ad) overlaps with the remaining
   // DB reads started above; interests chain after the reach totals so the
   // TikTok call count and peak concurrency stay what they were.
-  const reachP = Promise.all([
-    fetchDedupedReach(advertiserIdsOf(rows), dateFrom, dateTo),
-    fetchDedupedReach(advertiserIdsOf(prevRows), prevFrom, prevTo),
-  ]);
+  const reachP: Promise<[number, number]> = want("overview")
+    ? Promise.all([
+        fetchDedupedReach(advertiserIdsOf(rows), dateFrom, dateTo),
+        fetchDedupedReach(advertiserIdsOf(prevRows), prevFrom, prevTo),
+      ])
+    : Promise.resolve([totals.reach, prevTotals.reach]);
   reachP.catch(() => {}); // handled at the await below; avoids an unhandled-rejection warning in between
-  const applyReachP = applyDedupedReachToAds(byAd, advertiserIdsOf(rows), dateFrom, dateTo);
+  const applyReachP = want("quadrant")
+    ? applyDedupedReachToAds(byAd, advertiserIdsOf(rows), dateFrom, dateTo)
+    : Promise.resolve();
   applyReachP.catch(() => {});
   const interestsP = reachP
     .then(() => undefined, () => undefined)
-    .then(() => Promise.all(advertiserIdsOf(rows).map((id) => fetchAudienceInterests(id, dateFrom, dateTo))));
+    .then(() =>
+      want("audience")
+        ? Promise.all(advertiserIdsOf(rows).map((id) => fetchAudienceInterests(id, dateFrom, dateTo)))
+        : Promise.resolve([] as Awaited<ReturnType<typeof fetchAudienceInterests>>[]),
+    );
   interestsP.catch(() => {});
 
   let reachSource: "api_deduped" | "summed_fallback" = "api_deduped";
@@ -985,10 +1009,9 @@ export async function GET(req: NextRequest) {
     };
   };
 
-  const [accountNow, accountPrev] = await Promise.all([
-    readAccountTotals(dateFrom, dateTo),
-    readAccountTotals(prevFrom, prevTo),
-  ]);
+  const [accountNow, accountPrev] = want("overview")
+    ? await Promise.all([readAccountTotals(dateFrom, dateTo), readAccountTotals(prevFrom, prevTo)])
+    : [null, null];
 
   const profileMetrics = {
     // Account totals first, the older F15 snapshot as the fallback.
@@ -1025,7 +1048,7 @@ export async function GET(req: NextRequest) {
   // F26: last successful sync timestamp, so the UI can label stale/cached data.
   const { data: lastSuccessLog } = await lastLogP;
 
-  return NextResponse.json({
+  const payload = {
     totals,
     prev_totals: prevTotals,
     prev_video_count: prevVideoCount,
@@ -1064,7 +1087,29 @@ export async function GET(req: NextRequest) {
     // "stored_latest_chunk" = live call failed, showing one stored 30-day
     // chunk instead, which is not the selected period.
     interest_source: interestSource,
-  });
+  };
+
+  if (sections === null) return NextResponse.json(payload);
+  const FIELDS: Record<string, (keyof typeof payload)[]> = {
+    overview: [
+      "totals", "prev_totals", "prev_video_count", "mom_change", "last_success_at", "quadrant_thresholds",
+      "by_ad", "best_videos", "video_engagement_summary", "advertisers", "daily_timeline", "videos_daily",
+      "profile_metrics", "cost_distribution", "cost_distribution_other_objectives", "restricted_metrics",
+      "reach_source",
+    ],
+    audience: [
+      "audience_gender", "audience_age", "audience_age_performance", "audience_provinces",
+      "audience_interests", "interest_average", "audience_occupations", "interest_source",
+      "timing_heatmap", "weekly_engagement",
+    ],
+    // Same rows as overview's by_ad, but with TikTok's deduped per-ad reach applied.
+    quadrant: ["by_ad", "quadrant_thresholds"],
+  };
+  const picked: Partial<typeof payload> = {};
+  for (const sec of sections) {
+    for (const k of FIELDS[sec] ?? []) (picked as Record<string, unknown>)[k] = payload[k];
+  }
+  return NextResponse.json(picked);
 }
 
 function num(v: unknown): number {

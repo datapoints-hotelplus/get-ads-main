@@ -1440,11 +1440,22 @@ function TikTokDashboardPageInner() {
   // Chart 8: Quadrant Y-axis mode
   const [yAxisMode, setYAxisMode] = useState<ViewRateMode>("view_2s_rate");
 
+  // Staged load: the first request carries what the KPI Overview and Videos
+  // tabs need; Audience and Quadrant (the slow ones — live TikTok calls) load
+  // right after, in parallel, and their tabs stay locked until they land.
+  // reqRef drops responses that belong to a filter the user has already changed.
+  const [stageLoaded, setStageLoaded] = useState({ audience: false, quadrant: false });
+  const [stageError, setStageError] = useState<string | null>(null);
+  const reqRef = useRef(0);
+
   const fetchData = useCallback(async () => {
+    const req = ++reqRef.current;
     setLoading(true);
     setError(null);
-    try {
-      const params = new URLSearchParams();
+    setStageError(null);
+    setStageLoaded({ audience: false, quadrant: false });
+    const get = async (section: string) => {
+      const params = new URLSearchParams({ sections: section });
       if (dateFrom) params.set("date_from", dateFrom);
       if (dateTo) params.set("date_to", dateTo);
       if (selectedAdvertisers.length > 0) {
@@ -1456,11 +1467,30 @@ function TikTokDashboardPageInner() {
       const res = await fetch(`/api/tiktok/dashboard?${params.toString()}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "เกิดข้อผิดพลาด");
-      setData(json);
+      return json;
+    };
+    try {
+      const first = await get("overview");
+      if (req !== reqRef.current) return;
+      setData(first);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
+      if (req === reqRef.current) setError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
+      return;
     } finally {
-      setLoading(false);
+      if (req === reqRef.current) setLoading(false);
+    }
+    for (const section of ["audience", "quadrant"] as const) {
+      get(section)
+        .then((json) => {
+          if (req !== reqRef.current) return;
+          setData((prev) => (prev ? { ...prev, ...json } : prev));
+          setStageLoaded((p) => ({ ...p, [section]: true }));
+        })
+        .catch((err) => {
+          if (req === reqRef.current) {
+            setStageError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
+          }
+        });
     }
   }, [dateFrom, dateTo, selectedAdvertisers]);
 
@@ -2015,22 +2045,39 @@ function TikTokDashboardPageInner() {
                 { key: "videos", label: "Videos" },
                 { key: "quadrant", label: "Quadrant" },
               ] as { key: TabKey; label: string }[]
-            ).map((t) => (
-              <button
-                key={t.key}
-                onClick={() => setActiveTab(t.key)}
-                className={`flex-1 px-3 py-1.5 rounded text-sm font-semibold transition-all duration-200 ${
-                  activeTab === t.key
-                    ? "bg-white text-black shadow-[0_1px_4px_rgba(0,0,0,0.15)]"
-                    : "text-gray-500 hover:text-black"
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
+            ).map((t) => {
+              const locked = (t.key === "audience" || t.key === "quadrant") && !stageLoaded[t.key];
+              return (
+                <button
+                  key={t.key}
+                  onClick={() => setActiveTab(t.key)}
+                  disabled={locked}
+                  className={`flex-1 px-3 py-1.5 rounded text-sm font-semibold transition-all duration-200 ${
+                    activeTab === t.key
+                      ? "bg-white text-black shadow-[0_1px_4px_rgba(0,0,0,0.15)]"
+                      : locked
+                        ? "text-gray-300 cursor-not-allowed"
+                        : "text-gray-500 hover:text-black"
+                  }`}
+                >
+                  {t.label}
+                  {locked && !stageError && <span className="ml-1.5 inline-block w-3 h-3 align-[-2px] rounded-full border-2 border-gray-300 border-t-transparent animate-spin" />}
+                </button>
+              );
+            })}
           </div>
 
+          {stageError && (
+            <p className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              โหลดข้อมูลบางแท็บไม่สำเร็จ ({stageError}) — กด Apply เพื่อลองใหม่
+            </p>
+          )}
+
           <div className="pt-5">
+            {((activeTab === "audience" && !stageLoaded.audience) || (activeTab === "quadrant" && !stageLoaded.quadrant)) && (
+              <p className="text-sm text-gray-400 text-center py-10">กำลังโหลดข้อมูลแท็บนี้…</p>
+            )}
+
             {/* ── Tab 1: KPI Overview — Timeline Chart ───────────────────── */}
             {activeTab === "overview" && (
               <div className="space-y-4">
@@ -2346,7 +2393,7 @@ function TikTokDashboardPageInner() {
             )}
 
             {/* ── Tab 2: Audience ─────────────────────────────────────────── */}
-            {activeTab === "audience" && data && (
+            {activeTab === "audience" && data && stageLoaded.audience && (
               <div className="space-y-8">
                 {/* Weekly Engagement Bar */}
                 <DashboardSection
@@ -2666,7 +2713,7 @@ function TikTokDashboardPageInner() {
             )}
 
             {/* ── Tab 4: Quadrant Scatter ─────────────────────────────────── */}
-            {activeTab === "quadrant" && data && (
+            {activeTab === "quadrant" && data && stageLoaded.quadrant && (
               <DashboardSection
                 {...sectionProps}
                 title={`Quadrant — Spend × ${yAxisModeLabel(yAxisMode)}`}
