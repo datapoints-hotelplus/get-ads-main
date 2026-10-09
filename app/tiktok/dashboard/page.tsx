@@ -1442,9 +1442,9 @@ function TikTokDashboardPageInner() {
 
   // Staged load: the first request carries what the KPI Overview and Videos
   // tabs need; Audience and Quadrant (the slow ones — live TikTok calls) load
-  // right after, in parallel, and their tabs stay locked until they land.
+  // in parallel with it, and their tabs stay locked until they land.
   // reqRef drops responses that belong to a filter the user has already changed.
-  const [stageLoaded, setStageLoaded] = useState({ audience: false, quadrant: false });
+  const [stageLoaded, setStageLoaded] = useState({ reach: false, audience: false, quadrant: false });
   const [stageError, setStageError] = useState<string | null>(null);
   const reqRef = useRef(0);
 
@@ -1453,7 +1453,7 @@ function TikTokDashboardPageInner() {
     setLoading(true);
     setError(null);
     setStageError(null);
-    setStageLoaded({ audience: false, quadrant: false });
+    setStageLoaded({ reach: false, audience: false, quadrant: false });
     const get = async (section: string) => {
       const params = new URLSearchParams({ sections: section });
       if (dateFrom) params.set("date_from", dateFrom);
@@ -1469,21 +1469,33 @@ function TikTokDashboardPageInner() {
       if (!res.ok) throw new Error(json.error ?? "เกิดข้อผิดพลาด");
       return json;
     };
-    try {
-      const first = await get("overview");
-      if (req !== reqRef.current) return;
-      setData(first);
-    } catch (err) {
-      if (req === reqRef.current) setError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
-      return;
-    } finally {
-      if (req === reqRef.current) setLoading(false);
-    }
-    for (const section of ["audience", "quadrant"] as const) {
+    // All three go out at once — Audience and Quadrant don't depend on the
+    // overview response, so waiting for it only added its duration to theirs.
+    // Responses are merged into one object; it is published once the overview
+    // (the tabs' shared base) is in, so nothing renders from a partial base.
+    let merged: Partial<DashboardData> = {};
+    let haveOverview = false;
+    const publish = (json: Partial<DashboardData>) => {
+      merged = { ...merged, ...json };
+      if (haveOverview) setData(merged as DashboardData);
+    };
+    get("overview")
+      .then((json) => {
+        if (req !== reqRef.current) return;
+        haveOverview = true;
+        publish(json);
+      })
+      .catch((err) => {
+        if (req === reqRef.current) setError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
+      })
+      .finally(() => {
+        if (req === reqRef.current) setLoading(false);
+      });
+    for (const section of ["reach", "audience", "quadrant"] as const) {
       get(section)
         .then((json) => {
           if (req !== reqRef.current) return;
-          setData((prev) => (prev ? { ...prev, ...json } : prev));
+          publish(json);
           setStageLoaded((p) => ({ ...p, [section]: true }));
         })
         .catch((err) => {
@@ -1780,9 +1792,9 @@ function TikTokDashboardPageInner() {
               <KpiTile
                 label="Reach"
                 scope={data?.reach_source === "summed_fallback" ? "⚠️ ประมาณการ" : undefined}
-                value={fmt(totals.reach)}
-                thisMonth={data && deltaOf(totals.reach, data.prev_totals.reach, fmt)}
-                lastMonth={data && fmt(data.prev_totals.reach)}
+                value={stageLoaded.reach ? fmt(totals.reach) : "…"}
+                thisMonth={data && stageLoaded.reach ? deltaOf(totals.reach, data.prev_totals.reach, fmt) : null}
+                lastMonth={data && stageLoaded.reach ? fmt(data.prev_totals.reach) : null}
               />
               <KpiTile
                 label="CPM"

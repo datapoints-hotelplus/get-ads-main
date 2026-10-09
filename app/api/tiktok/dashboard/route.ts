@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
   // I/O (the slow reads and live TikTok calls) and are left out of the response.
   const sectionsParam = searchParams.get("sections");
   const sections = sectionsParam ? new Set(sectionsParam.split(",").map((x) => x.trim()).filter(Boolean)) : null;
-  const want = (k: "overview" | "audience" | "quadrant") => sections === null || sections.has(k);
+  const want = (k: "overview" | "reach" | "audience" | "quadrant") => sections === null || sections.has(k);
   // Starts the read only when its section is wanted; otherwise an empty result
   // of the same type, so the code that consumes it needs no special case.
   const gate = <T,>(on: boolean, start: () => PromiseLike<T>): Promise<T> =>
@@ -219,7 +219,9 @@ export async function GET(req: NextRequest) {
   // before — live TikTok reach (totals + per ad) overlaps with the remaining
   // DB reads started above; interests chain after the reach totals so the
   // TikTok call count and peak concurrency stay what they were.
-  const reachP: Promise<[number, number]> = want("overview")
+  // Reach is the one scorecard that needs live TikTok calls, so it has its own
+  // stage: the overview ships the other cards without waiting for it.
+  const reachP: Promise<[number, number]> = want("reach")
     ? Promise.all([
         fetchDedupedReach(advertiserIdsOf(rows), dateFrom, dateTo),
         fetchDedupedReach(advertiserIdsOf(prevRows), prevFrom, prevTo),
@@ -285,7 +287,7 @@ export async function GET(req: NextRequest) {
     string,
     { video_cover_url: string | null; caption: string | null; create_time: string | null; duration: number | null; tiktok_item_id: string | null }
   >();
-  if (adIds.length > 0) {
+  if (adIds.length > 0 && (want("overview") || want("quadrant"))) {
     const { data: creativeRows } = await sb
       .from("tiktok_ad_creatives")
       .select("ad_id, video_cover_url, caption, create_time, duration, tiktok_item_id")
@@ -1102,6 +1104,8 @@ export async function GET(req: NextRequest) {
       "audience_interests", "interest_average", "audience_occupations", "interest_source",
       "timing_heatmap", "weekly_engagement",
     ],
+    // Reach is deduplicated by TikTok per exact range — also changes the % deltas.
+    reach: ["totals", "prev_totals", "mom_change", "reach_source"],
     // Same rows as overview's by_ad, but with TikTok's deduped per-ad reach applied.
     quadrant: ["by_ad", "quadrant_thresholds"],
   };
