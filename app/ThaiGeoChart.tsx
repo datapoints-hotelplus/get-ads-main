@@ -179,6 +179,15 @@ export default function ThaiGeoChart({ regions, apiRef }: Props) {
     // ── Wheel = zoom (centered on the cursor), drag = pan ──────────────────
     const canvas = canvasRef.current;
 
+    // Keep the map's centre inside the canvas however far it's zoomed/dragged,
+    // and snap back to centred at 1x, so it can never be lost off-screen.
+    const clampOffset = (o: [number, number]): [number, number] => {
+      if (zoom.scale <= ZOOM_MIN) return [0, 0];
+      const lx = (canvas.clientWidth * zoom.scale) / 2;
+      const ly = (canvas.clientHeight * zoom.scale) / 2;
+      return [Math.max(-lx, Math.min(lx, o[0])), Math.max(-ly, Math.min(ly, o[1]))];
+    };
+
     const onWheel = (e: WheelEvent) => {
       e.preventDefault(); // don't also scroll the page underneath
       const p = liveProjection();
@@ -187,22 +196,23 @@ export default function ThaiGeoChart({ regions, apiRef }: Props) {
       const nextScale = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom.scale * factor));
       if (nextScale === zoom.scale) return;
       const k = nextScale / zoom.scale;
-      // Keep the geographic point under the cursor fixed on screen: the
-      // projection's current live translate() already reflects the full
-      // composed transform (base fit + our offset) from the last update, so
-      // subtracting our own offset isolates the part that's constant across
-      // this zoom change (the auto-fit center), which is what the standard
-      // zoom-around-a-point formula needs.
+      // Keep the geographic point under the cursor fixed on screen. The
+      // projection's live translate() already includes our current offset, so
+      // the standard zoom-around-a-point formula t' = m - k * (m - t) applies
+      // to it directly; the new offset is t' minus the auto-fit base.
+      // (Previously the k * (...) term used the base without the offset, so
+      // every wheel tick after the first compounded the error and flung the
+      // map out of the canvas.)
       const rect = canvas.getBoundingClientRect();
       const mouse: [number, number] = [e.clientX - rect.left, e.clientY - rect.top];
       const [liveX, liveY] = p.translate();
       const baseX = liveX - zoom.offset[0];
       const baseY = liveY - zoom.offset[1];
       zoom.scale = nextScale;
-      zoom.offset = [
-        mouse[0] - k * (mouse[0] - baseX) - baseX,
-        mouse[1] - k * (mouse[1] - baseY) - baseY,
-      ];
+      zoom.offset = clampOffset([
+        mouse[0] - k * (mouse[0] - liveX) - baseX,
+        mouse[1] - k * (mouse[1] - liveY) - baseY,
+      ]);
       applyZoom();
     };
 
@@ -219,7 +229,7 @@ export default function ThaiGeoChart({ regions, apiRef }: Props) {
       const dx = e.clientX - last[0];
       const dy = e.clientY - last[1];
       last = [e.clientX, e.clientY];
-      zoom.offset = [zoom.offset[0] + dx, zoom.offset[1] + dy];
+      zoom.offset = clampOffset([zoom.offset[0] + dx, zoom.offset[1] + dy]);
       applyZoom();
     };
     const endDrag = (e: PointerEvent) => {

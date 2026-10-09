@@ -531,7 +531,7 @@ export async function GET(req: NextRequest) {
       const cell = heatmapCells.get(`${weekday}_${hour}`);
       const topCampaigns = cell
         ? [...cell.byCampaign.values()]
-            .filter((c) => c.impressions > 0)
+            .filter((c) => c.engagement > 0)
             .sort((a, b) => b.engagement - a.engagement)
             .map((c) => ({ campaign_name: c.name, engagement_rate: round2((c.engagement / c.impressions) * 100) }))
         : [];

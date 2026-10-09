@@ -187,7 +187,7 @@ interface DashboardData {
     weekday: string;
     hour: number;
     engagement_rate: number;
-    // F18: every campaign with impressions, sorted by engagement, that made up this cell —
+    // F18: every campaign with engagement > 0, sorted by engagement, that made up this cell —
     // lets the hover say *who* drove it instead of just the account total.
     top_campaigns: { campaign_name: string; engagement_rate: number }[];
   }[];
