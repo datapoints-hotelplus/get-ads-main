@@ -30,6 +30,7 @@ import { fetchDedupedReach, applyDedupedReachToAds, fetchAudienceInterests, form
 type Row = Record<string, unknown>;
 
 export async function GET(req: NextRequest) {
+  const t0 = Date.now();
   const sb = getSupabase();
   const { searchParams } = req.nextUrl;
 
@@ -186,6 +187,55 @@ export async function GET(req: NextRequest) {
     .eq("id", 1)
     .maybeSingle());
 
+  const readAccountTotals = async (from: string, to: string) => {
+    const { data, error } = await sb
+      .from("tiktok_account_totals_daily")
+      .select("stat_time_day, profile_views, new_followers, followers_count, video_views")
+      .gte("stat_time_day", from)
+      .lte("stat_time_day", to)
+      .order("stat_time_day", { ascending: false });
+    if (error) {
+      console.error("[tiktok/dashboard] tiktok_account_totals_daily read failed (non-fatal):", error.message);
+      return null;
+    }
+    if (!data || data.length === 0) return null;
+    return {
+      profile_views: data.reduce((sum, r) => sum + num(r.profile_views), 0),
+      // video_views is a daily figure like profile_views (not a running
+      // total), so summing a range gives the account's real total for it —
+      // confirmed against TikTok Studio's own export, see sync-windsor.
+      video_views: data.reduce((sum, r) => sum + num(r.video_views), 0),
+      // new_followers is a signed daily delta, so summing a range gives the
+      // net change over it — that is the intended reading.
+      new_followers: data.reduce((sum, r) => sum + num(r.new_followers), 0),
+      // followers_count is a running total, never summed: the most recent
+      // day in range IS the figure.
+      followers: num(data[0].followers_count),
+    };
+  };
+  const accountP = want("overview")
+    ? Promise.all([readAccountTotals(dateFrom, dateTo), readAccountTotals(prevFrom, prevTo)])
+    : Promise.resolve([null, null] as [null, null]);
+  // The slowest dependent chain (post → its ads → their lifetime paid totals)
+  // only needs the posts, not the main rows — start it now so it overlaps the
+  // rawdata query instead of running after it.
+  const postDetailsP = postP.then(async ({ data: posts }) => {
+    if (!posts || posts.length === 0) return { itemCreatives: null, paidRows: null };
+    let creativeQuery = sb
+      .from("tiktok_ad_creatives")
+      .select("ad_id, advertiser_id, tiktok_item_id, video_cover_url")
+      .in("tiktok_item_id", posts.map((p) => p.item_id));
+    if (advFilter && advFilter.length > 0) creativeQuery = creativeQuery.in("advertiser_id", advFilter);
+    const { data: itemCreatives } = await creativeQuery;
+    const boostedAdIds = [...new Set((itemCreatives ?? []).filter((c) => c.tiktok_item_id).map((c) => c.ad_id))];
+    if (boostedAdIds.length === 0) return { itemCreatives, paidRows: null };
+    const { data: paidRows } = await sb
+      .from("tiktok_ads_rawdata")
+      .select("ad_id, video_views, likes, comments, shares")
+      .in("ad_id", boostedAdIds);
+    return { itemCreatives, paidRows };
+  });
+  postDetailsP.catch(() => {}); // surfaced where it is awaited below
   const [{ data: rawRows, error }, { data: prevRawRows }] = await Promise.all([query, prevQuery]);
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -346,13 +396,7 @@ export async function GET(req: NextRequest) {
   } | null = null;
   if (postRows && postRows.length > 0) {
     // Which ads ran each post, and what they spent over their whole life.
-    const itemIds = postRows.map((p) => p.item_id);
-    let creativeQuery = sb
-      .from("tiktok_ad_creatives")
-      .select("ad_id, advertiser_id, tiktok_item_id, video_cover_url")
-      .in("tiktok_item_id", itemIds);
-    if (advFilter && advFilter.length > 0) creativeQuery = creativeQuery.in("advertiser_id", advFilter);
-    const { data: itemCreatives } = await creativeQuery;
+    const { itemCreatives, paidRows } = await postDetailsP;
 
     const adToItem = new Map<string, string>();
     const itemCover = new Map<string, string>();
@@ -368,10 +412,6 @@ export async function GET(req: NextRequest) {
     const paidByItem = new Map<string, { views: number; likes: number; comments: number; shares: number }>();
     const boostedAdIds = [...adToItem.keys()];
     if (boostedAdIds.length > 0) {
-      const { data: paidRows } = await sb
-        .from("tiktok_ads_rawdata")
-        .select("ad_id, video_views, likes, comments, shares")
-        .in("ad_id", boostedAdIds);
       for (const r of paidRows ?? []) {
         const itemId = adToItem.get(String(r.ad_id));
         if (!itemId) continue;
@@ -984,36 +1024,8 @@ export async function GET(req: NextRequest) {
   // leaves these null and the UI shows "—" rather than a zero that reads as
   // real data. Read for the previous period too, so these tiles carry the
   // same period-over-period comparison every other KPI on the page has.
-  const readAccountTotals = async (from: string, to: string) => {
-    const { data, error } = await sb
-      .from("tiktok_account_totals_daily")
-      .select("stat_time_day, profile_views, new_followers, followers_count, video_views")
-      .gte("stat_time_day", from)
-      .lte("stat_time_day", to)
-      .order("stat_time_day", { ascending: false });
-    if (error) {
-      console.error("[tiktok/dashboard] tiktok_account_totals_daily read failed (non-fatal):", error.message);
-      return null;
-    }
-    if (!data || data.length === 0) return null;
-    return {
-      profile_views: data.reduce((sum, r) => sum + num(r.profile_views), 0),
-      // video_views is a daily figure like profile_views (not a running
-      // total), so summing a range gives the account's real total for it —
-      // confirmed against TikTok Studio's own export, see sync-windsor.
-      video_views: data.reduce((sum, r) => sum + num(r.video_views), 0),
-      // new_followers is a signed daily delta, so summing a range gives the
-      // net change over it — that is the intended reading.
-      new_followers: data.reduce((sum, r) => sum + num(r.new_followers), 0),
-      // followers_count is a running total, never summed: the most recent
-      // day in range IS the figure.
-      followers: num(data[0].followers_count),
-    };
-  };
 
-  const [accountNow, accountPrev] = want("overview")
-    ? await Promise.all([readAccountTotals(dateFrom, dateTo), readAccountTotals(prevFrom, prevTo)])
-    : [null, null];
+  const [accountNow, accountPrev] = await accountP;
 
   const profileMetrics = {
     // Account totals first, the older F15 snapshot as the fallback.
@@ -1091,7 +1103,8 @@ export async function GET(req: NextRequest) {
     interest_source: interestSource,
   };
 
-  if (sections === null) return NextResponse.json(payload);
+  const timing = { headers: { "Server-Timing": `total;dur=${Date.now() - t0}` } };
+  if (sections === null) return NextResponse.json(payload, timing);
   const FIELDS: Record<string, (keyof typeof payload)[]> = {
     overview: [
       "totals", "prev_totals", "prev_video_count", "mom_change", "last_success_at", "quadrant_thresholds",
@@ -1113,7 +1126,7 @@ export async function GET(req: NextRequest) {
   for (const sec of sections) {
     for (const k of FIELDS[sec] ?? []) (picked as Record<string, unknown>)[k] = payload[k];
   }
-  return NextResponse.json(picked);
+  return NextResponse.json(picked, timing);
 }
 
 function num(v: unknown): number {

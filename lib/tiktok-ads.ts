@@ -500,7 +500,7 @@ export async function fetchAdInsights(
 // anyway, so summing the per-advertiser figures is as close as this gets.
 // That residual overlap only exists for viewers who saw ads from more than
 // one of these accounts.
-export async function fetchDedupedReach(
+async function fetchDedupedReachUncached(
   advertiserIds: string[],
   startDate: string,
   endDate: string,
@@ -538,7 +538,7 @@ export async function fetchDedupedReach(
 // advertiser_id — one call per advertiser returns every one of its ads'
 // deduped reach for the range in a single response, so this costs no more
 // requests than the account-level fetch already makes.
-export async function fetchDedupedReachByAd(
+async function fetchDedupedReachByAdUncached(
   advertiserIds: string[],
   startDate: string,
   endDate: string,
@@ -1141,7 +1141,7 @@ export interface TikTokInterestRow {
   impressions: number;
 }
 
-export async function fetchAudienceInterests(
+export async function fetchAudienceInterestsUncached(
   advertiserId: string,
   startDate: string,
   endDate: string,
@@ -1599,3 +1599,48 @@ function num(v: unknown): number {
 }
 
 export { formatTikTokError };
+
+// ─── In-process cache for the read-only reports the dashboard asks TikTok for ──
+// reach (account / per ad) and interests only change when the daily sync lands,
+// yet every page open, date change and Apply used to hit TikTok again. Same
+// (advertisers, range) within the TTL is answered from memory, and identical
+// requests in flight at once share one TikTok call. Failures are never cached.
+//
+// ponytail: per server process (no DB, no shared store) — a cold or different
+// serverless instance asks TikTok once itself. Move to a shared store only if
+// that ever shows up as a real call-count problem.
+const LIVE_CACHE_TTL_MS = 30 * 60 * 1000;
+const LIVE_CACHE_MAX = 300;
+const liveCache = new Map<string, { at: number; value: Promise<unknown> }>();
+
+function memo<T>(key: string, load: () => Promise<T>): Promise<T> {
+  const hit = liveCache.get(key);
+  if (hit && Date.now() - hit.at < LIVE_CACHE_TTL_MS) return hit.value as Promise<T>;
+  const value = load();
+  liveCache.set(key, { at: Date.now(), value });
+  value.catch(() => {
+    if (liveCache.get(key)?.value === value) liveCache.delete(key);
+  });
+  if (liveCache.size > LIVE_CACHE_MAX) {
+    const oldest = liveCache.keys().next().value;
+    if (oldest !== undefined) liveCache.delete(oldest);
+  }
+  return value;
+}
+
+const idsKey = (ids: string[]) => [...ids].sort().join(",");
+
+export const fetchDedupedReach = (advertiserIds: string[], startDate: string, endDate: string) =>
+  memo(`reach|${idsKey(advertiserIds)}|${startDate}|${endDate}`, () =>
+    fetchDedupedReachUncached(advertiserIds, startDate, endDate),
+  );
+
+export const fetchDedupedReachByAd = (advertiserIds: string[], startDate: string, endDate: string) =>
+  memo(`reachByAd|${idsKey(advertiserIds)}|${startDate}|${endDate}`, () =>
+    fetchDedupedReachByAdUncached(advertiserIds, startDate, endDate),
+  );
+
+export const fetchAudienceInterests = (advertiserId: string, startDate: string, endDate: string) =>
+  memo(`interests|${advertiserId}|${startDate}|${endDate}`, () =>
+    fetchAudienceInterestsUncached(advertiserId, startDate, endDate),
+  );

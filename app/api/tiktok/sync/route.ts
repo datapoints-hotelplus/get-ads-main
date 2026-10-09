@@ -37,7 +37,7 @@ import {
   fetchAdCreatives,
   fetchAudienceDemographics,
   fetchAudienceLocations,
-  fetchAudienceInterests,
+  fetchAudienceInterestsUncached as fetchAudienceInterests, // sync must read fresh, never the dashboard cache
   fetchRegionNames,
   fetchInterestCategoryNames,
   fetchCampaignObjectives,
