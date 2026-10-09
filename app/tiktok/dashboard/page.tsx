@@ -790,22 +790,25 @@ function TimingHeatmapChart({ d }: { d: DashboardData }) {
               <div className="mt-1.5 space-y-1 border-t border-gray-200 pt-1.5">
                 {shownCell.top_campaigns.map((c) => (
                   <div key={c.campaign_name}>
-                    <div className="flex items-center justify-between gap-3 text-gray-500">
-                      <span className="truncate">{c.campaign_name}</span>
-                      <span className="font-medium text-black shrink-0">{c.engagement_rate.toFixed(2)}%</span>
+                    <div className="grid grid-cols-[4fr_1fr] gap-4 items-center text-gray-500">
+                      <span className="truncate" title={c.campaign_name}>{c.campaign_name}</span>
+                      <span className="font-medium text-black text-right">{c.engagement_rate.toFixed(2)}%</span>
                     </div>
                     {c.videos.map((v) => {
-                      const label = v.caption || v.ad_name;
+                      // TikTok captions are long and hashtag-heavy; show the text part,
+                      // keep the full caption in the tooltip.
+                      const full = v.caption || v.ad_name;
+                      const label = full.replace(/#\S+/g, "").replace(/\s+/g, " ").trim() || full;
                       return (
-                        <div key={v.ad_name} className="flex items-center justify-between gap-3 pl-4 text-gray-400">
+                        <div key={v.ad_name} className="grid grid-cols-[4fr_1fr] gap-4 items-center pl-4 text-gray-400">
                           {v.video_link ? (
-                            <a href={v.video_link} target="_blank" rel="noreferrer" className="truncate hover:underline text-secondary">
+                            <a href={v.video_link} target="_blank" rel="noreferrer" title={full} className="truncate hover:underline text-secondary">
                               🎬 {label}
                             </a>
                           ) : (
-                            <span className="truncate">🎬 {label}</span>
+                            <span className="truncate" title={full}>🎬 {label}</span>
                           )}
-                          <span className="shrink-0">{v.engagement_rate.toFixed(2)}%</span>
+                          <span className="text-right">{v.engagement_rate.toFixed(2)}%</span>
                         </div>
                       );
                     })}
