@@ -179,14 +179,12 @@ export default function ThaiGeoChart({ regions, apiRef }: Props) {
     // ── Wheel = zoom (centered on the cursor), drag = pan ──────────────────
     const canvas = canvasRef.current;
 
-    // Keep the map's centre inside the canvas however far it's zoomed/dragged,
-    // and snap back to centred at 1x, so it can never be lost off-screen.
-    const clampOffset = (o: [number, number]): [number, number] => {
-      if (zoom.scale <= ZOOM_MIN) return [0, 0];
-      const lx = (canvas.clientWidth * zoom.scale) / 2;
-      const ly = (canvas.clientHeight * zoom.scale) / 2;
-      return [Math.max(-lx, Math.min(lx, o[0])), Math.max(-ly, Math.min(ly, o[1]))];
-    };
+    // Snap back to exactly centred at 1x. Not clamped otherwise: the offset
+    // is relative to the projection's origin (lon 0, ~3000px away from
+    // Thailand), so its magnitude says nothing about where the map is on
+    // screen — an offset-size clamp pushed the map off-canvas on zoom.
+    const clampOffset = (o: [number, number]): [number, number] =>
+      zoom.scale <= ZOOM_MIN ? [0, 0] : o;
 
     const onWheel = (e: WheelEvent) => {
       e.preventDefault(); // don't also scroll the page underneath
