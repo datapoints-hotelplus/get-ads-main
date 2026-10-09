@@ -187,7 +187,7 @@ interface DashboardData {
     weekday: string;
     hour: number;
     engagement_rate: number;
-    // F18: up to 3 campaigns, sorted by engagement, that made up this cell —
+    // F18: every campaign with impressions, sorted by engagement, that made up this cell —
     // lets the hover say *who* drove it instead of just the account total.
     top_campaigns: { campaign_name: string; engagement_rate: number }[];
   }[];
@@ -755,10 +755,9 @@ function TimingHeatmapChart({ d }: { d: DashboardData }) {
         </table>
       </div>
 
-      {/* Fixed height regardless of content (3 campaign lines is the
-          realistic max — TOP_CAMPAIGNS_PER_CELL on the server) so settling
+      {/* Fixed height regardless of content (long lists scroll) so settling
           into/out of hover never nudges anything else on the page. */}
-      <div className="mt-3 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-xs h-24 overflow-y-auto">
+      <div className="mt-3 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-xs h-40 overflow-y-auto">
         {shown ? (
           <>
             <div className="flex items-center justify-between gap-2">

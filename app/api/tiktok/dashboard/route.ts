@@ -216,8 +216,10 @@ export async function GET(req: NextRequest) {
     }
   }
   // Spark Ads (most ads in this account) have no video_cover_url — link
-  // straight to the real video via TikTok's oEmbed URL instead.
-  const videoLink = (itemId: string | null) => (itemId ? `https://www.tiktok.com/embed/v2/${itemId}` : null);
+  // straight to the real video. /@/video/<id> redirects to the canonical
+  // watch page; the old /embed/v2/<id> is iframe-only and intermittently
+  // answers "overload-protect triggered" when opened as a page.
+  const videoLink = (itemId: string | null) => (itemId ? `https://www.tiktok.com/@/video/${itemId}` : null);
 
   const byAdWithCover = byAd.map((a) => ({
     ...a,
@@ -524,7 +526,6 @@ export async function GET(req: NextRequest) {
     }
     heatmapCells.set(key, e);
   }
-  const TOP_CAMPAIGNS_PER_CELL = 3;
   const timingHeatmap = weekKeys.flatMap((weekday) =>
     Array.from({ length: 24 }, (_, hour) => {
       const cell = heatmapCells.get(`${weekday}_${hour}`);
@@ -532,7 +533,6 @@ export async function GET(req: NextRequest) {
         ? [...cell.byCampaign.values()]
             .filter((c) => c.impressions > 0)
             .sort((a, b) => b.engagement - a.engagement)
-            .slice(0, TOP_CAMPAIGNS_PER_CELL)
             .map((c) => ({ campaign_name: c.name, engagement_rate: round2((c.engagement / c.impressions) * 100) }))
         : [];
       return {
