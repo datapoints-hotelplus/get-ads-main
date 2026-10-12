@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AdminNav from "@/app/components/AdminNav";
 import DateInput from "@/app/components/DateInput";
@@ -19,6 +19,21 @@ export default function AdminSyncPage() {
   const [backfillTables, setBackfillTables] = useState<string[]>([
     "rawdata", "geo", "demographic", "device",
   ]);
+  // "" = every active account; otherwise one account's id (without act_).
+  const [backfillAccount, setBackfillAccount] = useState("");
+  const [accountOptions, setAccountOptions] = useState<{ id: string; name: string }[]>([]);
+  useEffect(() => {
+    fetch("/api/admin/accounts")
+      .then((r) => r.json())
+      .then((d: { accounts?: { account_name: string; account_id: string; is_active: boolean }[] }) =>
+        setAccountOptions(
+          (d.accounts ?? [])
+            .filter((a) => a.is_active)
+            .map((a) => ({ id: String(a.account_id).replace(/^act_/, ""), name: a.account_name })),
+        ),
+      )
+      .catch(() => {});
+  }, []);
 
   const [resyncing, setResyncing] = useState(false);
   const [resyncResult, setResyncResult] = useState<{
@@ -66,7 +81,7 @@ export default function AdminSyncPage() {
       const res = await fetch("/api/sync-backfill", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tables: backfillTables }),
+        body: JSON.stringify({ tables: backfillTables, account_id: backfillAccount || undefined }),
       });
       const data = await res.json();
       if (!res.ok) setBackfillError(data.error ?? "เกิดข้อผิดพลาด");
@@ -164,6 +179,20 @@ export default function AdminSyncPage() {
           <p className="text-sm text-gray-500 mb-3">
             ดึงข้อมูลตั้งแต่วันแรกใน rawdata จนถึงวันนี้ใหม่ทั้งหมด เฉพาะแถวที่ spend &gt; 0
           </p>
+          <select
+            value={backfillAccount}
+            onChange={(e) => setBackfillAccount(e.target.value)}
+            disabled={backfilling}
+            aria-label="เลือก account"
+            className="w-full mb-3 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white"
+          >
+            <option value="">ทุก account ({accountOptions.length})</option>
+            {accountOptions.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name} (act_{a.id})
+              </option>
+            ))}
+          </select>
           <div className="flex flex-wrap gap-3 mb-4">
             {(["rawdata", "geo", "demographic", "device"] as const).map((t) => (
               <label key={t} className="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
@@ -186,7 +215,11 @@ export default function AdminSyncPage() {
             disabled={backfilling || backfillTables.length === 0}
             className="w-full bg-secondary hover:bg-secondary-light disabled:bg-gray-400 text-white font-semibold py-2.5 rounded-xl transition"
           >
-            {backfilling ? "กำลัง Backfill..." : "เริ่ม Backfill"}
+            {backfilling
+              ? "กำลัง Backfill..."
+              : backfillAccount
+                ? "เริ่ม Backfill (1 account)"
+                : "เริ่ม Backfill (ทุก account)"}
           </button>
           {backfillError && (
             <p className="mt-3 text-sm text-red-600">{backfillError}</p>
