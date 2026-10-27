@@ -6,7 +6,6 @@
  */
 import { getSupabase } from "@/lib/supabase";
 import { toRole } from "@/lib/access";
-import { EXCLUDED_ACCOUNTS } from "@/lib/adscanScan";
 
 export type StaffRow = {
   name: string; role: string; hotels: number;
@@ -28,10 +27,9 @@ export async function loadReport(days: number): Promise<Report> {
   const sb = getSupabase();
   const since = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
 
-  const [{ data: users }, { data: grants }, { data: pages }, { data: eps, error: eErr }, { data: acts, error: aErr }, { data: last }] = await Promise.all([
+  const [{ data: users }, { data: grants }, { data: eps, error: eErr }, { data: acts, error: aErr }, { data: last }] = await Promise.all([
     sb.from("ads_users").select("id,username,display_name,role").eq("is_active", true).in("role", ["admin", "specialist"]),
     sb.from("ads_user_page_permissions").select("user_id,account_id"),
-    sb.from("ads_allpage").select("account_id").eq("is_active", true),
     sb.from("adscan_alerts").select("id,campaign_id,account_id,first_seen,closed_at,close_reason")
       .or(`closed_at.is.null,closed_at.gte.${since}`),
     sb.from("adscan_actions").select("user_id,campaign_id,type,label,created_at").gte("created_at", since),
@@ -44,7 +42,6 @@ export async function loadReport(days: number): Promise<Report> {
   const latest = (last?.data_date as string | undefined) ?? null;
   const today = latest ?? new Date().toISOString().slice(0, 10);
 
-  const active = new Set((pages ?? []).map((p) => p.account_id as string).filter((id) => !EXCLUDED_ACCOUNTS.has(id)));
   const episodes = eps ?? [];
   const actions = acts ?? [];
   // The episode an action belongs to: same campaign, opened on/before the action.
@@ -52,9 +49,9 @@ export async function loadReport(days: number): Promise<Report> {
     episodes.filter((e) => e.campaign_id === cid && e.first_seen <= at.slice(0, 10)).sort((a, b) => (a.first_seen < b.first_seen ? 1 : -1))[0];
   const actedOn = new Set(actions.map((a) => episodeOf(a.campaign_id, a.created_at)?.id).filter(Boolean));
 
-  const staff = (users ?? []).map((u): StaffRow => {
-    const isAdmin = toRole(u.role) === "admin";
-    const mine = isAdmin ? active : new Set((grants ?? []).filter((g) => g.user_id === u.id).map((g) => g.account_id as string));
+  // Admins aren't listed: they see every hotel and aren't the ones being measured.
+  const staff = (users ?? []).filter((u) => toRole(u.role) !== "admin").map((u): StaffRow => {
+    const mine = new Set((grants ?? []).filter((g) => g.user_id === u.id).map((g) => g.account_id as string));
     const received = episodes.filter((e) => mine.has(e.account_id));
     const myActs = actions.filter((a) => a.user_id === u.id);
     const pending = received.filter((e) => e.closed_at == null && !actedOn.has(e.id));
@@ -66,7 +63,7 @@ export async function loadReport(days: number): Promise<Report> {
     skips.forEach((s) => reasons.set(s.label, (reasons.get(s.label) ?? 0) + 1));
     const judged = improved + stillBad;
     return {
-      name: u.display_name || u.username, role: isAdmin ? "Admin" : "Specialist", hotels: mine.size,
+      name: u.display_name || u.username, role: "Specialist", hotels: mine.size,
       received: received.length,
       handled: new Set(myActs.map((a) => episodeOf(a.campaign_id, a.created_at)?.id).filter(Boolean)).size,
       pending: pending.length, pendingDays: avg(pending.map((e) => dayDiff(e.first_seen, today) + 1)),

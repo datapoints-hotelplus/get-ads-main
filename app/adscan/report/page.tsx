@@ -87,7 +87,7 @@ export default function PerformanceReport() {
                   <td className="px-3 text-xs">{s.topSkip ?? "—"}</td>
                 </tr>
               ))}
-              {!data.staff.length && <tr><td colSpan={COLS.length + 3} className="px-4 py-8 text-center text-gray-500">ยังไม่มีพนักงาน role Admin / Specialist</td></tr>}
+              {!data.staff.length && <tr><td colSpan={COLS.length + 3} className="px-4 py-8 text-center text-gray-500">ยังไม่มีพนักงาน role Specialist</td></tr>}
             </tbody>
           </table>
           <div className="px-4 py-3 text-xs text-gray-500 space-y-0.5">
