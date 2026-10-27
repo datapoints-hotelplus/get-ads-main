@@ -1,5 +1,6 @@
 "use client";
 
+import AppHeader from "@/app/components/AppHeader";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
@@ -35,7 +36,7 @@ export default function HighlightsPage() {
     Promise.all([
       fetch("/api/admin/highlights?list=campaigns").then((r) => {
         if (r.status === 401) {
-          router.push("/admin/login");
+          router.push("/login");
           return null;
         }
         return r.json();
@@ -100,29 +101,7 @@ export default function HighlightsPage() {
 
   return (
     <div className=" min-h-screen bg-gray-100">
-      <div className="bg-primary px-6 py-4 flex items-center justify-between shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center">
-            <span className="text-primary font-bold text-sm">H+</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => router.push("/admin")}
-              className="text-sm text-secondary/60 hover:text-secondary"
-            >
-              ← Accounts
-            </button>
-            <div>
-              <span className="text-lg font-bold text-secondary tracking-tight block leading-tight">
-                HOTEL PLUS
-              </span>
-              <span className="text-xs text-secondary/70">
-                Highlight Metrics
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
+      <AppHeader subtitle="Highlight Metrics" />
 
       <div className="max-w-5xl mx-auto px-4 py-8">
         {loading ? (

@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import AppHeader from "@/app/components/AppHeader";
 import { useRouter } from "next/navigation";
-import AdminNav from "@/app/components/AdminNav";
 
 /**
  * A long sync can outrun the serverless function's time limit — the
@@ -335,10 +335,7 @@ export default function TikTokSyncPage() {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      {/* ── Header — same AdminNav every other admin page uses (name +
-          Logout everywhere, Dashboard/Facebook Sync already covered by its
-          TikTok/Facebook dropdowns) ──────────────────────────────────────── */}
-      <AdminNav subtitle="TikTok — Sync Panel" />
+      <AppHeader subtitle="TikTok — Sync Panel" />
 
       {/* ── Content ───────────────────────────────────────────────────────── */}
       <div className="max-w-2xl mx-auto px-4 py-8 space-y-5">

@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import AppHeader from "@/app/components/AppHeader";
 import { useRouter } from "next/navigation";
-import UserNav from "@/app/components/UserNav";
 import DateInput from "@/app/components/DateInput";
 
 type Template = {
@@ -565,7 +565,7 @@ export default function PortfolioPage() {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <UserNav subtitle="Portfolio" />
+      <AppHeader subtitle="Portfolio" />
 
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
         {/* Filters */}

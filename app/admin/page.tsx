@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, FormEvent } from "react";
+import AppHeader from "@/app/components/AppHeader";
 import { useRouter } from "next/navigation";
-import AdminNav from "@/app/components/AdminNav";
 
 type Account = {
   account_name: string;
@@ -31,7 +31,7 @@ export default function AdminPage() {
   async function fetchAccounts() {
     const res = await fetch("/api/admin/accounts");
     if (res.status === 401) {
-      router.push("/admin/login");
+      router.push("/login");
       return;
     }
     const data = await res.json();
@@ -142,7 +142,7 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <AdminNav subtitle="Admin — Manage Accounts" />
+      <AppHeader subtitle="Admin — Manage Accounts" />
 
       <div className="max-w-3xl mx-auto px-4 py-8 space-y-8">
         {/* Add Account Form */}

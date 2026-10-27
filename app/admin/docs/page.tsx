@@ -1,5 +1,6 @@
 "use client";
 
+import AppHeader from "@/app/components/AppHeader";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -26,7 +27,7 @@ const sections = [
 
 วิธี Login:
 1. เข้า /login สำหรับ user ทั่วไป
-2. เข้า /admin/login สำหรับ admin
+2. ทุก role เข้าที่ /login หน้าเดียว ระบบพาไปหน้าตาม role เอง
 3. กรอก username + password แล้วกด "เข้าสู่ระบบ"
 
 หมายเหตุ:
@@ -224,30 +225,7 @@ export default function AdminDocsPage() {
 
   return (
     <div className=" min-h-screen bg-gray-100">
-      {/* Header */}
-      <div className="bg-primary px-6 py-4 flex items-center justify-between shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center">
-            <span className="text-primary font-bold text-sm">H+</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => router.push("/admin")}
-              className="text-sm text-secondary/60 hover:text-secondary"
-            >
-              ← Admin
-            </button>
-            <div>
-              <span className="text-lg font-bold text-secondary tracking-tight block leading-tight">
-                HOTEL PLUS
-              </span>
-              <span className="text-xs text-secondary/70">
-                📖 วิธีใช้งานระบบ
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
+      <AppHeader subtitle="วิธีใช้งานระบบ" />
 
       <div className="max-w-6xl mx-auto px-4 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">

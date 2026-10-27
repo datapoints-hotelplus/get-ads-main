@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect, FormEvent } from "react";
+import AppHeader from "@/app/components/AppHeader";
 import { useRouter } from "next/navigation";
-import AdminNav from "@/app/components/AdminNav";
+import { ROLES, ROLE_LABELS, type Role } from "@/lib/access";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -11,6 +12,7 @@ type User = {
   username: string;
   display_name: string | null;
   is_active: boolean;
+  role: Role;
   created_at: string;
 };
 
@@ -61,6 +63,7 @@ export default function AdminUsersPage() {
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newDisplayName, setNewDisplayName] = useState("");
+  const [newRole, setNewRole] = useState<Role>("user");
   const [createError, setCreateError] = useState("");
   const [creating, setCreating] = useState(false);
 
@@ -90,7 +93,7 @@ export default function AdminUsersPage() {
     setUsersLoading(true);
     const res = await fetch("/api/admin/users");
     if (res.status === 401) {
-      router.push("/admin/login");
+      router.push("/login");
       return;
     }
     const data = await res.json();
@@ -116,12 +119,14 @@ export default function AdminUsersPage() {
           username: newUsername,
           password: newPassword,
           display_name: newDisplayName,
+          role: newRole,
         }),
       });
       if (res.ok) {
         setNewUsername("");
         setNewPassword("");
         setNewDisplayName("");
+        setNewRole("user");
         await fetchUsers();
       } else {
         const d = await res.json();
@@ -141,6 +146,22 @@ export default function AdminUsersPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: user.id, is_active: !user.is_active }),
     });
+    await fetchUsers();
+  }
+
+  // ── Change role ────────────────────────────────────────────────────────────
+  // Takes effect on the user's next login: the role rides in their session
+  // cookie, so an already-logged-in user keeps the old one until it expires.
+  async function handleRoleChange(user: User, role: Role) {
+    const res = await fetch("/api/admin/users", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: user.id, role }),
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      alert(d.error ?? "เปลี่ยน role ไม่สำเร็จ");
+    }
     await fetchUsers();
   }
 
@@ -242,7 +263,7 @@ export default function AdminUsersPage() {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <AdminNav
+      <AppHeader
         subtitle={
           view === "permissions" && permUser
             ? `Permissions — ${permUser.display_name ?? permUser.username}`
@@ -263,7 +284,7 @@ export default function AdminUsersPage() {
                 Create New User
               </h2>
               <form onSubmit={handleCreate} className="space-y-4">
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Username <span className="text-red-500">*</span>
@@ -302,6 +323,14 @@ export default function AdminUsersPage() {
                       placeholder="John Doe"
                       className="input"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                    <select value={newRole} onChange={(e) => setNewRole(e.target.value as Role)} className="input">
+                      {ROLES.map((r) => (
+                        <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
@@ -352,6 +381,7 @@ export default function AdminUsersPage() {
                         <th className="px-4 py-3 font-medium">#</th>
                         <th className="px-4 py-3 font-medium">Username</th>
                         <th className="px-4 py-3 font-medium">Display Name</th>
+                        <th className="px-4 py-3 font-medium">Role</th>
                         <th className="px-4 py-3 font-medium">Status</th>
                         <th className="px-4 py-3 font-medium">Created</th>
                         <th className="px-4 py-3 font-medium text-right">
@@ -370,6 +400,18 @@ export default function AdminUsersPage() {
                             {user.display_name ?? (
                               <span className="text-gray-300 italic">—</span>
                             )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <select
+                              value={user.role}
+                              onChange={(e) => handleRoleChange(user, e.target.value as Role)}
+                              className="border border-gray-200 rounded-md px-2 py-1 text-xs bg-white"
+                              aria-label={`Role ของ ${user.username}`}
+                            >
+                              {ROLES.map((r) => (
+                                <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                              ))}
+                            </select>
                           </td>
                           <td className="px-4 py-3">
                             <button

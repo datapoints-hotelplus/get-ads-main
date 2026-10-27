@@ -170,14 +170,18 @@ a[role="button"] {
 }
 
 /* ── Links ─────────────────────────────────────────────────────────────── */
-a {
-  color: var(--secondary);
-  text-decoration: none;
-  transition: color 0.2s ease;
-}
+/* In the base layer so Tailwind utilities win: unlayered, this beat
+   `text-white` and made link-styled buttons navy-on-navy. */
+@layer base {
+  a {
+    color: var(--secondary);
+    text-decoration: none;
+    transition: color 0.2s ease;
+  }
 
-a:hover {
-  color: var(--primary);
+  a:hover {
+    color: var(--primary);
+  }
 }
 
 /* ── Headings ──────────────────────────────────────────────────────────── */

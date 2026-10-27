@@ -14,6 +14,9 @@ const nextConfig: NextConfig = {
     return [
       { source: "/dashboard", destination: "/facebook/dashboard", permanent: true },
       { source: "/portfolio", destination: "/facebook/portfolio", permanent: true },
+      // One login for every role now; old admin bookmarks keep working.
+      { source: "/admin/login", destination: "/login", permanent: true },
+      { source: "/admin/change-password", destination: "/account/password", permanent: true },
     ];
   },
 };

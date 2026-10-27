@@ -3,11 +3,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 import { verifyPassword } from "@/lib/userAuth";
 import { signSessionToken, verifySessionToken } from "@/lib/sessionToken";
+import { homeFor, menuFor, toRole } from "@/lib/access";
+import { getUserPlatforms } from "@/lib/userPlatforms";
 
 const COOKIE_NAME = "session";
 const COOKIE_MAX_AGE = 7 * 86_400; // 7 days
 
-// ── POST /api/user/auth — Login (both admin and user) ─────────────────────────
+// ── POST /api/user/auth — Login, every role (the only login there is) ────────
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const { username, password } = body as { username?: string; password?: string };
@@ -36,8 +38,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
   }
 
-  const role = (user.role as "admin" | "user") ?? "user";
+  const role = toRole(user.role);
   const token = await signSessionToken(user.id, role);
+  const platforms = await getUserPlatforms(user.id, role);
 
   // Log login
   const headerStore = await headers();
@@ -69,6 +72,9 @@ export async function POST(req: NextRequest) {
       display_name: user.display_name,
       role,
     },
+    // Where this role lands — computed here so the login page needn't know
+    // the rules (lib/access.ts is the only place that does).
+    home: homeFor(role, platforms),
   });
 }
 
@@ -106,12 +112,17 @@ export async function GET() {
     return NextResponse.json({ error: "User not found" }, { status: 401 });
   }
 
+  const role = toRole(user.role);
+  const platforms = await getUserPlatforms(user.id, role);
   return NextResponse.json({
     user: {
       id: user.id,
       username: user.username,
       display_name: user.display_name,
-      role: user.role ?? "user",
+      role,
     },
+    platforms,
+    // The nav renders this as-is, so it can't drift from what proxy.ts allows.
+    menu: menuFor(role, platforms),
   });
 }

@@ -565,23 +565,10 @@ export async function POST(req: Request) {
     );
   }
 
-  const allAccounts = await getAccountIds();
-  if (allAccounts.length === 0) {
-    return NextResponse.json(
-      { error: "ไม่พบ Account ID ใน PageIDs sheet" },
-      { status: 404 },
-    );
-  }
-
-  // Optional single-account backfill: body.account_id (with or without "act_").
-  // Absent/empty = every active account, same as before.
-  const requestedId = String(body.account_id ?? "").trim().replace(/^act_/, "");
-  const accounts = requestedId
-    ? allAccounts.filter((a) => a.id === requestedId)
-    : allAccounts;
+  const accounts = await getAccountIds();
   if (accounts.length === 0) {
     return NextResponse.json(
-      { error: `ไม่พบ account ${requestedId} (หรือถูกปิดใช้งาน)` },
+      { error: "ไม่พบ Account ID ใน PageIDs sheet" },
       { status: 404 },
     );
   }

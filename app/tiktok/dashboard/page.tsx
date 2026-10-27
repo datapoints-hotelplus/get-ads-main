@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import AppHeader from "@/app/components/AppHeader";
 import ReactSelect from "react-select";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -28,8 +29,6 @@ import type { ColumnDef } from "@tanstack/react-table";
 import ThaiGeoChart from "../../ThaiGeoChart";
 import SortableTable from "@/app/components/SortableTable";
 import DateInput from "@/app/components/DateInput";
-import AdminNav from "@/app/components/AdminNav";
-import UserNav from "@/app/components/UserNav";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1379,9 +1378,7 @@ function TikTokDashboardPageInner() {
   // AC10: role — same check as the Facebook /dashboard page
   // (currentUser?.role === "admin"). "user" role = read-only Viewer here:
   // Settings (quadrant threshold edit, Sync/Settings page) and Export stay
-  // admin-only; everything else on this page is visible to both. Also
-  // drives which nav renders below (AdminNav vs UserNav — same username +
-  // Logout every other page has).
+  // admin-only; everything else on this page is visible to both.
   const [currentUser, setCurrentUser] = useState<{ username: string; display_name?: string | null; role?: string } | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   useEffect(() => {
@@ -1652,15 +1649,7 @@ function TikTokDashboardPageInner() {
         </div>
       )}
 
-      {/* Header — same AdminNav/UserNav every other page uses (name +
-          Logout everywhere). AC10: admin gets AdminNav (its TikTok dropdown
-          already covers the old "Sync Data" shortcut); Viewer gets UserNav
-          (already covers the old "Facebook Dashboard" link). */}
-      {isAdmin ? (
-        <AdminNav subtitle="TikTok — Dashboard" />
-      ) : (
-        <UserNav subtitle="TikTok — Dashboard" user={currentUser} authLoading={authLoading} />
-      )}
+      <AppHeader subtitle="TikTok — Dashboard" />
 
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-5">
         {/* Filters — flat pill row, no card/labels: placeholder text alone

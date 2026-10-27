@@ -1,5 +1,6 @@
 "use client";
 
+import AppHeader from "@/app/components/AppHeader";
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -78,7 +79,7 @@ function AdminConfigPageInner() {
   async function loadStatus() {
     const res = await fetch("/api/admin/config");
     if (res.status === 401) {
-      router.push("/admin/login");
+      router.push("/login");
       return;
     }
     const data = await res.json();
@@ -183,16 +184,12 @@ function AdminConfigPageInner() {
   const expiry = daysUntil(status.token.expires_at);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-3xl mx-auto">
+    <div className="min-h-screen bg-gray-50">
+      <AppHeader subtitle="System Config" />
+      <div className="max-w-3xl mx-auto p-8">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold text-gray-900">System Config</h1>
-          <a
-            href="/admin"
-            className="text-sm text-gray-600 hover:text-gray-900"
-          >
-            ← กลับหน้า Admin
-          </a>
+
         </div>
 
         {message && (

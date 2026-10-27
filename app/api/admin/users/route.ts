@@ -3,13 +3,23 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifySessionToken } from "@/lib/sessionToken";
 import { getSupabase } from "@/lib/supabase";
 import { hashPassword } from "@/lib/userAuth";
+import { ROLES, type Role } from "@/lib/access";
 
-async function checkAdminAuth(): Promise<boolean> {
+/** Rejected, not coerced — a typo must not silently become a real role. */
+function isRole(v: unknown): v is Role {
+  return (ROLES as readonly string[]).includes(v as string);
+}
+
+async function adminSession() {
   const cookieStore = await cookies();
   const token = cookieStore.get("session")?.value;
-  if (!token) return false;
+  if (!token) return null;
   const session = await verifySessionToken(token);
-  return session?.role === "admin";
+  return session?.role === "admin" ? session : null;
+}
+
+async function checkAdminAuth(): Promise<boolean> {
+  return (await adminSession()) !== null;
 }
 
 // ── GET /api/admin/users — List all users ─────────────────────────────────────
@@ -21,7 +31,7 @@ export async function GET() {
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from("ads_users")
-    .select("id, username, display_name, is_active, created_at")
+    .select("id, username, display_name, is_active, role, created_at")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -38,11 +48,16 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({}));
-  const { username, password, display_name } = body as {
+  const { username, password, display_name, role } = body as {
     username?: string;
     password?: string;
     display_name?: string;
+    role?: string;
   };
+
+  if (role !== undefined && !isRole(role)) {
+    return NextResponse.json({ error: `role must be one of: ${ROLES.join(", ")}` }, { status: 400 });
+  }
 
   if (!username || !password) {
     return NextResponse.json(
@@ -68,8 +83,9 @@ export async function POST(req: NextRequest) {
       username: normalised,
       password_hash: passwordHash,
       display_name: display_name?.trim() || null,
+      role: role ?? "user",
     })
-    .select("id, username, display_name, is_active, created_at")
+    .select("id, username, display_name, is_active, role, created_at")
     .single();
 
   if (error) {
@@ -87,16 +103,18 @@ export async function POST(req: NextRequest) {
 
 // ── PATCH /api/admin/users — Update user (reset password / toggle active) ────
 export async function PATCH(req: NextRequest) {
-  if (!(await checkAdminAuth())) {
+  const session = await adminSession();
+  if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const body = await req.json().catch(() => ({}));
-  const { id, password, is_active, display_name } = body as {
+  const { id, password, is_active, display_name, role } = body as {
     id?: string;
     password?: string;
     is_active?: boolean;
     display_name?: string;
+    role?: string;
   };
 
   if (!id) {
@@ -124,6 +142,17 @@ export async function PATCH(req: NextRequest) {
     updates.display_name = display_name.trim() || null;
   }
 
+  if (role !== undefined) {
+    if (!isRole(role)) {
+      return NextResponse.json({ error: `role must be one of: ${ROLES.join(", ")}` }, { status: 400 });
+    }
+    // An admin demoting themselves is one click from locking every admin out.
+    if (id === session.userId && role !== "admin") {
+      return NextResponse.json({ error: "เปลี่ยน role ของตัวเองไม่ได้ — ให้ admin คนอื่นเปลี่ยนให้" }, { status: 400 });
+    }
+    updates.role = role;
+  }
+
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: "No fields to update" }, { status: 400 });
   }
@@ -133,7 +162,7 @@ export async function PATCH(req: NextRequest) {
     .from("ads_users")
     .update(updates)
     .eq("id", id)
-    .select("id, username, display_name, is_active")
+    .select("id, username, display_name, is_active, role")
     .single();
 
   if (error) {

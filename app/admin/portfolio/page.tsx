@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import AppHeader from "@/app/components/AppHeader";
 import { useRouter } from "next/navigation";
-import AdminNav from "@/app/components/AdminNav";
 
 type Template = {
   id: string;
@@ -110,7 +110,7 @@ export default function AdminPortfolioPage() {
     setTLoading(true);
     const res = await fetch("/api/admin/portfolio/templates");
     if (res.status === 401) {
-      router.push("/admin/login");
+      router.push("/login");
       return;
     }
     const data = await res.json();
@@ -122,7 +122,7 @@ export default function AdminPortfolioPage() {
     setPLoading(true);
     const res = await fetch("/api/admin/portfolio/profiles");
     if (res.status === 401) {
-      router.push("/admin/login");
+      router.push("/login");
       return;
     }
     const data = await res.json();
@@ -270,8 +270,8 @@ export default function AdminPortfolioPage() {
   }
 
   async function handleLogout() {
-    await fetch("/api/admin/auth", { method: "DELETE" });
-    router.push("/admin/login");
+    await fetch("/api/user/auth", { method: "DELETE" });
+    router.push("/login");
   }
 
   function numField(val: number | null) {
@@ -280,7 +280,7 @@ export default function AdminPortfolioPage() {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <AdminNav subtitle="Admin — Portfolio" />
+      <AppHeader subtitle="Admin — Portfolio" />
 
       <div className="max-w-4xl mx-auto px-4 py-8 space-y-5">
         {/* Tab switcher */}

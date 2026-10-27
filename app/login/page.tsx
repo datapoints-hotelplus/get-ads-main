@@ -9,13 +9,13 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
 
-  // If already logged in, redirect to dashboard
+  // Already logged in → "/" sends each role to its own landing page.
   useEffect(() => {
     fetch("/api/user/auth")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (data?.user) {
-          window.location.href = "/facebook/dashboard";
+          window.location.href = "/";
         } else {
           setChecking(false);
         }
@@ -36,7 +36,9 @@ export default function LoginPage() {
       });
 
       if (res.ok) {
-        window.location.href = "/facebook/dashboard";
+        // One login for every role — the server says where this role lands.
+        const data = await res.json();
+        window.location.href = data.home ?? "/";
         return;
       } else {
         const data = await res.json();

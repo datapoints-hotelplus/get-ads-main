@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import AppHeader from "@/app/components/AppHeader";
 import {
   useReactTable,
   getCoreRowModel,
@@ -15,7 +16,6 @@ import ReactSelect from "react-select";
 import FrequencyGauge from "../../FrequencyGauge";
 import ThaiGeoChart from "../../ThaiGeoChart";
 import ErrorBoundary from "../../ErrorBoundary";
-import UserNav from "@/app/components/UserNav";
 import { isoToDisplay } from "@/app/components/dateFormat";
 
 // ─── Checkbox Filter Component ────────────────────────────────────────────────
@@ -1423,11 +1423,8 @@ export default function DashboardPage() {
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-100">
-      <UserNav
+      <AppHeader
         subtitle="Ads Performance Dashboard"
-        user={currentUser}
-        authLoading={authLoading}
-        onLogout={handleLogout}
       >
         {/* Filter form */}
         <form onSubmit={handleApply} className="space-y-3">
@@ -1521,7 +1518,7 @@ export default function DashboardPage() {
               </div>
             </div>
           </form>
-      </UserNav>
+      </AppHeader>
 
       {/* ── Page content ────────────────────────────────────────────────────── */}
       <div className="max-w-7xl mx-auto px-4 py-6">
