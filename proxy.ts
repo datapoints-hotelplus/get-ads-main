@@ -26,7 +26,6 @@ const CRON_APIS = new Set([
   "/api/tiktok/sync-windsor",
   "/api/tiktok/check-token-expiry",
   "/api/adscan/scan", // also an admin button; checked by isAuthorizedSyncCaller
-  "/api/adscan/ai-run", // n8n 09:00; same check
 ]);
 
 function under(pathname: string, prefix: string) {
