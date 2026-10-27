@@ -275,3 +275,53 @@ export function applyDay(open: Map<string, Episode>, created: Episode[], verdict
   }
 }
 
+
+/**
+ * The Slack summary after a scan, in plain Thai with each campaign named.
+ * Pure (no I/O) so the check can pin the wording. `names` maps campaign_id →
+ * hotel + campaign name; `link` is the ADSCAN URL when the site URL is known.
+ */
+export function slackSummary(p: {
+  day: string; created: Episode[]; touched: Episode[];
+  names: Map<string, { hotel: string; campaign: string }>; link: string | null;
+}): string {
+  const MAX = 30; // Slack stays readable; the rest is on the page
+  const dayDiff = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
+  const thDay = new Date(p.day + "T00:00:00Z").toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+  const name = (e: Episode) => {
+    const n = p.names.get(e.campaign_id);
+    return `${n?.hotel ?? e.account_id} — ${n?.campaign ?? e.campaign_id}`;
+  };
+  const sev = (e: Episode) => (e.sev === "critical" ? "เร่งด่วน" : "ควรดู");
+  // Every ADSCAN metric is a cost, so "too high" is the failure.
+  const METRIC_TH: Record<string, string> = {
+    cost_per_message: "ต้นทุนต่อข้อความ", cost_per_like: "ต้นทุนต่อไลก์เพจ", cost_per_engagement: "ต้นทุนต่อ Engagement",
+    cost_per_lead: "ต้นทุนต่อ Lead", cost_per_purchase: "ต้นทุนต่อการซื้อ", cost_per_result: "ต้นทุนต่อผลลัพธ์",
+  };
+  const metric = (e: Episode) => METRIC_TH[e.metric] ?? e.metric;
+  const list = (title: string, eps: Episode[], detail: (e: Episode) => string) => {
+    if (!eps.length) return [];
+    const lines = eps.slice(0, MAX).map((e) => `• ${name(e)} (${detail(e)})`);
+    if (eps.length > MAX) lines.push(`และอีก ${eps.length - MAX} แคมเปญ`);
+    return ["", `*${title} ${eps.length} แคมเปญ*`, ...lines];
+  };
+  const bySeverity = (a: Episode, b: Episode) => (a.sev === b.sev ? a.first_seen.localeCompare(b.first_seen) : a.sev === "critical" ? -1 : 1);
+
+  const isNew = (e: Episode) => e.first_seen === p.day && e.closed_at == null;
+  const fresh = p.created.filter(isNew).sort(bySeverity);
+  const pending = [...p.touched, ...p.created].filter((e) => e.closed_at == null && !isNew(e)).sort(bySeverity);
+  const closed = p.touched.filter((e) => e.closed_at != null);
+  const fixed = closed.filter((e) => e.close_reason === "improved");
+  const stopped = closed.filter((e) => e.close_reason !== "improved");
+
+  const lines = [
+    `*สรุปแคมเปญที่ต้องดูแล ข้อมูลวันที่ ${thDay}*`,
+    ...list("พบปัญหาใหม่", fresh, (e) => `${metric(e)} สูงเกินเกณฑ์, ${sev(e)}`),
+    ...list("ยังไม่ได้แก้", pending, (e) => `${metric(e)} สูงเกินเกณฑ์, ${sev(e)}, ค้างมา ${dayDiff(e.first_seen, p.day) + 1} วัน`),
+    ...list("กลับมาปกติแล้ว", fixed, (e) => `${metric(e)} กลับมาอยู่ในเกณฑ์`),
+    ...list("หยุดติดตาม", stopped, () => "หยุดยิงหรือใช้งบน้อยเกินกว่าจะตัดสิน"),
+  ];
+  if (!fresh.length && !pending.length && !closed.length) lines.push("", "ไม่มีแคมเปญที่ต้องดูแลในวันนี้");
+  lines.push("", p.link ? `ดูรายละเอียดได้ที่ <${p.link}|ADSCAN>` : "ดูรายละเอียดได้ที่หน้า ADSCAN");
+  return lines.join("\n");
+}

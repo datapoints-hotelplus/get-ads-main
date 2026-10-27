@@ -3,7 +3,7 @@
  * Run: node --experimental-strip-types lib/adscan.check.ts
  */
 import assert from "node:assert/strict";
-import { applyDay, evaluate, type Episode, type RawRow, type Template, type Verdict } from "./adscan.ts";
+import { applyDay, evaluate, slackSummary, type Episode, type RawRow, type Template, type Verdict } from "./adscan.ts";
 
 const T: Template[] = [
   { name: "Message Campaign", metric: "cost_per_message", direction: "lower_better", green_min: 54, yellow_min: 66, green_op: "<=", yellow_op: "<=", campaign_filter: "MES" },
@@ -71,5 +71,31 @@ assert.equal(created.length, 2, "relapse opens a new episode");
 applyDay(open, created, [], "2026-10-05");
 assert.equal(created[1].close_reason, "stopped", "campaign gone from the data = stopped, not improved");
 
-console.log("OK — adscan: persistent episodes, severity bands, culprit/best, effect, wait, zero-result, unsupported templates");
+// ── Slack summary: names every campaign, puts each in the right group ──
+{
+  const ep = (cid: string, o: Partial<Episode>): Episode => ({
+    campaign_id: cid, account_id: "1", metric: "cost_per_message", first_seen: "2026-10-26", last_seen: "2026-10-26",
+    times_seen: 1, sev: "critical", value: 80, closed_at: null, close_reason: null, ...o,
+  });
+  const names = new Map([
+    ["c1", { hotel: "Hotel A", campaign: "MES Oct" }],
+    ["c2", { hotel: "Hotel B", campaign: "AWN Reach" }],
+    ["c3", { hotel: "Hotel C", campaign: "MES Sep" }],
+  ]);
+  const text = slackSummary({
+    day: "2026-10-26",
+    created: [ep("c1", {})],
+    touched: [ep("c2", { first_seen: "2026-10-20", sev: "medium" }), ep("c3", { first_seen: "2026-10-20", closed_at: "2026-10-26", close_reason: "improved" })],
+    names, link: "https://x.test/adscan",
+  });
+  assert.match(text, /ข้อมูลวันที่ 26 ต\.ค\. 2569/);
+  assert.match(text, /\*พบปัญหาใหม่ 1 แคมเปญ\*\n• Hotel A — MES Oct \(ต้นทุนต่อข้อความ สูงเกินเกณฑ์, เร่งด่วน\)/);
+  assert.match(text, /\*ยังไม่ได้แก้ 1 แคมเปญ\*\n• Hotel B — AWN Reach \(.*ควรดู, ค้างมา 7 วัน\)/);
+  assert.match(text, /\*กลับมาปกติแล้ว 1 แคมเปญ\*\n• Hotel C — MES Sep/);
+  assert.doesNotMatch(text, /หยุดติดตาม/, "empty groups are left out");
+  assert.doesNotMatch(text, /:[a-z_]+:/, "no emoji codes");
+  assert.match(text, /<https:\/\/x\.test\/adscan\|ADSCAN>$/);
+}
+
+console.log("OK — adscan: persistent episodes, severity bands, culprit/best, effect, wait, zero-result, unsupported templates, slack summary");
 

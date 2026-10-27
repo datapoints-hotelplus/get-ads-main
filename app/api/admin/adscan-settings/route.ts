@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     if (b.action === "test") {
       const s = await getSlackSettings();
       if (!s.url) return NextResponse.json({ error: "ยังไม่ได้บันทึก Webhook URL" }, { status: 400 });
-      await postToSlack(s.url, ":white_check_mark: ทดสอบการแจ้งเตือน ADSCAN AI — ถ้าเห็นข้อความนี้ แปลว่า channel นี้ตั้งค่าถูกต้อง");
+      await postToSlack(s.url, "ทดสอบการแจ้งเตือนจาก ADSCAN ถ้าเห็นข้อความนี้ แปลว่าเชื่อมต่อกับ channel นี้เรียบร้อยแล้ว");
       return NextResponse.json({ ok: true });
     }
     let url: string | undefined;

@@ -9,7 +9,7 @@
  * it (n8n after sync, or an admin). The first run backfills BACKFILL_DAYS.
  */
 import { getSupabase } from "@/lib/supabase";
-import { TREND_DAYS, applyDay, evaluate, type Episode, type RawRow, type Template } from "@/lib/adscan";
+import { TREND_DAYS, applyDay, evaluate, slackSummary, type Episode, type RawRow, type Template } from "@/lib/adscan";
 import { notifySlack } from "@/lib/adscanSlack";
 
 export const BACKFILL_DAYS = 90;
@@ -84,14 +84,8 @@ export async function scanPending(): Promise<number> {
 
   // Slack (if an admin turned it on): once per newly scanned data date — the
   // claim above means only one scanner gets here, whether n8n or a page open.
-  const all = [...touched, ...created];
+  const names = new Map(rows.map((r) => [r.campaign_id, { hotel: r.account_name, campaign: r.campaign_name }])); // newest row wins
   const site = process.env.NEXT_PUBLIC_APP_URL ?? (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null);
-  await notifySlack(
-    [
-      `:mag: *ADSCAN ตรวจข้อมูลวันที่ ${latest} เสร็จแล้ว*`,
-      `Alert ใหม่ ${created.filter((e) => e.first_seen === latest && e.closed_at == null).length} · ยังเปิดอยู่ทั้งหมด ${all.filter((e) => e.closed_at == null).length} · ดีขึ้นจนปิดไป ${[...touched].filter((e) => e.closed_at != null).length}`,
-      site ? `<${site}/adscan|เปิดหน้า ADSCAN> (คำแนะนำ AI จะวิเคราะห์ตอนเปิดดูแต่ละเรื่อง)` : "เปิดหน้า ADSCAN เพื่อดูรายละเอียด (คำแนะนำ AI จะวิเคราะห์ตอนเปิดดูแต่ละเรื่อง)",
-    ].join("\n"),
-  );
+  await notifySlack(slackSummary({ day: latest, created, touched: [...touched], names, link: site ? `${site}/adscan` : null }));
   return todo.length;
 }
