@@ -24,6 +24,15 @@ export default function AdscanSkillAdmin() {
   const [openV, setOpenV] = useState<number | null>(null);
   const [models, setModels] = useState<{ id: string; name: string; context: number | null; inPerM: number | null; outPerM: number | null }[]>([]);
   const [firstRun, setFirstRun] = useState<{ generated: number; skipped: number; failed: { id: string; error: string }[] } | null>(null);
+  const [slack, setSlack] = useState<{ enabled: boolean; hasUrl: boolean; urlMasked: string | null } | null>(null);
+  const [slackUrl, setSlackUrl] = useState("");
+  const [slackMsg, setSlackMsg] = useState("");
+  async function slackCall(body: object) {
+    const r = await fetch("/api/admin/adscan-settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || "ไม่สำเร็จ");
+    return j;
+  }
 
   const load = useCallback(
     () =>
@@ -45,6 +54,10 @@ export default function AdscanSkillAdmin() {
 
   useEffect(() => {
     load();
+    fetch("/api/admin/adscan-settings")
+      .then((r) => r.json())
+      .then((d) => setSlack(d))
+      .catch(() => {});
     fetch("/api/admin/adscan-models")
       .then((r) => r.json())
       .then((d) => setModels(d.models ?? []))
@@ -207,6 +220,57 @@ export default function AdscanSkillAdmin() {
               )}
             </div>
           )}
+        </div>
+
+        <div className={`${card} p-5 space-y-3`}>
+          <h2 className="font-semibold">แจ้งเตือน Slack</h2>
+          <p className="text-sm text-gray-500">
+            เมื่อรอบวิเคราะห์ AI (<code>/api/adscan/ai-run</code> ที่ n8n เรียก หรือปุ่มด้านบน) สร้างคำแนะนำใหม่หรือมีรายการล้มเหลว ระบบจะส่งสรุปเข้า channel ที่ผูกกับ Webhook นี้
+            (ถ้าเรียกซ้ำแล้วข้ามทั้งหมดจะไม่ส่ง) · สร้างที่ Slack: <em>api.slack.com/apps → Incoming Webhooks → Add New Webhook to Workspace → เลือก channel</em> แล้วคัดลอก URL มาวางที่นี่
+          </p>
+          {slackMsg && <div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2 text-sm">{slackMsg}</div>}
+          <div className="flex flex-wrap gap-2 items-center">
+            <input
+              type="password"
+              autoComplete="off"
+              value={slackUrl}
+              onChange={(e) => setSlackUrl(e.target.value)}
+              placeholder={slack?.hasUrl ? `บันทึกไว้แล้ว: ${slack.urlMasked} (วาง URL ใหม่เพื่อเปลี่ยน)` : "https://hooks.slack.com/services/…"}
+              className="flex-1 min-w-[260px] border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono"
+            />
+            <button
+              disabled={!!busy || !slackUrl.trim()}
+              onClick={() => run("slacksave", async () => {
+                setSlackMsg("");
+                setSlack(await slackCall({ url: slackUrl.trim() }));
+                setSlackUrl("");
+                setSlackMsg("บันทึก Webhook URL แล้ว");
+              })}
+              className="px-4 min-h-11 rounded-lg bg-secondary text-white font-semibold disabled:opacity-40"
+            >
+              {busy === "slacksave" ? "กำลังบันทึก…" : "บันทึก URL"}
+            </button>
+            <button
+              disabled={!!busy || !slack?.hasUrl}
+              onClick={() => run("slacktest", async () => {
+                setSlackMsg("");
+                await slackCall({ action: "test" });
+                setSlackMsg("ส่งข้อความทดสอบแล้ว — ตรวจใน channel ว่าเห็นข้อความ");
+              })}
+              className="px-4 min-h-11 rounded-lg border border-secondary text-secondary font-semibold disabled:opacity-40"
+            >
+              {busy === "slacktest" ? "กำลังส่ง…" : "ส่งข้อความทดสอบ"}
+            </button>
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={!!slack?.enabled}
+              disabled={!!busy || !slack?.hasUrl}
+              onChange={(e) => run("slacktoggle", async () => setSlack(await slackCall({ enabled: e.target.checked })))}
+            />
+            เปิดการแจ้งเตือน Slack {!slack?.hasUrl && <span className="text-xs text-gray-400">(บันทึก URL ก่อน)</span>}
+          </label>
         </div>
 
         <div className={`${card} p-5 space-y-2`}>
