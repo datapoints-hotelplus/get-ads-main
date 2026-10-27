@@ -44,7 +44,7 @@ function TreeRow({ a, r, level, indent, toggle }: { a: AdscanAlert; r: Node; lev
   );
 }
 
-/** AI Skill recommendation (TOR M3), stored by the 09:00 job; this only reads it. */
+/** AI Skill recommendation (TOR M3): generated the first time anyone opens this alert for the current data date, then reused. */
 function AiBox({ id }: { id: string }) {
   const [r, setR] = useState<{ text: string; version: number; model: string; at: string } | null>(null);
   const [err, setErr] = useState("");
@@ -69,7 +69,7 @@ function AiBox({ id }: { id: string }) {
         <h2 className="font-semibold">คำแนะนำจาก AI</h2>
         {r && <span className="text-[11px] text-gray-500 font-mono">Skill v{r.version} · {r.model}</span>}
       </div>
-      {busy ? <div className="text-sm text-gray-500">กำลังโหลดคำแนะนำ…</div>
+      {busy ? <div className="text-sm text-gray-500">AI กำลังวิเคราะห์… (ครั้งแรกของวันอาจใช้เวลาสักครู่)</div>
         : err ? <div className="text-sm text-red-700">{err}</div>
         : r && <div className="text-sm whitespace-pre-wrap leading-relaxed">{r.text}</div>}
       <div className="text-[11px] text-gray-400">AI อาจผิดพลาดได้ — ตรวจตัวเลขในตารางก่อนแก้</div>

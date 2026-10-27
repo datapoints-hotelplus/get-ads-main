@@ -10,6 +10,7 @@
  */
 import { getSupabase } from "@/lib/supabase";
 import { TREND_DAYS, applyDay, evaluate, type Episode, type RawRow, type Template } from "@/lib/adscan";
+import { notifySlack } from "@/lib/adscanSlack";
 
 export const BACKFILL_DAYS = 90;
 export const EXCLUDED_ACCOUNTS = new Set(["act_1378870469122933"]); // H+ Marcom — internal, not a client hotel
@@ -80,5 +81,17 @@ export async function scanPending(): Promise<number> {
     const { error } = await sb.from("adscan_alerts").update(strip(ep)).eq("id", ep.id);
     if (error) throw new Error(error.message);
   }
+
+  // Slack (if an admin turned it on): once per newly scanned data date — the
+  // claim above means only one scanner gets here, whether n8n or a page open.
+  const all = [...touched, ...created];
+  const site = process.env.NEXT_PUBLIC_APP_URL ?? (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null);
+  await notifySlack(
+    [
+      `:mag: *ADSCAN ตรวจข้อมูลวันที่ ${latest} เสร็จแล้ว*`,
+      `Alert ใหม่ ${created.filter((e) => e.first_seen === latest && e.closed_at == null).length} · ยังเปิดอยู่ทั้งหมด ${all.filter((e) => e.closed_at == null).length} · ดีขึ้นจนปิดไป ${[...touched].filter((e) => e.closed_at != null).length}`,
+      site ? `<${site}/adscan|เปิดหน้า ADSCAN> (คำแนะนำ AI จะวิเคราะห์ตอนเปิดดูแต่ละเรื่อง)` : "เปิดหน้า ADSCAN เพื่อดูรายละเอียด (คำแนะนำ AI จะวิเคราะห์ตอนเปิดดูแต่ละเรื่อง)",
+    ].join("\n"),
+  );
   return todo.length;
 }

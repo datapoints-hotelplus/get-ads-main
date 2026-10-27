@@ -56,25 +56,37 @@ export async function generate(model: string, prompt: string, input: unknown): P
   return text;
 }
 
-/** Newest stored recommendation for a campaign — what users read. Never calls the AI. */
-export async function stored(campaignId: string) {
-  const sb = getSupabase();
-  const { data: hit } = await sb.from("adscan_ai_cache").select("text,created_at,skill_version")
-    .eq("campaign_id", campaignId).order("created_at", { ascending: false }).limit(1).maybeSingle();
-  if (!hit) return null;
-  const { data: sk } = await sb.from("adscan_skills").select("model").eq("version", hit.skill_version).maybeSingle();
-  return { text: hit.text as string, version: hit.skill_version as number, model: (sk?.model as string) ?? "—", at: hit.created_at as string };
-}
+export type Recommendation = { text: string; version: number; model: string; at: string };
 
-/** Daily job: one AI call per campaign × data date × skill version; already-stored ones are skipped. */
-export async function generateFor(v: Verdict, dataDate: string) {
+// Two people opening the same alert at once share one AI call (per server process).
+const inflight = new Map<string, Promise<Recommendation>>();
+
+/**
+ * On demand, when someone opens an alert: one AI call per campaign × data date ×
+ * skill version, stored in adscan_ai_cache; every later view of the same key —
+ * by anyone — reads the stored text and never calls the AI again.
+ */
+export async function recommendationFor(v: Verdict, dataDate: string): Promise<Recommendation> {
   const skill = await activeSkill();
   if (!skill) throw new Error("ยังไม่มี AI Skill — เพิ่มที่ ตั้งค่า › AI Skill (ADSCAN)");
   const sb = getSupabase();
-  const { data: hit } = await sb.from("adscan_ai_cache").select("campaign_id")
+  const { data: hit } = await sb.from("adscan_ai_cache").select("text,created_at")
     .eq("campaign_id", v.id).eq("data_date", dataDate).eq("skill_version", skill.version).maybeSingle();
-  if (hit) return false;
-  const text = await generate(skill.model, skill.prompt, alertInput(v));
-  await sb.from("adscan_ai_cache").upsert({ campaign_id: v.id, data_date: dataDate, skill_version: skill.version, text, created_at: new Date().toISOString() });
-  return true;
+  if (hit) return { text: hit.text as string, version: skill.version, model: skill.model, at: hit.created_at as string };
+
+  const key = `${v.id}|${dataDate}|${skill.version}`;
+  const running = inflight.get(key);
+  if (running) return running;
+  const job = (async () => {
+    const text = await generate(skill.model, skill.prompt, alertInput(v));
+    const at = new Date().toISOString();
+    await sb.from("adscan_ai_cache").upsert({ campaign_id: v.id, data_date: dataDate, skill_version: skill.version, text, created_at: at });
+    return { text, version: skill.version, model: skill.model, at };
+  })();
+  inflight.set(key, job);
+  try {
+    return await job;
+  } finally {
+    inflight.delete(key);
+  }
 }

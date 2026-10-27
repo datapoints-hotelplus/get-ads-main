@@ -1,9 +1,9 @@
 /**
  * lib/adscanSlack.ts
- * Slack notification for the daily ADSCAN AI run. The channel is whatever the
+ * Slack notification when ADSCAN finishes scanning a new data date. The channel is whatever the
  * Incoming Webhook URL (set by an admin at /admin/adscan-skill) is bound to.
  * Settings live in adscan_settings (migration 043); until that exists or a URL
- * is saved, notify() is a no-op and never breaks the AI run.
+ * is saved, notifySlack() is a no-op and never breaks the scan.
  */
 import { getSupabase } from "@/lib/supabase";
 
@@ -38,7 +38,7 @@ export async function postToSlack(url: string, text: string) {
   if (!res.ok) throw new Error(`Slack ${res.status}: ${(await res.text().catch(() => "")).slice(0, 120)}`);
 }
 
-/** Used by ai-run: sends only when enabled and a URL is saved; reports what happened instead of throwing. */
+/** Used after each scan: sends only when enabled and a URL is saved; reports what happened instead of throwing. */
 export async function notifySlack(text: string): Promise<"sent" | "off" | `error: ${string}`> {
   try {
     const s = await getSlackSettings();

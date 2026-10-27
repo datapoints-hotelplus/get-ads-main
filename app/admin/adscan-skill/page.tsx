@@ -23,7 +23,6 @@ export default function AdscanSkillAdmin() {
   const [msg, setMsg] = useState("");
   const [openV, setOpenV] = useState<number | null>(null);
   const [models, setModels] = useState<{ id: string; name: string; context: number | null; inPerM: number | null; outPerM: number | null }[]>([]);
-  const [firstRun, setFirstRun] = useState<{ generated: number; skipped: number; failed: { id: string; error: string }[] } | null>(null);
   const [slack, setSlack] = useState<{ enabled: boolean; hasUrl: boolean; urlMasked: string | null } | null>(null);
   const [slackUrl, setSlackUrl] = useState("");
   const [slackMsg, setSlackMsg] = useState("");
@@ -188,45 +187,10 @@ export default function AdscanSkillAdmin() {
         </div>
 
         <div className={`${card} p-5 space-y-3`}>
-          <h2 className="font-semibold">เรียก AI ครั้งแรก</h2>
-          <p className="text-sm text-gray-500">
-            ให้ AI วิเคราะห์ทุก alert ที่เป็น &quot;issue&quot; ตอนนี้เลย โดยไม่ต้องรอรอบ 09:00 ของ n8n (เรียก <code>/api/adscan/ai-run</code>) ผลจะถูกเก็บไว้ให้ผู้ใช้เปิดอ่านได้ทันที
-            ตัวที่เคยวิเคราะห์ไปแล้วของวันข้อมูลเดียวกันและเวอร์ชัน skill เดียวกันจะถูกข้ามและไม่เสียโควตา · ใช้เวลานานได้เป็นนาทีตามจำนวน alert
-          </p>
-          <button
-            disabled={!!busy || !hasKey || !active}
-            onClick={() => {
-              if (!window.confirm("เรียก AI วิเคราะห์ทุก alert ที่ยังไม่มีคำแนะนำตอนนี้เลยใช่ไหม? (ใช้เครดิต OpenRouter ต่อ 1 alert)")) return;
-              run("firstrun", async () => {
-                setFirstRun(null);
-                const r = await fetch("/api/adscan/ai-run", { method: "POST" });
-                const j = await r.json().catch(() => ({}));
-                if (!r.ok) throw new Error(j.error || "เรียก AI ไม่สำเร็จ");
-                setFirstRun({ generated: j.generated ?? 0, skipped: j.skipped ?? 0, failed: j.failed ?? [] });
-              });
-            }}
-            className="px-4 min-h-11 rounded-lg bg-secondary text-white font-semibold disabled:opacity-40"
-          >
-            {busy === "firstrun" ? "AI กำลังวิเคราะห์… (อย่าปิดหน้านี้)" : "เรียก AI ครั้งแรก"}
-          </button>
-          {!active && <div className="text-xs text-amber-700">ยังไม่มี skill ที่ใช้อยู่ — บันทึกเวอร์ชันก่อน</div>}
-          {firstRun && (
-            <div className={`rounded-lg px-3 py-2 text-sm border ${firstRun.failed.length ? "bg-amber-50 border-amber-200 text-amber-800" : "bg-green-50 border-green-200 text-green-800"}`}>
-              สร้างใหม่ {firstRun.generated} · ข้าม (มีอยู่แล้ว) {firstRun.skipped}
-              {firstRun.failed.length > 0 && (
-                <ul className="mt-1 list-disc pl-5">
-                  {firstRun.failed.map((x) => <li key={x.id}><span className="font-mono text-xs">{x.id}</span>: {x.error}</li>)}
-                </ul>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className={`${card} p-5 space-y-3`}>
           <h2 className="font-semibold">แจ้งเตือน Slack</h2>
           <p className="text-sm text-gray-500">
-            เมื่อรอบวิเคราะห์ AI (<code>/api/adscan/ai-run</code> ที่ n8n เรียก หรือปุ่มด้านบน) สร้างคำแนะนำใหม่หรือมีรายการล้มเหลว ระบบจะส่งสรุปเข้า channel ที่ผูกกับ Webhook นี้
-            (ถ้าเรียกซ้ำแล้วข้ามทั้งหมดจะไม่ส่ง) · สร้างที่ Slack: <em>api.slack.com/apps → Incoming Webhooks → Add New Webhook to Workspace → เลือก channel</em> แล้วคัดลอก URL มาวางที่นี่
+            เมื่อ sync ข้อมูลวันใหม่เข้ามาและระบบตรวจ alert เสร็จ (<code>/api/adscan/scan</code> ที่ n8n เรียก หรือมีคนเปิดหน้า ADSCAN) ระบบจะส่งสรุปจำนวน alert เข้า channel ที่ผูกกับ Webhook นี้
+            ส่งครั้งเดียวต่อวันข้อมูล · คำแนะนำ AI ไม่ได้รันรายวันแล้ว จะวิเคราะห์ตอนมีคนเปิดดู alert นั้น · สร้างที่ Slack: <em>api.slack.com/apps → Incoming Webhooks → Add New Webhook to Workspace → เลือก channel</em> แล้วคัดลอก URL มาวางที่นี่
           </p>
           {slackMsg && <div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2 text-sm">{slackMsg}</div>}
           <div className="flex flex-wrap gap-2 items-center">
