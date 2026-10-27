@@ -18,7 +18,7 @@ export async function POST(req: Request) {
     if (!data.latestDate) return NextResponse.json({ ok: true, generated: 0, skipped: 0, failed: [] });
     let generated = 0, skipped = 0;
     const failed: { id: string; error: string }[] = [];
-    // ponytail: sequential — gentle on the Gemini rate limit; parallelise if it outgrows maxDuration.
+    // ponytail: sequential — gentle on the AI provider's rate limit; parallelise if it outgrows maxDuration.
     for (const a of data.alerts.filter((x) => x.kind === "issue")) {
       try {
         if (await generateFor(a, data.latestDate)) generated++;

@@ -2,7 +2,7 @@
  * lib/adscanAi.ts
  * ADSCAN AI Skill — the recommendation on the Detail View (TOR ส่วนที่ 2).
  * The prompt + model live in adscan_skills (versioned masterdata, edited at
- * /admin/adscan-skill); the API key stays in the environment: GEMINI_API_KEY.
+ * /admin/adscan-skill); the API key stays in the environment: OPENROUTER_API_KEY (OpenRouter).
  */
 import { getSupabase } from "@/lib/supabase";
 import { WINDOW, type Node, type Verdict } from "@/lib/adscan";
@@ -32,21 +32,27 @@ export function alertInput(v: Verdict) {
 }
 
 export async function generate(model: string, prompt: string, input: unknown): Promise<string> {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) throw new Error("ยังไม่ได้ตั้ง GEMINI_API_KEY ใน .env");
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+  const key = process.env.OPENROUTER_API_KEY;
+  if (!key) throw new Error("ยังไม่ได้ตั้ง OPENROUTER_API_KEY ใน .env");
+  // OpenRouter model ids are "provider/model". Skills saved before the switch
+  // hold a bare Gemini id ("gemini-2.5-flash") — treat that as Google's.
+  const id = model.includes("/") ? model : `google/${model}`;
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
     body: JSON.stringify({
-      systemInstruction: { parts: [{ text: prompt }] },
-      contents: [{ role: "user", parts: [{ text: JSON.stringify(input) }] }],
-      generationConfig: { temperature: 0.3 },
+      model: id,
+      temperature: 0.3,
+      messages: [
+        { role: "system", content: prompt },
+        { role: "user", content: JSON.stringify(input) },
+      ],
     }),
   });
   const j = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(`Gemini ${res.status}: ${j?.error?.message ?? res.statusText}`);
-  const text = (j?.candidates?.[0]?.content?.parts ?? []).map((p: { text?: string }) => p.text ?? "").join("").trim();
-  if (!text) throw new Error("Gemini ไม่ได้ส่งคำตอบกลับมา");
+  if (!res.ok) throw new Error(`OpenRouter ${res.status}: ${j?.error?.message ?? res.statusText}`);
+  const text = String(j?.choices?.[0]?.message?.content ?? "").trim();
+  if (!text) throw new Error("AI ไม่ได้ส่งคำตอบกลับมา");
   return text;
 }
 

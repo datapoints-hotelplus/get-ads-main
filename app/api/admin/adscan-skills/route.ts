@@ -13,7 +13,7 @@ export async function GET() {
   const ids = [...new Set((data ?? []).map((s) => s.created_by).filter(Boolean))];
   const { data: users } = ids.length ? await sb.from("ads_users").select("id,username,display_name").in("id", ids) : { data: [] };
   const name = new Map((users ?? []).map((u) => [u.id, u.display_name || u.username]));
-  return NextResponse.json({ skills: (data ?? []).map((s) => ({ ...s, by: s.created_by ? name.get(s.created_by) ?? "—" : "ระบบ" })), hasKey: !!process.env.GEMINI_API_KEY });
+  return NextResponse.json({ skills: (data ?? []).map((s) => ({ ...s, by: s.created_by ? name.get(s.created_by) ?? "—" : "ระบบ" })), hasKey: !!process.env.OPENROUTER_API_KEY });
 }
 
 /**

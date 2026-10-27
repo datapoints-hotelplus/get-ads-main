@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import ReactSelect from "react-select";
 import AppHeader from "@/app/components/AppHeader";
 import type { AdscanPayload } from "@/lib/adscanData";
 
@@ -21,6 +22,7 @@ export default function AdscanSkillAdmin() {
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState("");
   const [openV, setOpenV] = useState<number | null>(null);
+  const [models, setModels] = useState<{ id: string; name: string; context: number | null; inPerM: number | null; outPerM: number | null }[]>([]);
   const [firstRun, setFirstRun] = useState<{ generated: number; skipped: number; failed: { id: string; error: string }[] } | null>(null);
 
   const load = useCallback(
@@ -43,6 +45,10 @@ export default function AdscanSkillAdmin() {
 
   useEffect(() => {
     load();
+    fetch("/api/admin/adscan-models")
+      .then((r) => r.json())
+      .then((d) => setModels(d.models ?? []))
+      .catch(() => {});
     fetch("/api/adscan")
       .then((r) => r.json())
       .then((d: AdscanPayload) => {
@@ -71,6 +77,18 @@ export default function AdscanSkillAdmin() {
     setBusy("");
   }
 
+  type ModelOption = { value: string; label: string; price: string; provider: string };
+  const modelOptions: ModelOption[] = models.map((m) => ({
+    value: m.id,
+    label: m.name,
+    price: m.inPerM !== null && m.outPerM !== null ? `$${m.inPerM} / $${m.outPerM} ต่อ 1M` : "",
+    provider: m.id.split("/")[0],
+  }));
+  const PROVIDER_LABEL: Record<string, string> = { openai: "OpenAI (GPT)", anthropic: "Anthropic (Claude)", "meta-llama": "Meta (Llama)", qwen: "Qwen" };
+  const modelGroups = Object.entries(PROVIDER_LABEL)
+    .map(([p, label]) => ({ label, options: modelOptions.filter((o) => o.provider === p) }))
+    .filter((g) => g.options.length);
+
   const active = skills?.find((s) => s.is_active);
   const changed = !!active && (active.model !== model || active.prompt !== prompt);
 
@@ -81,10 +99,10 @@ export default function AdscanSkillAdmin() {
         <div>
           <h1 className="text-2xl font-bold">AI Skill — คำแนะนำในหน้ารายละเอียด Alert</h1>
           <div className="text-sm text-gray-500">
-            แก้ prompt และ model ได้ที่นี่ บันทึกแต่ละครั้งเป็นเวอร์ชันใหม่ เวอร์ชันเก่าเก็บไว้ทั้งหมด · API key อยู่ใน <code>.env</code> (GEMINI_API_KEY)
+            แก้ prompt และ model ได้ที่นี่ บันทึกแต่ละครั้งเป็นเวอร์ชันใหม่ เวอร์ชันเก่าเก็บไว้ทั้งหมด · API key อยู่ใน <code>.env</code> (OPENROUTER_API_KEY)
           </div>
         </div>
-        {!hasKey && <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">ยังไม่ได้ตั้ง <code>GEMINI_API_KEY</code> ใน .env — ทดสอบและแสดงคำแนะนำไม่ได้จนกว่าจะตั้ง</div>}
+        {!hasKey && <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">ยังไม่ได้ตั้ง <code>OPENROUTER_API_KEY</code> ใน .env — ทดสอบและแสดงคำแนะนำไม่ได้จนกว่าจะตั้ง</div>}
         {msg && <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">{msg}</div>}
 
         <div className="flex flex-wrap gap-4 items-start">
@@ -93,10 +111,31 @@ export default function AdscanSkillAdmin() {
               <h2 className="font-semibold">แก้ไข {active ? `(ใช้อยู่: v${active.version})` : ""}</h2>
               {changed && <span className="text-xs text-amber-700 font-semibold">มีการแก้ที่ยังไม่บันทึก</span>}
             </div>
-            <label className="block text-sm">
-              <span className="text-gray-600">Model</span>
-              <input value={model} onChange={(e) => setModel(e.target.value)} placeholder="gemini-2.5-flash" className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 font-mono text-sm" />
-            </label>
+            <div className="block text-sm">
+              <span className="text-gray-600">
+                Model (OpenRouter){" "}
+                <span className="text-xs text-gray-400">{models.length ? `· ${models.length} โมเดล (GPT · Claude · Llama · Qwen) พิมพ์เพื่อค้นหาได้` : "· กำลังโหลดรายการโมเดล…"}</span>
+              </span>
+              <div className="mt-1">
+                <ReactSelect
+                  instanceId="adscan-model"
+                  isLoading={!models.length}
+                  options={modelGroups}
+                  value={modelOptions.find((o) => o.value === model) ?? (model ? { value: model, label: model, price: "", provider: "" } : null)}
+                  onChange={(o) => o && setModel(o.value)}
+                  formatOptionLabel={(o) => (
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="truncate">{o.label} <span className="font-mono text-xs text-gray-400">{o.value}</span></span>
+                      {o.price && <span className="shrink-0 text-xs text-gray-500">{o.price}</span>}
+                    </div>
+                  )}
+                  placeholder="เลือกโมเดล…"
+                  noOptionsMessage={() => "ไม่พบโมเดล"}
+                  classNamePrefix="rs"
+                  className="text-sm"
+                />
+              </div>
+            </div>
             <label className="block text-sm">
               <span className="text-gray-600">Prompt (คำสั่งระบบ — ข้อมูล alert จะส่งตามไปเป็น JSON)</span>
               <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={16} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono" />
@@ -144,7 +183,7 @@ export default function AdscanSkillAdmin() {
           <button
             disabled={!!busy || !hasKey || !active}
             onClick={() => {
-              if (!window.confirm("เรียก AI วิเคราะห์ทุก alert ที่ยังไม่มีคำแนะนำตอนนี้เลยใช่ไหม? (ใช้โควตา Gemini ต่อ 1 alert)")) return;
+              if (!window.confirm("เรียก AI วิเคราะห์ทุก alert ที่ยังไม่มีคำแนะนำตอนนี้เลยใช่ไหม? (ใช้เครดิต OpenRouter ต่อ 1 alert)")) return;
               run("firstrun", async () => {
                 setFirstRun(null);
                 const r = await fetch("/api/adscan/ai-run", { method: "POST" });
