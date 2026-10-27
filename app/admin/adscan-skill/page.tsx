@@ -225,6 +225,18 @@ export default function AdscanSkillAdmin() {
             >
               {busy === "slacktest" ? "กำลังส่ง…" : "ส่งข้อความทดสอบ"}
             </button>
+            <button
+              disabled={!!busy || !slack?.hasUrl || !slack?.enabled}
+              onClick={() => run("slacksummary", async () => {
+                setSlackMsg("");
+                const j = await slackCall({ action: "summary" });
+                setSlackMsg(`ส่งสรุปของข้อมูลวันที่ ${j.day} เข้า Slack แล้ว — ตรวจใน channel`);
+              })}
+              className="px-4 min-h-11 rounded-lg border border-secondary text-secondary font-semibold disabled:opacity-40"
+              title={!slack?.enabled ? "ติ๊กเปิดการแจ้งเตือนก่อน" : undefined}
+            >
+              {busy === "slacksummary" ? "กำลังส่ง…" : "ส่งสรุปล่าสุดเข้า Slack"}
+            </button>
           </div>
           <label className="flex items-center gap-2 text-sm">
             <input

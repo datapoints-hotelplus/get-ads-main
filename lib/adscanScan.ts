@@ -89,3 +89,40 @@ export async function scanPending(): Promise<number> {
   await notifySlack(slackSummary({ day: latest, created, touched: [...touched], names, link: site ? `${site}/adscan` : null }));
   return todo.length;
 }
+
+/**
+ * Re-send the summary for the newest scanned data date — the same message a
+ * scan sends — without scanning again. For the admin "test" button.
+ */
+export async function sendLatestSummary(): Promise<string> {
+  const sb = getSupabase();
+  const { data: last } = await sb.from("adscan_scans").select("data_date").order("data_date", { ascending: false }).limit(1).maybeSingle();
+  const day = last?.data_date as string | undefined;
+  if (!day) throw new Error("ยังไม่เคยสแกน — ยังไม่มีสรุปให้ส่ง");
+  const [{ data: open, error: oErr }, { data: closed, error: cErr }] = await Promise.all([
+    sb.from("adscan_alerts").select("*").is("closed_at", null),
+    sb.from("adscan_alerts").select("*").eq("closed_at", day),
+  ]);
+  if (oErr || cErr) throw new Error((oErr ?? cErr)!.message);
+  const eps = [...(open ?? []), ...(closed ?? [])] as Episode[];
+
+  const names = new Map<string, { hotel: string; campaign: string }>();
+  const ids = [...new Set(eps.map((e) => e.campaign_id))];
+  for (let off = 0; ids.length; off += 1000) {
+    const { data, error } = await sb.from("ads_rawdata").select("campaign_id,campaign_name,account_name")
+      .in("campaign_id", ids).gte("date_start", addDays(day, -(TREND_DAYS - 1))).order("date_start").range(off, off + 999);
+    if (error) throw new Error(error.message);
+    for (const r of data ?? []) names.set(r.campaign_id as string, { hotel: r.account_name as string, campaign: r.campaign_name as string }); // newest wins
+    if ((data ?? []).length < 1000) break;
+  }
+
+  const site = process.env.NEXT_PUBLIC_APP_URL ?? (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null);
+  const text = slackSummary({
+    day, created: eps.filter((e) => e.first_seen === day), touched: eps.filter((e) => e.first_seen !== day),
+    names, link: site ? `${site}/adscan` : null,
+  });
+  const result = await notifySlack(text);
+  if (result === "off") throw new Error("ยังไม่ได้เปิดการแจ้งเตือน Slack หรือยังไม่ได้บันทึก Webhook URL");
+  if (result !== "sent") throw new Error(result.replace(/^error: /, ""));
+  return day;
+}

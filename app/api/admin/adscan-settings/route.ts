@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { WEBHOOK_PREFIX, getSlackSettings, postToSlack, saveSlackSettings } from "@/lib/adscanSlack";
+import { sendLatestSummary } from "@/lib/adscanScan";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,7 @@ export async function GET() {
  * POST /api/admin/adscan-settings
  *   { url?: string, enabled?: boolean }  → save
  *   { action: "test" }                   → post a test message with the saved URL
+ *   { action: "summary" }                → re-send the latest scan's summary (no rescan)
  */
 export async function POST(req: NextRequest) {
   const b = (await req.json().catch(() => ({}))) as { action?: string; url?: string; enabled?: boolean };
@@ -24,6 +26,9 @@ export async function POST(req: NextRequest) {
       if (!s.url) return NextResponse.json({ error: "ยังไม่ได้บันทึก Webhook URL" }, { status: 400 });
       await postToSlack(s.url, "ทดสอบการแจ้งเตือนจาก ADSCAN ถ้าเห็นข้อความนี้ แปลว่าเชื่อมต่อกับ channel นี้เรียบร้อยแล้ว");
       return NextResponse.json({ ok: true });
+    }
+    if (b.action === "summary") {
+      return NextResponse.json({ ok: true, day: await sendLatestSummary() });
     }
     let url: string | undefined;
     if (b.url !== undefined) {
