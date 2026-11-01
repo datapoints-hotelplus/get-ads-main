@@ -7,7 +7,7 @@
  * alone, instead of silently becoming a different day.
  */
 import assert from "node:assert/strict";
-import { isoToDisplay, displayToIso } from "./dateFormat.ts";
+import { isoToDisplay, displayToIso, dateTimeToDisplay } from "./dateFormat.ts";
 
 // ── ISO → display ──
 assert.equal(isoToDisplay("2026-09-08"), "08/09/2026");
@@ -31,4 +31,10 @@ for (const iso of ["2026-01-01", "2026-02-28", "2024-02-29", "2026-06-15", "2026
   assert.equal(displayToIso(isoToDisplay(iso)), iso, `round trip failed for ${iso}`);
 }
 
-console.log("OK — dateFormat: display, parse, rejections, and round trip all pass");
+
+// ── timestamp → Bangkok dd/mm/yyyy hh:mm ──
+assert.equal(dateTimeToDisplay("2026-10-30T17:05:00Z"), "31/10/2026 00:05", "UTC+7, crosses midnight");
+assert.equal(dateTimeToDisplay("2026-10-31T14:05:09+07:00"), "31/10/2026 14:05");
+assert.equal(dateTimeToDisplay("nope"), "—");
+
+console.log("OK — dateFormat: display, parse, rejections, round trip, and timestamps all pass");

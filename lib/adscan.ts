@@ -279,13 +279,16 @@ export function applyDay(open: Map<string, Episode>, created: Episode[], verdict
 /**
  * The Slack summary after a scan, in plain Thai with each campaign named.
  * Pure (no I/O) so the check can pin the wording. `names` maps campaign_id →
- * hotel + campaign name; `link` is the ADSCAN URL when the site URL is known.
+ * hotel + campaign name; `owners` maps a bare account id → the Specialists who
+ * look after it, and each section groups by them; `link` is the ADSCAN URL when
+ * the site URL is known.
  */
 export function slackSummary(p: {
   day: string; created: Episode[]; touched: Episode[];
-  names: Map<string, { hotel: string; campaign: string }>; link: string | null;
+  names: Map<string, { hotel: string; campaign: string }>; owners: Map<string, string[]>; link: string | null;
 }): string {
-  const MAX = 30; // Slack stays readable; the rest is on the page
+  const MAX = 30; // per person — Slack stays readable; the rest is on the page
+  const NO_OWNER = "ยังไม่มีผู้ดูแล"; // keeps an alert visible when nobody holds its account
   const dayDiff = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
   const thDay = new Date(p.day + "T00:00:00Z").toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
   const name = (e: Episode) => {
@@ -301,9 +304,18 @@ export function slackSummary(p: {
   const metric = (e: Episode) => METRIC_TH[e.metric] ?? e.metric;
   const list = (title: string, eps: Episode[], detail: (e: Episode) => string) => {
     if (!eps.length) return [];
-    const lines = eps.slice(0, MAX).map((e) => `• ${name(e)} (${detail(e)})`);
-    if (eps.length > MAX) lines.push(`และอีก ${eps.length - MAX} แคมเปญ`);
-    return ["", `*${title} ${eps.length} แคมเปญ*`, ...lines];
+    // Shared accounts list under each owner; the header still counts campaigns once.
+    const groups = new Map<string, Episode[]>();
+    for (const e of eps) {
+      for (const who of p.owners.get(e.account_id.replace(/^act_/, "")) ?? [NO_OWNER]) groups.set(who, [...(groups.get(who) ?? []), e]);
+    }
+    const order = [...groups.keys()].sort((a, b) => (a === NO_OWNER ? 1 : b === NO_OWNER ? -1 : a.localeCompare(b)));
+    return ["", `*${title} ${eps.length} แคมเปญ*`, ...order.flatMap((who) => {
+      const mine = groups.get(who)!;
+      const lines = mine.slice(0, MAX).map((e) => `• ${name(e)} (${detail(e)})`);
+      if (mine.length > MAX) lines.push(`และอีก ${mine.length - MAX} แคมเปญ`);
+      return ["", `*Account: ${who}*`, ...lines];
+    })];
   };
   const bySeverity = (a: Episode, b: Episode) => (a.sev === b.sev ? a.first_seen.localeCompare(b.first_seen) : a.sev === "critical" ? -1 : 1);
 

@@ -85,13 +85,16 @@ assert.equal(created[1].close_reason, "stopped", "campaign gone from the data = 
   const text = slackSummary({
     day: "2026-10-26",
     created: [ep("c1", {})],
-    touched: [ep("c2", { first_seen: "2026-10-20", sev: "medium" }), ep("c3", { first_seen: "2026-10-20", closed_at: "2026-10-26", close_reason: "improved" })],
-    names, link: "https://x.test/adscan",
+    touched: [
+      ep("c2", { account_id: "act_2", first_seen: "2026-10-20", sev: "medium" }),
+      ep("c3", { account_id: "3", first_seen: "2026-10-20", closed_at: "2026-10-26", close_reason: "improved" }),
+    ],
+    names, owners: new Map([["1", ["LEEM"]], ["2", ["OAM", "BEER"]]]), link: "https://x.test/adscan",
   });
   assert.match(text, /ข้อมูลวันที่ 26 ต\.ค\. 2569/);
-  assert.match(text, /\*พบปัญหาใหม่ 1 แคมเปญ\*\n• Hotel A — MES Oct \(ต้นทุนต่อข้อความ สูงเกินเกณฑ์, เร่งด่วน\)/);
-  assert.match(text, /\*ยังไม่ได้แก้ 1 แคมเปญ\*\n• Hotel B — AWN Reach \(.*ควรดู, ค้างมา 7 วัน\)/);
-  assert.match(text, /\*กลับมาปกติแล้ว 1 แคมเปญ\*\n• Hotel C — MES Sep/);
+  assert.match(text, /\*พบปัญหาใหม่ 1 แคมเปญ\*\n\n\*Account: LEEM\*\n• Hotel A — MES Oct \(ต้นทุนต่อข้อความ สูงเกินเกณฑ์, เร่งด่วน\)/);
+  assert.match(text, /\*ยังไม่ได้แก้ 1 แคมเปญ\*\n\n\*Account: BEER\*\n• Hotel B — AWN Reach \(.*ควรดู, ค้างมา 7 วัน\)\n\n\*Account: OAM\*\n• Hotel B/, "shared account: under each owner, counted once");
+  assert.match(text, /\*กลับมาปกติแล้ว 1 แคมเปญ\*\n\n\*Account: ยังไม่มีผู้ดูแล\*\n• Hotel C — MES Sep/, "no owner: still shown, not dropped");
   assert.doesNotMatch(text, /หยุดติดตาม/, "empty groups are left out");
   assert.doesNotMatch(text, /:[a-z_]+:/, "no emoji codes");
   assert.match(text, /<https:\/\/x\.test\/adscan\|ADSCAN>$/);

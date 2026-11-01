@@ -133,6 +133,7 @@ const MENU: { label: string; items: MenuItem[] }[] = [
       { href: "/admin/portfolio", label: "Portfolio Template" },
       { href: "/admin/adscan-skill", label: "AI Skill (ADSCAN)" },
       { href: "/admin/config", label: "System Config" },
+      { href: "/admin/logs", label: "Log การใช้งาน" },
     ],
   },
   {

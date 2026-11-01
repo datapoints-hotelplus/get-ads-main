@@ -30,3 +30,14 @@ export function displayToIso(text: string): string | null {
   if (Number.isNaN(parsed.getTime())) return null;
   return parsed.toISOString().slice(0, 10) === iso ? iso : null;
 }
+
+/** Timestamp → "31/10/2026 14:05" in Bangkok time, whatever the viewer's clock. Invalid → "—". */
+export function dateTimeToDisplay(ts: string): string {
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return "—";
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Bangkok", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+      .formatToParts(d).map((x) => [x.type, x.value]),
+  );
+  return `${p.day}/${p.month}/${p.year} ${p.hour}:${p.minute}`;
+}

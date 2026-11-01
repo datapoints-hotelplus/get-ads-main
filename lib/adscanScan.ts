@@ -86,8 +86,27 @@ export async function scanPending(): Promise<number> {
   // claim above means only one scanner gets here, whether n8n or a page open.
   const names = new Map(rows.map((r) => [r.campaign_id, { hotel: r.account_name, campaign: r.campaign_name }])); // newest row wins
   const site = process.env.NEXT_PUBLIC_APP_URL ?? (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null);
-  await notifySlack(slackSummary({ day: latest, created, touched: [...touched], names, link: site ? `${site}/adscan` : null }));
+  // The scan is already saved: a failed owner lookup must not lose the message,
+  // it just lists every campaign as unassigned.
+  const owners = await loadOwners().catch(() => new Map<string, string[]>());
+  await notifySlack(slackSummary({ day: latest, created, touched: [...touched], names, owners, link: site ? `${site}/adscan` : null }));
   return todo.length;
+}
+
+/** Bare account id → active Specialists holding it (ads_user_page_permissions), for the Slack grouping. */
+async function loadOwners(): Promise<Map<string, string[]>> {
+  const sb = getSupabase();
+  const { data: users, error: uErr } = await sb.from("ads_users").select("id,username,display_name").eq("role", "specialist").eq("is_active", true);
+  if (uErr) throw new Error(uErr.message);
+  const label = new Map((users ?? []).map((u) => [u.id as string, (u.display_name || u.username) as string]));
+  const { data: grants, error: gErr } = await sb.from("ads_user_page_permissions").select("user_id,account_id").in("user_id", [...label.keys()]);
+  if (gErr) throw new Error(gErr.message);
+  const owners = new Map<string, string[]>();
+  for (const g of grants ?? []) {
+    const id = (g.account_id as string).replace(/^act_/, "");
+    owners.set(id, [...(owners.get(id) ?? []), label.get(g.user_id as string)!]);
+  }
+  return owners;
 }
 
 /**
@@ -119,7 +138,7 @@ export async function sendLatestSummary(): Promise<string> {
   const site = process.env.NEXT_PUBLIC_APP_URL ?? (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null);
   const text = slackSummary({
     day, created: eps.filter((e) => e.first_seen === day), touched: eps.filter((e) => e.first_seen !== day),
-    names, link: site ? `${site}/adscan` : null,
+    names, owners: await loadOwners(), link: site ? `${site}/adscan` : null,
   });
   const result = await notifySlack(text);
   if (result === "off") throw new Error("ยังไม่ได้เปิดการแจ้งเตือน Slack หรือยังไม่ได้บันทึก Webhook URL");
