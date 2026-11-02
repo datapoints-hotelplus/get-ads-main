@@ -7,10 +7,11 @@
  * Runs lazily — loadAdscan() calls it whenever the newest data date hasn't
  * been scanned yet — so no extra cron is needed; POST /api/adscan/scan forces
  * it (n8n after sync, or an admin). The first run backfills BACKFILL_DAYS.
+ * Scanning never posts to Slack — see sendDailySummary().
  */
 import { getSupabase } from "@/lib/supabase";
 import { TREND_DAYS, applyDay, evaluate, slackSummary, type Episode, type RawRow, type Template } from "@/lib/adscan";
-import { notifySlack } from "@/lib/adscanSlack";
+import { getSlackSettings, notifySlack } from "@/lib/adscanSlack";
 
 export const BACKFILL_DAYS = 90;
 export const EXCLUDED_ACCOUNTS = new Set(["act_1378870469122933"]); // H+ Marcom — internal, not a client hotel
@@ -81,15 +82,6 @@ export async function scanPending(): Promise<number> {
     const { error } = await sb.from("adscan_alerts").update(strip(ep)).eq("id", ep.id);
     if (error) throw new Error(error.message);
   }
-
-  // Slack (if an admin turned it on): once per newly scanned data date — the
-  // claim above means only one scanner gets here, whether n8n or a page open.
-  const names = new Map(rows.map((r) => [r.campaign_id, { hotel: r.account_name, campaign: r.campaign_name }])); // newest row wins
-  const site = process.env.NEXT_PUBLIC_APP_URL ?? (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null);
-  // The scan is already saved: a failed owner lookup must not lose the message,
-  // it just lists every campaign as unassigned.
-  const owners = await loadOwners().catch(() => new Map<string, string[]>());
-  await notifySlack(slackSummary({ day: latest, created, touched: [...touched], names, owners, link: site ? `${site}/adscan` : null }));
   return todo.length;
 }
 
@@ -110,14 +102,35 @@ async function loadOwners(): Promise<Map<string, string[]>> {
 }
 
 /**
- * Re-send the summary for the newest scanned data date — the same message a
- * scan sends — without scanning again. For the admin "test" button.
+ * The daily Slack message. Only POST /api/adscan/scan calls this, on n8n's
+ * Bearer token — a page open may scan first, but never posts. One message per
+ * data date: the claim row makes a repeated n8n run a no-op, and a failed post
+ * gives the claim back so the next run retries.
  */
-export async function sendLatestSummary(): Promise<string> {
+export async function sendDailySummary(): Promise<"sent" | "already" | "off" | "nothing"> {
+  const s = await getSlackSettings();
+  if (!s.enabled || !s.url) return "off";
   const sb = getSupabase();
   const { data: last } = await sb.from("adscan_scans").select("data_date").order("data_date", { ascending: false }).limit(1).maybeSingle();
   const day = last?.data_date as string | undefined;
-  if (!day) throw new Error("ยังไม่เคยสแกน — ยังไม่มีสรุปให้ส่ง");
+  if (!day) return "nothing";
+  const key = `slack_sent_${day}`;
+  const { data: claimed, error } = await sb.from("adscan_settings")
+    .upsert({ key, value: "true" }, { onConflict: "key", ignoreDuplicates: true }).select("key");
+  if (error) throw new Error(error.message);
+  if (!claimed?.length) return "already";
+  try {
+    await sendSummary(day);
+    return "sent";
+  } catch (e) {
+    await sb.from("adscan_settings").delete().eq("key", key);
+    throw e;
+  }
+}
+
+/** Build and post the summary for one scanned data date. */
+async function sendSummary(day: string): Promise<void> {
+  const sb = getSupabase();
   const [{ data: open, error: oErr }, { data: closed, error: cErr }] = await Promise.all([
     sb.from("adscan_alerts").select("*").is("closed_at", null),
     sb.from("adscan_alerts").select("*").eq("closed_at", day),
@@ -143,5 +156,4 @@ export async function sendLatestSummary(): Promise<string> {
   const result = await notifySlack(text);
   if (result === "off") throw new Error("ยังไม่ได้เปิดการแจ้งเตือน Slack หรือยังไม่ได้บันทึก Webhook URL");
   if (result !== "sent") throw new Error(result.replace(/^error: /, ""));
-  return day;
 }

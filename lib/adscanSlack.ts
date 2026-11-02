@@ -1,6 +1,6 @@
 /**
  * lib/adscanSlack.ts
- * Slack notification when ADSCAN finishes scanning a new data date. The channel is whatever the
+ * Slack notification sent when n8n calls POST /api/adscan/scan. The channel is whatever the
  * Incoming Webhook URL (set by an admin at /admin/adscan-skill) is bound to.
  * Settings live in adscan_settings (migration 043); until that exists or a URL
  * is saved, notifySlack() is a no-op and never breaks the scan.
@@ -38,7 +38,7 @@ export async function postToSlack(url: string, text: string) {
   if (!res.ok) throw new Error(`Slack ${res.status}: ${(await res.text().catch(() => "")).slice(0, 120)}`);
 }
 
-/** Used after each scan: sends only when enabled and a URL is saved; reports what happened instead of throwing. */
+/** Sends only when enabled and a URL is saved; reports what happened instead of throwing. */
 export async function notifySlack(text: string): Promise<"sent" | "off" | `error: ${string}`> {
   try {
     const s = await getSlackSettings();

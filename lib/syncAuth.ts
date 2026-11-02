@@ -13,12 +13,14 @@
 import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/sessionToken";
 
-export async function isAuthorizedSyncCaller(req: Request): Promise<boolean> {
+/** True only for the shared-secret caller (n8n, cron), not an admin session. */
+export function isSyncBearer(req: Request): boolean {
   const secret = process.env.SYNC_TRIGGER_SECRET;
-  if (secret) {
-    const auth = req.headers.get("authorization");
-    if (auth === `Bearer ${secret}`) return true;
-  }
+  return !!secret && req.headers.get("authorization") === `Bearer ${secret}`;
+}
+
+export async function isAuthorizedSyncCaller(req: Request): Promise<boolean> {
+  if (isSyncBearer(req)) return true;
 
   const cookieStore = await cookies();
   const token = cookieStore.get("session")?.value;

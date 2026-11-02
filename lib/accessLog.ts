@@ -12,9 +12,11 @@ export async function logAccess(req: NextRequest, page: string): Promise<void> {
   if (!userId) return;
   const sb = getSupabase();
   const { data: me } = await sb.from("ads_users").select("username").eq("id", userId).maybeSingle();
-  await sb.from("ads_user_access_logs").insert({
+  const { error } = await sb.from("ads_user_access_logs").insert({
     user_id: userId, username: me?.username ?? "?", page,
     ip_address: req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? req.headers.get("x-real-ip") ?? null,
     user_agent: req.headers.get("user-agent"),
   });
+  // A logging failure must not block the action, but it must not vanish either.
+  if (error) console.error(`access log "${page}" not written: ${error.message}`);
 }

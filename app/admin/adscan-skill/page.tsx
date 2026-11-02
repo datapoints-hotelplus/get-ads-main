@@ -189,7 +189,7 @@ export default function AdscanSkillAdmin() {
         <div className={`${card} p-5 space-y-3`}>
           <h2 className="font-semibold">แจ้งเตือน Slack</h2>
           <p className="text-sm text-gray-500">
-            เมื่อ sync ข้อมูลวันใหม่เข้ามาและระบบตรวจ alert เสร็จ (<code>/api/adscan/scan</code> ที่ n8n เรียก หรือมีคนเปิดหน้า ADSCAN) ระบบจะส่งสรุปจำนวน alert เข้า channel ที่ผูกกับ Webhook นี้
+            เมื่อ sync ข้อมูลวันใหม่เข้ามาและระบบตรวจ alert เสร็จ ตอน n8n เรียก <code>/api/adscan/scan</code> ระบบจะส่งสรุปเข้า channel ที่ผูกกับ Webhook นี้
             ส่งครั้งเดียวต่อวันข้อมูล · คำแนะนำ AI ไม่ได้รันรายวันแล้ว จะวิเคราะห์ตอนมีคนเปิดดู alert นั้น · สร้างที่ Slack: <em>api.slack.com/apps → Incoming Webhooks → Add New Webhook to Workspace → เลือก channel</em> แล้วคัดลอก URL มาวางที่นี่
           </p>
           {slackMsg && <div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2 text-sm">{slackMsg}</div>}
