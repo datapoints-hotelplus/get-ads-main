@@ -179,7 +179,7 @@ export default function AdminSyncPage() {
             Backfill
           </h2>
           <p className="text-sm text-gray-500 mb-3">
-            ดึงข้อมูลจาก Facebook มาเขียนทับใน DB เฉพาะแถวที่ spend &gt; 0 · ไม่เลือก = ทุก account ตั้งแต่วันแรกใน DB ถึงวันนี้
+            ดึงข้อมูลจาก Facebook มาเขียนทับใน DB เฉพาะแถวที่มี spend หรือมีผลลัพธ์ · ไม่เลือก = ทุก account ตั้งแต่วันแรกใน DB ถึงวันนี้
           </p>
           <div className="mb-3">
             <label htmlFor="backfill-account" className="block text-xs text-gray-500 mb-1">Account (ไม่บังคับ)</label>

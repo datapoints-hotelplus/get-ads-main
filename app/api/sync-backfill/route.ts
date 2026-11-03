@@ -393,8 +393,11 @@ async function fetchMonth(
             access_token: accessToken,
           });
 
+    // Keep zero-spend rows that still carry results: FB attributes late messages
+    // to a day the ad no longer spent on (Brown House 10 Oct: ฿0, 1 message), and
+    // dropping them left the DB a message short of Ads Manager.
     const page_items = (res.data.data ?? []).filter(
-      (i: FBItem) => num(i.spend) > 0,
+      (i: FBItem) => num(i.spend) > 0 || !!i.actions?.length,
     );
     items.push(...page_items);
     nextUrl = res.data.paging?.next ?? null;
