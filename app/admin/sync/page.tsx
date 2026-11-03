@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import AppHeader from "@/app/components/AppHeader";
 import { useRouter } from "next/navigation";
 import DateInput from "@/app/components/DateInput";
@@ -19,6 +19,18 @@ export default function AdminSyncPage() {
   const [backfillTables, setBackfillTables] = useState<string[]>([
     "rawdata", "geo", "demographic", "device",
   ]);
+  // Optional scope — empty = every active account / from the first date in the DB / to today.
+  const [backfillAccount, setBackfillAccount] = useState("");
+  const [backfillFrom, setBackfillFrom] = useState("");
+  const [backfillTo, setBackfillTo] = useState("");
+  const [accounts, setAccounts] = useState<{ account_id: string; account_name: string }[]>([]);
+  useEffect(() => {
+    fetch("/api/admin/accounts")
+      .then((r) => r.json())
+      .then((d: { accounts?: { account_id: string; account_name: string; is_active: boolean }[] }) =>
+        setAccounts((d.accounts ?? []).filter((a) => a.is_active)))
+      .catch(() => setBackfillError("โหลดรายชื่อ account ไม่สำเร็จ — Backfill ได้เฉพาะแบบทุก account"));
+  }, []);
 
   const [resyncing, setResyncing] = useState(false);
   const [resyncResult, setResyncResult] = useState<{
@@ -66,7 +78,12 @@ export default function AdminSyncPage() {
       const res = await fetch("/api/sync-backfill", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tables: backfillTables }),
+        body: JSON.stringify({
+          tables: backfillTables,
+          accountId: backfillAccount || undefined,
+          since: backfillFrom || undefined,
+          until: backfillTo || undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) setBackfillError(data.error ?? "เกิดข้อผิดพลาด");
@@ -159,11 +176,45 @@ export default function AdminSyncPage() {
         {/* Backfill */}
         <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
           <h2 className="text-base font-semibold text-gray-800 mb-1">
-            Backfill (ตั้งแต่วันแรกใน DB)
+            Backfill
           </h2>
           <p className="text-sm text-gray-500 mb-3">
-            ดึงข้อมูลตั้งแต่วันแรกใน rawdata จนถึงวันนี้ใหม่ทั้งหมด เฉพาะแถวที่ spend &gt; 0
+            ดึงข้อมูลจาก Facebook มาเขียนทับใน DB เฉพาะแถวที่ spend &gt; 0 · ไม่เลือก = ทุก account ตั้งแต่วันแรกใน DB ถึงวันนี้
           </p>
+          <div className="mb-3">
+            <label htmlFor="backfill-account" className="block text-xs text-gray-500 mb-1">Account (ไม่บังคับ)</label>
+            <select
+              id="backfill-account"
+              value={backfillAccount}
+              onChange={(e) => setBackfillAccount(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            >
+              <option value="">ทุก account</option>
+              {accounts.map((a) => (
+                <option key={a.account_id} value={a.account_id}>{a.account_name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex gap-3 mb-3">
+            <div className="flex-1">
+              <label className="block text-xs text-gray-500 mb-1">วันเริ่มต้น (ไม่บังคับ)</label>
+              <DateInput
+                value={backfillFrom}
+                onChange={setBackfillFrom}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 pr-7 text-sm"
+                aria-label="วันเริ่มต้น Backfill"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="block text-xs text-gray-500 mb-1">วันสิ้นสุด (ไม่บังคับ)</label>
+              <DateInput
+                value={backfillTo}
+                onChange={setBackfillTo}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 pr-7 text-sm"
+                aria-label="วันสิ้นสุด Backfill"
+              />
+            </div>
+          </div>
           <div className="flex flex-wrap gap-3 mb-4">
             {(["rawdata", "geo", "demographic", "device"] as const).map((t) => (
               <label key={t} className="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">

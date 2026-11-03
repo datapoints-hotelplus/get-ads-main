@@ -565,7 +565,18 @@ export async function POST(req: Request) {
     );
   }
 
-  const accounts = await getAccountIds();
+  // Optional scope: one account (bare or act_ id) and/or a date range. Omitted =
+  // every active account, from the first date in the DB to today (old behavior).
+  const isIso = (v: unknown): v is string => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v));
+  const onlyAccount = typeof body.accountId === "string" && body.accountId ? body.accountId.replace(/^act_/, "") : null;
+  if ((body.since != null && !isIso(body.since)) || (body.until != null && !isIso(body.until))) {
+    return NextResponse.json({ error: "วันที่ต้องเป็นรูปแบบ YYYY-MM-DD" }, { status: 400 });
+  }
+
+  const accounts = (await getAccountIds()).filter((a) => !onlyAccount || a.id === onlyAccount);
+  if (onlyAccount && accounts.length === 0) {
+    return NextResponse.json({ error: "ไม่พบ account นี้ หรือ account ถูกปิดใช้งาน" }, { status: 404 });
+  }
   if (accounts.length === 0) {
     return NextResponse.json(
       { error: "ไม่พบ Account ID ใน PageIDs sheet" },
@@ -573,9 +584,10 @@ export async function POST(req: Request) {
     );
   }
 
-  const until = new Date().toLocaleDateString("en-CA", {
+  const today = new Date().toLocaleDateString("en-CA", {
     timeZone: "Asia/Bangkok",
   });
+  const until = isIso(body.until) && body.until < today ? body.until : today;
 
   // Find earliest date_start in rawdata
   const supabase = getSupabase();
@@ -585,11 +597,14 @@ export async function POST(req: Request) {
     .order("date_start", { ascending: true })
     .limit(1)
     .single();
-  const since = firstRow?.date_start ?? (() => {
+  const since = isIso(body.since) ? body.since : firstRow?.date_start ?? (() => {
     const d = new Date(until);
     d.setFullYear(d.getFullYear() - 1);
     return d.toISOString().slice(0, 10);
   })();
+  if (since > until) {
+    return NextResponse.json({ error: "วันเริ่มต้นต้องไม่เกินวันสิ้นสุด" }, { status: 400 });
+  }
   const chunks = monthChunks(since, until);
 
   console.log(
