@@ -162,6 +162,10 @@ export async function GET(req: NextRequest) {
     a.rows += 1;
   }
 
+  // cost_per_X metrics answered by FB's objective-aware cost_per_result. The
+  // others are spend / their own count column, like the Facebook dashboard.
+  const usesFbCpr = (m: string) => m.startsWith("cost_per_") && m !== "cost_per_engagement" && m !== "cost_per_message";
+
   function getMetricValue(metric: string, a: Agg): number | null {
     const n = a.rows || 1; // number of rows for averaging
     // Most cost-per-X metrics come from FB's objective-aware cost_per_result when
@@ -171,7 +175,10 @@ export async function GET(req: NextRequest) {
     // (smaller) count than the actions:post_engagement Ads Manager actually shows
     // in its "Post Engagement" / "Cost per Engagement" columns. Using cost_per_result
     // there overstates cost per engagement, so fall through to spend/post_engagement.
-    if (metric.startsWith("cost_per_") && metric !== "cost_per_engagement" && a.fb_cost_per_result != null) {
+    // Same for cost_per_message: the team reads it as Ads Manager's "Messaging
+    // conversations started" / "Cost per messaging conversation started", which
+    // cost_per_result is not (it gave ฿130 vs the real ฿84 on Sea U Pattaya).
+    if (usesFbCpr(metric) && a.fb_cost_per_result != null) {
       return a.fb_cost_per_result;
     }
     switch (metric) {
@@ -314,7 +321,7 @@ export async function GET(req: NextRequest) {
   if (fbToken && dateFrom && dateTo) {
     const filters = new Set<string>();
     for (const t of templates ?? []) {
-      if (!t.metric.startsWith("cost_per_") || t.metric === "cost_per_engagement") continue;
+      if (!usesFbCpr(t.metric)) continue;
       filters.add(((t as Record<string, unknown>).campaign_filter as string | null) ?? "");
     }
     const jobs: Promise<void>[] = [];
@@ -366,7 +373,7 @@ export async function GET(req: NextRequest) {
       // (matches Ads Manager) over the DB-derived spend/count, which is skewed
       // because synced result counts (messages/engagement/likes) differ slightly
       // from FB's. Falls back to the DB value when FB has no result.
-      if (t.metric.startsWith("cost_per_") && t.metric !== "cost_per_engagement") {
+      if (usesFbCpr(t.metric)) {
         const fbVal = fbCostPerResult(acctId, filter);
         if (fbVal != null) a.fb_cost_per_result = fbVal;
       }
