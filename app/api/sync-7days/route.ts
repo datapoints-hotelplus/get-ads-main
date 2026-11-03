@@ -9,6 +9,9 @@ import {
 
 const FB_GRAPH_API = "https://graph.facebook.com/v25.0";
 
+// The daily run re-pulls 30 days of rawdata for ~50 accounts — give it the room.
+export const maxDuration = 300;
+
 type FBAction = { action_type: string; value: string };
 type FBItem = { actions?: FBAction[]; action_values?: FBAction[] } & Record<
   string,
@@ -487,7 +490,9 @@ export async function runSync(
   since: string,
   until: string,
   label = "sync",
-): Promise<{ since: string; until: string; accounts: SyncSummaryItem[] }> {
+  // rawdata may reach further back than the breakdown tables (see GET).
+  rawSince = since,
+): Promise<{ since: string; until: string; rawSince: string; accounts: SyncSummaryItem[] }> {
   // Proactively refresh token on every sync call
   console.log(`[${label}] Refreshing token before sync...`);
   const refreshed = await refreshFacebookToken();
@@ -513,14 +518,14 @@ export async function runSync(
     };
     try {
       const [rawItems, geoItems, demoItems, deviceItems] = await Promise.all([
-        fetchRangeWithRetry(account.id, tokenRef, since, until, "rawdata"),
+        fetchRangeWithRetry(account.id, tokenRef, rawSince, until, "rawdata"),
         fetchRangeWithRetry(account.id, tokenRef, since, until, "geo"),
         fetchRangeWithRetry(account.id, tokenRef, since, until, "demographic"),
         fetchRangeWithRetry(account.id, tokenRef, since, until, "device"),
       ]);
 
       await Promise.all([
-        deleteAndInsert("ads_rawdata", rawItems.map((item) => ({ ...toRawdata(item), account_id: account.id })), since, until),
+        deleteAndInsert("ads_rawdata", rawItems.map((item) => ({ ...toRawdata(item), account_id: account.id })), rawSince, until),
         deleteByUniqueKeysAndInsert("ads_geo", geoItems.map(toGeo), [
           "ad_id",
           "date_start",
@@ -564,7 +569,7 @@ export async function runSync(
   }
 
   console.log(`[${label}] DONE ✓\n`);
-  return { since, until, accounts: summary };
+  return { since, until, rawSince, accounts: summary };
 }
 
 // ─── GET handler — ดึงข้อมูลวันนี้ (00:00–ตอนนี้) ───────────────────────────
@@ -580,7 +585,15 @@ export async function GET(request: Request) {
     const defaultSince = since3.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
     const since = searchParams.get("since") ?? defaultSince;
     const until = searchParams.get("until") ?? today;
-    const result = await runSync(since, until, "sync-today");
+    // rawdata is re-pulled for the last RAW_DAYS every run: FB keeps revising
+    // results for days after the fact (late-attributed messages), and a 2-day
+    // window left the DB short of Ads Manager. geo/demographic/device keep the
+    // short window. An explicit ?since= applies to all four, as before.
+    const RAW_DAYS = 30;
+    const rawFrom = new Date();
+    rawFrom.setDate(rawFrom.getDate() - (RAW_DAYS - 1));
+    const rawSince = searchParams.get("since") ?? rawFrom.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
+    const result = await runSync(since, until, "sync-today", rawSince);
     const response = { success: true, ...result };
 
     // Send notification to webhook
