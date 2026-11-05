@@ -26,6 +26,7 @@ const CRON_APIS = new Set([
   "/api/tiktok/sync-windsor",
   "/api/tiktok/check-token-expiry",
   "/api/adscan/scan", // also an admin button; checked by isAuthorizedSyncCaller
+  "/api/export/monthly", // Marcom Webapp (WBS) monthly report, Bearer EXPORT_SECRET checked in the route
 ]);
 
 function under(pathname: string, prefix: string) {
