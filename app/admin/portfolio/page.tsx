@@ -471,7 +471,7 @@ export default function AdminPortfolioPage() {
                   ยังไม่มี template
                 </p>
               ) : (
-                <table className="w-full text-sm">
+                <div className="overflow-x-auto"><table className="w-full min-w-[1200px] text-sm">
                   <thead className="bg-gray-50 text-gray-600 text-left">
                     <tr>
                       <th className="px-4 py-3 font-medium">ชื่อ</th>
@@ -497,7 +497,7 @@ export default function AdminPortfolioPage() {
                                     (p) => p && { ...p, name: e.target.value },
                                   )
                                 }
-                                className="input w-full text-xs"
+                                className="input w-full min-w-[8rem]"
                               />
                             </td>
                             <td className="px-4 py-2">
@@ -509,7 +509,7 @@ export default function AdminPortfolioPage() {
                                       p && { ...p, metric: e.target.value },
                                   )
                                 }
-                                className="input w-full text-xs"
+                                className="input w-full min-w-[8rem]"
                               >
                                 {METRICS.map((m) => (
                                   <option key={m.value} value={m.value}>
@@ -532,7 +532,7 @@ export default function AdminPortfolioPage() {
                                       },
                                   )
                                 }
-                                className="input w-full text-xs"
+                                className="input w-full min-w-[8rem]"
                               >
                                 <option value="higher_better">สูง = ดี</option>
                                 <option value="lower_better">ต่ำ = ดี</option>
@@ -554,7 +554,7 @@ export default function AdminPortfolioPage() {
                                       },
                                   )
                                 }
-                                className="input w-20 text-xs"
+                                className="input w-24"
                               />
                             </td>
                             <td className="px-4 py-2">
@@ -574,7 +574,7 @@ export default function AdminPortfolioPage() {
                                         },
                                     )
                                   }
-                                  className="input flex-3 text-xs"
+                                  className="input flex-3 min-w-[7rem]"
                                 >
                                   <option value=">=">&gt;=</option>
                                   <option value=">">&gt;</option>
@@ -596,7 +596,7 @@ export default function AdminPortfolioPage() {
                                         },
                                     )
                                   }
-                                  className="input flex-6 text-xs"
+                                  className="input flex-6 min-w-[6rem]"
                                 />
                               </div>
                             </td>
@@ -617,7 +617,7 @@ export default function AdminPortfolioPage() {
                                         },
                                     )
                                   }
-                                  className="input flex-3 text-xs"
+                                  className="input flex-3 min-w-[7rem]"
                                 >
                                   <option value=">=">&gt;=</option>
                                   <option value=">">&gt;</option>
@@ -639,7 +639,7 @@ export default function AdminPortfolioPage() {
                                         },
                                     )
                                   }
-                                  className="input flex-6 text-xs"
+                                  className="input flex-6 min-w-[6rem]"
                                 />
                               </div>
                             </td>
@@ -656,7 +656,7 @@ export default function AdminPortfolioPage() {
                                   )
                                 }
                                 placeholder="e.g. MES"
-                                className="input w-full text-xs"
+                                className="input w-full min-w-[8rem]"
                               />
                             </td>
                             <td className="px-4 py-2 text-right">
@@ -723,7 +723,7 @@ export default function AdminPortfolioPage() {
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </table></div>
               )}
             </div>
           </>
