@@ -81,7 +81,7 @@ export type Platforms = { facebook: boolean; tiktok: boolean };
 
 /** Where to land after login, or after being bounced off a page. */
 export function homeFor(role: Role, platforms: Platforms): string {
-  if (role === "hr") return "/adscan/report";
+  if (role === "hr") return "/adscan";
   if (role === "admin") return "/facebook/dashboard";
   if (role === "specialist") return "/adscan";
   if (platforms.facebook) return "/facebook/dashboard";

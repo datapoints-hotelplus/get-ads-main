@@ -65,7 +65,7 @@ assert.equal(canOpen("admin", "/adscan/report"), true);
 assert.equal(canOpen("specialist", "/adscan/report"), false, "specialists don't see colleagues' performance");
 assert.equal(canOpen("user", "/adscan/report"), false);
 assert.equal(canOpen("hr", "/adscan/hotels"), false, "the report rule must not open the rest of ADSCAN to HR");
-assert.equal(homeFor("hr", { facebook: true, tiktok: true }), "/adscan/report");
+assert.equal(homeFor("hr", { facebook: true, tiktok: true }), "/adscan");
 
 // ── public pages ──
 for (const role of ROLES) {
