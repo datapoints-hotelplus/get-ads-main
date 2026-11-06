@@ -554,7 +554,7 @@ export default function AdminPortfolioPage() {
                                       },
                                   )
                                 }
-                                className="input w-24"
+                                className="input w-full min-w-[8rem]"
                               />
                             </td>
                             <td className="px-4 py-2">
