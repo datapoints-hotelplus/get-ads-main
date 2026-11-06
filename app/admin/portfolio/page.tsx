@@ -78,6 +78,7 @@ export default function AdminPortfolioPage() {
   const [tError, setTError] = useState("");
   const [tSaving, setTSaving] = useState(false);
   const [editTpl, setEditTpl] = useState<Template | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
   const [newTpl, setNewTpl] = useState({
     name: "",
     metric: "roas",
@@ -193,6 +194,30 @@ export default function AdminPortfolioPage() {
       await fetchTemplates();
     }
     setTSaving(false);
+  }
+
+  // Drag & drop: move the dragged row to the drop target's position, save order.
+  // ponytail: HTML5 DnD has no touch support; add up/down buttons if mobile reordering is needed
+  async function handleReorder(targetId: string) {
+    const from = templates.findIndex((t) => t.id === dragId);
+    const to = templates.findIndex((t) => t.id === targetId);
+    setDragId(null);
+    if (from < 0 || to < 0 || from === to) return;
+    const next = [...templates];
+    next.splice(to, 0, next.splice(from, 1)[0]);
+    setTemplates(next);
+    setTError("");
+    try {
+      const res = await fetch("/api/admin/portfolio/templates", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: next.map((t) => t.id) }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "เกิดข้อผิดพลาด");
+    } catch (e) {
+      setTError(`บันทึกลำดับไม่สำเร็จ: ${e instanceof Error ? e.message : e}`);
+      await fetchTemplates();
+    }
   }
 
   async function handleDeleteTemplate(id: string) {
@@ -474,6 +499,7 @@ export default function AdminPortfolioPage() {
                 <div className="overflow-x-auto"><table className="w-full min-w-[1200px] text-sm">
                   <thead className="bg-gray-50 text-gray-600 text-left">
                     <tr>
+                      <th className="w-8 px-2 py-3" aria-label="ลากเพื่อเรียงลำดับ"></th>
                       <th className="px-4 py-3 font-medium">ชื่อ</th>
                       <th className="px-4 py-3 font-medium">Metric</th>
                       <th className="px-4 py-3 font-medium">Direction</th>
@@ -486,7 +512,21 @@ export default function AdminPortfolioPage() {
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {templates.map((t) => (
-                      <tr key={t.id} className="hover:bg-gray-50">
+                      <tr
+                        key={t.id}
+                        draggable={editTpl?.id !== t.id}
+                        onDragStart={() => setDragId(t.id)}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={() => handleReorder(t.id)}
+                        onDragEnd={() => setDragId(null)}
+                        className={`hover:bg-gray-50 ${dragId === t.id ? "opacity-40" : ""}`}
+                      >
+                        <td
+                          className={`px-2 py-3 text-gray-400 select-none ${editTpl?.id === t.id ? "" : "cursor-grab"}`}
+                          title="ลากเพื่อเรียงลำดับ"
+                        >
+                          {editTpl?.id === t.id ? "" : "⠿"}
+                        </td>
                         {editTpl?.id === t.id ? (
                           <>
                             <td className="px-4 py-2">

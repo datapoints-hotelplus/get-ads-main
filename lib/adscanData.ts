@@ -69,7 +69,7 @@ export async function loadAdscan(userId: string, role: Role): Promise<AdscanPayl
     if ((data ?? []).length < 1000) break;
   }
 
-  const { data: templates, error: tErr } = await sb.from("ads_portfolio_templates").select("*").order("created_at");
+  const { data: templates, error: tErr } = await sb.from("ads_portfolio_templates").select("*").order("sort_order").order("created_at");
   if (tErr) throw new Error(tErr.message);
 
   const since = new Date(Date.now() - 90 * 864e5).toISOString();

@@ -31,6 +31,7 @@ export async function GET(req: NextRequest) {
   const { data: templates, error: tErr } = await supabase
     .from("ads_portfolio_templates")
     .select("*")
+    .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
   if (tErr) return NextResponse.json({ error: tErr.message }, { status: 500 });
 
