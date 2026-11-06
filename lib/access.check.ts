@@ -48,13 +48,18 @@ assert.equal(canOpen("user", "/administrator"), true, "prefix match is per path 
 assert.equal(canOpen("specialist", "/adscan"), true);
 assert.equal(canOpen("specialist", "/adscan/a1"), true);
 assert.equal(canOpen("admin", "/adscan/hotels"), true);
+assert.equal(canOpen("user", "/adscan"), false, "user must not open ADSCAN alerts");
 for (const role of ["user", "hr"] as const) {
-  assert.equal(canOpen(role, "/adscan"), false, `${role} must not open ADSCAN alerts`);
   assert.equal(canOpen(role, "/adscan/a1"), false, `${role} must not open an ADSCAN alert by URL`);
+}
+// HR: read-only overview page only
+assert.equal(canOpen("hr", "/adscan"), true, "hr may open the ADSCAN overview");
+for (const p of ["/adscan/hotels", "/adscan/history", "/adscan/hotels/h1"]) {
+  assert.equal(canOpen("hr", p), false, `hr must not open ${p}`);
 }
 assert.equal(homeFor("specialist", { facebook: true, tiktok: false }), "/adscan");
 
-// ── Performance Report: admin + HR only; HR sees nothing else of ADSCAN ──
+// ── Performance Report: admin + HR only; HR sees nothing else of ADSCAN except the overview ──
 assert.equal(canOpen("hr", "/adscan/report"), true);
 assert.equal(canOpen("admin", "/adscan/report"), true);
 assert.equal(canOpen("specialist", "/adscan/report"), false, "specialists don't see colleagues' performance");
@@ -86,7 +91,7 @@ const labels = (role: (typeof ROLES)[number], pl: Platforms) => menuFor(role, pl
 assert.deepEqual(labels("user", { facebook: true, tiktok: false }), ["Facebook", "บัญชี"]);
 assert.deepEqual(labels("user", { facebook: false, tiktok: true }), ["TikTok", "บัญชี"]);
 assert.deepEqual(labels("hr", { facebook: true, tiktok: true }), ["ADSCAN", "บัญชี"], "hr never gets platform menus");
-assert.deepEqual(menuFor("hr", { facebook: true, tiktok: true })[0].links.map((l) => l.href), ["/adscan/report"], "hr's ADSCAN menu is the report only");
+assert.deepEqual(menuFor("hr", { facebook: true, tiktok: true })[0].links.map((l) => l.href), ["/adscan", "/adscan/report"], "hr's ADSCAN menu is the overview + the report");
 assert.deepEqual(labels("admin", { facebook: false, tiktok: false }), ["ADSCAN", "Facebook", "TikTok", "ตั้งค่า", "บัญชี"],
   "admin sees everything regardless of grants");
 

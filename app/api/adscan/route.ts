@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   const me = who(req);
   if (!me) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    return NextResponse.json(await loadAdscan(me.userId, me.role));
+    return NextResponse.json({ ...(await loadAdscan(me.userId, me.role)), readOnly: me.role === "hr" });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const me = who(req);
   if (!me) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (me.role === "hr") return NextResponse.json({ error: "Forbidden" }, { status: 403 }); // HR is view-only
   const body = await req.json().catch(() => null);
   const { campaign_id, type, label } = (body ?? {}) as Record<string, string>;
   const choices = type === "fixed" ? DONE_CHOICES : type === "skipped" ? SKIP_CHOICES : null;

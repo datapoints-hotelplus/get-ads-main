@@ -11,7 +11,8 @@
  *               assigned to them
  *   user        Hotel client — dashboards for their own ad accounts only.
  *               Never ADSCAN: the TOR says clients have no way into it.
- *   hr          ADSCAN Performance Report only, no ad data at all
+ *   hr          ADSCAN Performance Report + the read-only ADSCAN alerts overview
+ *               (/adscan, all hotels, no detail page, no recording actions)
  *
  * Which ad accounts someone sees is NOT decided here — that's the per-user
  * grants in ads_user_page_permissions (Facebook) and
@@ -48,12 +49,13 @@ const ALL_ROLES: Role[] = [...ROLES];
  * /tiktok/dashboard must sit above /tiktok. A path with no matching rule is
  * public (login, privacy).
  */
-const PAGE_RULES: { prefix: string; roles: Role[] }[] = [
+const PAGE_RULES: { prefix: string; roles: Role[]; exact?: boolean }[] = [
   { prefix: "/facebook/portfolio", roles: ["admin"] }, // its profile list API was already admin-only
   { prefix: "/facebook", roles: DASHBOARD_ROLES },
   { prefix: "/tiktok/dashboard", roles: DASHBOARD_ROLES },
   { prefix: "/tiktok", roles: ["admin"] }, // /tiktok/sync — settings
   { prefix: "/adscan/report", roles: ["admin", "hr"] }, // TOR: Performance Report — per-person numbers, no ad data
+  { prefix: "/adscan", exact: true, roles: ["admin", "specialist", "hr"] }, // alerts overview; HR read-only (no detail/actions)
   { prefix: "/adscan", roles: ["admin", "specialist"] }, // TOR: clients never see ADSCAN
   { prefix: "/account", roles: ALL_ROLES },
   { prefix: "/no-access", roles: ALL_ROLES },
@@ -66,7 +68,7 @@ function matches(pathname: string, prefix: string): boolean {
 
 /** null = public page, no login needed. */
 export function pageRoles(pathname: string): Role[] | null {
-  return PAGE_RULES.find((r) => matches(pathname, r.prefix))?.roles ?? null;
+  return PAGE_RULES.find((r) => (r.exact ? pathname === r.prefix : matches(pathname, r.prefix)))?.roles ?? null;
 }
 
 export function canOpen(role: Role, pathname: string): boolean {

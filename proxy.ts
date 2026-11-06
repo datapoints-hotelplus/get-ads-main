@@ -51,6 +51,7 @@ function apiRule(pathname: string): Role[] | "public" | "cron" | null {
   // (its profile list comes from /api/admin/portfolio/profiles).
   if (under(pathname, "/api/portfolio")) return ["admin"];
   if (under(pathname, "/api/adscan/report")) return ["admin", "hr"];
+  if (pathname === "/api/adscan") return ["admin", "specialist", "hr"]; // HR: GET only, POST refused in the route
   if (under(pathname, "/api/adscan")) return ["admin", "specialist"]; // TOR: clients never see ADSCAN
   if (under(pathname, "/api/user")) return [...DASHBOARD_ROLES, "hr"];
   return null;

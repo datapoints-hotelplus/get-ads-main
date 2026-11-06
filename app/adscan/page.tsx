@@ -5,7 +5,7 @@ import Link from "next/link";
 import { FOLLOW_DAYS, followUps, thDate, useAdscan, type AdscanAlert, type AdscanPayload } from "./data";
 import { ADS_MANAGER, Aging, Chip, DataNote, Gate, Metric, SEV, Sparkline, card, costText, hotelPill, strip } from "./ui";
 
-function IssueCard({ a, n }: { a: AdscanAlert; n: number }) {
+function IssueCard({ a, n, readOnly }: { a: AdscanAlert; n: number; readOnly?: boolean }) {
   return (
     <article className={`${card} ${SEV[a.sev].border} p-4 space-y-3`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -26,13 +26,21 @@ function IssueCard({ a, n }: { a: AdscanAlert; n: number }) {
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-3">
         <div className="flex-[1_1_280px] text-sm"><strong className="text-secondary">ต้องทำ:</strong> {a.action}</div>
-        <div className="flex gap-2">
-          <a href={ADS_MANAGER} target="_blank" rel="noopener" className="px-3 py-2 rounded-lg border border-secondary text-secondary text-sm font-semibold">Ads Manager ↗</a>
-          <Link href={`/adscan/${a.id}`} className="px-3 py-2 rounded-lg bg-secondary text-white text-sm font-semibold">ดูรายละเอียด</Link>
-        </div>
+        {!readOnly && (
+          <div className="flex gap-2">
+            <a href={ADS_MANAGER} target="_blank" rel="noopener" className="px-3 py-2 rounded-lg border border-secondary text-secondary text-sm font-semibold">Ads Manager ↗</a>
+            <Link href={`/adscan/${a.id}`} className="px-3 py-2 rounded-lg bg-secondary text-white text-sm font-semibold">ดูรายละเอียด</Link>
+          </div>
+        )}
       </div>
     </article>
   );
+}
+
+/** Good-news card: a link to the detail page, or a plain box for view-only HR. */
+function GoodWrap({ id, readOnly, children }: { id: string; readOnly?: boolean; children: React.ReactNode }) {
+  const cls = `${card} ${SEV.good.border} p-3.5 block space-y-1`;
+  return readOnly ? <div className={cls}>{children}</div> : <Link href={`/adscan/${id}`} className={`${cls} hover:bg-gray-50`}>{children}</Link>;
 }
 
 function Today({ d }: { d: AdscanPayload }) {
@@ -89,7 +97,7 @@ function Today({ d }: { d: AdscanPayload }) {
       <div className="flex flex-wrap gap-5 items-start">
         <section aria-label="เรื่องที่ต้องแก้" className="flex-[3_1_560px] min-w-0 space-y-3">
           <h2 className="font-semibold text-gray-900">ต้องแก้ — เรียงตามความเร่งด่วน แล้วตามงบ</h2>
-          {shown.map((a, i) => <IssueCard key={a.id} a={a} n={i + 1} />)}
+          {shown.map((a, i) => <IssueCard key={a.id} a={a} n={i + 1} readOnly={d.readOnly} />)}
           {!shown.length && (
             <div className={`${card} p-7 text-center`}>
               <div className="font-semibold">ไม่มีเรื่องค้าง</div>
@@ -102,11 +110,11 @@ function Today({ d }: { d: AdscanPayload }) {
           <section className="space-y-2.5">
             <h2 className="font-semibold text-gray-900">ข่าวดี</h2>
             {(allGood ? good : good.slice(0, 5)).map((g) => (
-              <Link key={g.id} href={`/adscan/${g.id}`} className={`${card} ${SEV.good.border} p-3.5 block space-y-1 hover:bg-gray-50`}>
+              <GoodWrap key={g.id} id={g.id} readOnly={d.readOnly}>
                 <div className="flex justify-between gap-2 flex-wrap"><span className={hotelPill}>{g.hotel}</span><span className="font-mono text-sm font-bold text-teal-700">{costText(g)}</span></div>
                 <div className="text-sm font-semibold">{g.headline}</div>
                 <div className="text-xs text-gray-500 font-mono truncate">{g.campaign}</div>
-              </Link>
+              </GoodWrap>
             ))}
             {good.length > 5 && (
               <button onClick={() => setAllGood(!allGood)} className="text-sm font-semibold text-secondary">

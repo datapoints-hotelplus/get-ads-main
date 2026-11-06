@@ -25,6 +25,8 @@ export type AdscanPayload = {
   actions: Action[];
   /** Name of the migration still to run, if a table is missing. */
   needsMigration?: string;
+  /** HR: overview only — no links to detail pages, no Ads Manager. Set by /api/adscan. */
+  readOnly?: boolean;
 };
 
 export async function loadAdscan(userId: string, role: Role): Promise<AdscanPayload> {
@@ -38,11 +40,11 @@ export async function loadAdscan(userId: string, role: Role): Promise<AdscanPayl
     needsMigration = "042_adscan_alerts_skills.sql";
   }
 
-  // Accounts this user may see: admin → every active account; specialist → own grants.
+  // Accounts this user may see: admin and HR (view-only, has no grants) → every active account; specialist → own grants.
   const { data: pages, error: pErr } = await sb.from("ads_allpage").select("account_id,account_name").eq("is_active", true);
   if (pErr) throw new Error(pErr.message);
   let allowed = (pages ?? []).filter((p) => !EXCLUDED_ACCOUNTS.has(p.account_id));
-  if (role !== "admin") {
+  if (role !== "admin" && role !== "hr") {
     const { data: grants, error } = await sb.from("ads_user_page_permissions").select("account_id").eq("user_id", userId);
     if (error) throw new Error(error.message);
     const mine = new Set((grants ?? []).map((g) => g.account_id as string));
