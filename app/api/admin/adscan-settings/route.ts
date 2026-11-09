@@ -1,25 +1,45 @@
 import { NextRequest, NextResponse } from "next/server";
-import { WEBHOOK_PREFIX, getSlackSettings, saveSlackSettings } from "@/lib/adscanSlack";
+import { WEBHOOK_PREFIX, getSlackLabels, getSlackSettings, saveSlackLabels, saveSlackSettings } from "@/lib/adscanSlack";
+import { SLACK_LABELS_DEFAULT, cleanSlackLabels } from "@/lib/adscan";
+import { previewSummary } from "@/lib/adscanScan";
 import { logAccess } from "@/lib/accessLog";
 
 export const dynamic = "force-dynamic";
 
 const mask = (u: string) => `${WEBHOOK_PREFIX}…${u.slice(-4)}`;
 
-/** GET /api/admin/adscan-settings — Slack status. Never returns the full webhook URL. Admin only (proxy). */
-export async function GET() {
+async function status() {
   const s = await getSlackSettings();
-  return NextResponse.json({ enabled: s.enabled, hasUrl: !!s.url, urlMasked: s.url ? mask(s.url) : null });
+  return {
+    enabled: s.enabled, hasUrl: !!s.url, urlMasked: s.url ? mask(s.url) : null,
+    labels: { ...SLACK_LABELS_DEFAULT, ...(await getSlackLabels()) }, labelDefaults: SLACK_LABELS_DEFAULT,
+  };
+}
+
+/** GET /api/admin/adscan-settings — Slack status + message wording. Never returns the full webhook URL. Admin only (proxy). */
+export async function GET() {
+  return NextResponse.json(await status());
 }
 
 /**
  * POST /api/admin/adscan-settings
  *   { url?: string, enabled?: boolean }  → save
- * Every call is written to ads_user_access_logs (who, IP, when) — shown on /admin/logs.
+ *   { labels: {...} }                    → save the message wording ({} = back to defaults)
+ *   { previewLabels: {...} }             → the message built from live data with that wording; sends and saves nothing
+ * Every save is written to ads_user_access_logs (who, IP, when) — shown on /admin/logs.
  */
 export async function POST(req: NextRequest) {
-  const b = (await req.json().catch(() => ({}))) as { url?: string; enabled?: boolean };
+  const b = (await req.json().catch(() => ({}))) as { url?: string; enabled?: boolean; labels?: unknown; previewLabels?: unknown };
   try {
+    if (b.previewLabels !== undefined) {
+      const text = await previewSummary(cleanSlackLabels(b.previewLabels));
+      return NextResponse.json({ text: text ?? "ยังไม่มีข้อมูลที่ตรวจแล้ว จึงยังสร้างตัวอย่างไม่ได้" });
+    }
+    if (b.labels !== undefined) {
+      await logAccess(req, "adscan_slack_labels_save");
+      await saveSlackLabels(cleanSlackLabels(b.labels));
+      return NextResponse.json(await status());
+    }
     // Logged before acting so a click that then fails still shows who pressed it.
     await logAccess(req,
       b.url !== undefined ? "adscan_slack_save_url"
@@ -33,8 +53,7 @@ export async function POST(req: NextRequest) {
       }
     }
     await saveSlackSettings({ url, enabled: typeof b.enabled === "boolean" ? b.enabled : undefined });
-    const s = await getSlackSettings();
-    return NextResponse.json({ enabled: s.enabled, hasUrl: !!s.url, urlMasked: s.url ? mask(s.url) : null });
+    return NextResponse.json(await status());
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }

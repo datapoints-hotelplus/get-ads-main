@@ -10,8 +10,8 @@
  * Scanning never posts to Slack — see sendDailySummary().
  */
 import { getSupabase } from "@/lib/supabase";
-import { TREND_DAYS, applyDay, evaluate, slackSummary, type Episode, type RawRow, type Template } from "@/lib/adscan";
-import { getSlackSettings, notifySlack } from "@/lib/adscanSlack";
+import { TREND_DAYS, applyDay, evaluate, slackSummary, type Episode, type RawRow, type SlackLabels, type Template } from "@/lib/adscan";
+import { getSlackLabels, getSlackSettings, notifySlack } from "@/lib/adscanSlack";
 
 export const BACKFILL_DAYS = 90;
 export const EXCLUDED_ACCOUNTS = new Set(["act_1378870469122933"]); // H+ Marcom — internal, not a client hotel
@@ -130,6 +130,18 @@ export async function sendDailySummary(): Promise<"sent" | "already" | "off" | "
 
 /** Build and post the summary for one scanned data date. */
 async function sendSummary(day: string): Promise<void> {
+  const result = await notifySlack(await buildSummary(day));
+  if (result === "off") throw new Error("ยังไม่ได้เปิดการแจ้งเตือน Slack หรือยังไม่ได้บันทึก Webhook URL");
+  if (result !== "sent") throw new Error(result.replace(/^error: /, ""));
+}
+
+/** The summary text for the newest scanned date, with the given (unsaved) wording. Sends nothing. */
+export async function previewSummary(labels: Partial<SlackLabels>): Promise<string | null> {
+  const { data: last } = await getSupabase().from("adscan_scans").select("data_date").order("data_date", { ascending: false }).limit(1).maybeSingle();
+  return last?.data_date ? buildSummary(last.data_date as string, labels) : null;
+}
+
+async function buildSummary(day: string, labels?: Partial<SlackLabels>): Promise<string> {
   const sb = getSupabase();
   const [{ data: open, error: oErr }, { data: closed, error: cErr }] = await Promise.all([
     sb.from("adscan_alerts").select("*").is("closed_at", null),
@@ -149,11 +161,9 @@ async function sendSummary(day: string): Promise<void> {
   }
 
   const site = process.env.NEXT_PUBLIC_APP_URL ?? (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null);
-  const text = slackSummary({
+  return slackSummary({
     day, created: eps.filter((e) => e.first_seen === day), touched: eps.filter((e) => e.first_seen !== day),
     names, owners: await loadOwners(), link: site ? `${site}/adscan` : null,
+    labels: labels ?? (await getSlackLabels()),
   });
-  const result = await notifySlack(text);
-  if (result === "off") throw new Error("ยังไม่ได้เปิดการแจ้งเตือน Slack หรือยังไม่ได้บันทึก Webhook URL");
-  if (result !== "sent") throw new Error(result.replace(/^error: /, ""));
 }

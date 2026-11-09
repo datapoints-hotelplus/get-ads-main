@@ -6,7 +6,9 @@
  * is saved, notifySlack() is a no-op and never breaks the scan.
  */
 import { getSupabase } from "@/lib/supabase";
+import { SLACK_LABELS_DEFAULT, cleanSlackLabels, type SlackLabels } from "@/lib/adscan";
 
+const LABELS_KEY = "slack_labels";
 const URL_KEY = "slack_webhook_url";
 const ENABLED_KEY = "slack_enabled";
 export const WEBHOOK_PREFIX = "https://hooks.slack.com/";
@@ -30,6 +32,28 @@ export async function saveSlackSettings(p: { url?: string; enabled?: boolean }) 
   if (error) {
     throw new Error(/adscan_settings/.test(error.message) ? "ยังไม่ได้สร้างตาราง — ต้องรัน supabase/migrations/043 ใน Supabase ก่อน" : error.message);
   }
+}
+
+/** Wording the admin edited at /admin/adscan-skill (JSON in adscan_settings); empty = defaults. */
+export async function getSlackLabels(): Promise<Partial<SlackLabels>> {
+  const { data, error } = await getSupabase().from("adscan_settings").select("value").eq("key", LABELS_KEY).maybeSingle();
+  if (error || !data?.value) return {}; // table not created yet, or never edited
+  try {
+    return cleanSlackLabels(JSON.parse(data.value as string));
+  } catch {
+    return {};
+  }
+}
+
+/** Saves the given wording; an empty object resets everything to the defaults. */
+export async function saveSlackLabels(all: Partial<SlackLabels>) {
+  const sb = getSupabase();
+  // Keep only what differs from the defaults, so untouched fields follow future default changes.
+  const labels = Object.fromEntries(Object.entries(all).filter(([k, v]) => v !== SLACK_LABELS_DEFAULT[k as keyof SlackLabels]));
+  const { error } = Object.keys(labels).length
+    ? await sb.from("adscan_settings").upsert({ key: LABELS_KEY, value: JSON.stringify(labels), updated_at: new Date().toISOString() })
+    : await sb.from("adscan_settings").delete().eq("key", LABELS_KEY);
+  if (error) throw new Error(error.message);
 }
 
 /** Posts `text` (Slack mrkdwn) to the configured webhook. Throws on failure. */

@@ -3,7 +3,7 @@
  * Run: node --experimental-strip-types lib/adscan.check.ts
  */
 import assert from "node:assert/strict";
-import { applyDay, evaluate, slackSummary, type Episode, type RawRow, type Template, type Verdict } from "./adscan.ts";
+import { applyDay, cleanSlackLabels, evaluate, slackSummary, type Episode, type RawRow, type Template, type Verdict } from "./adscan.ts";
 
 const T: Template[] = [
   { name: "Message Campaign", metric: "cost_per_message", direction: "lower_better", green_min: 54, yellow_min: 66, green_op: "<=", yellow_op: "<=", campaign_filter: "MES" },
@@ -98,6 +98,15 @@ assert.equal(created[1].close_reason, "stopped", "campaign gone from the data = 
   assert.doesNotMatch(text, /หยุดติดตาม/, "empty groups are left out");
   assert.doesNotMatch(text, /:[a-z_]+:/, "no emoji codes");
   assert.match(text, /<https:\/\/x\.test\/adscan\|ADSCAN>$/);
+
+  // admin-edited wording replaces the fixed text; anything left unset keeps the default
+  const custom = slackSummary({
+    day: "2026-10-26", created: [ep("c1", {})], touched: [], names, owners: new Map(), link: null,
+    labels: cleanSlackLabels({ title: "*รายงาน {date}*", fresh: "เรื่องใหม่", noOwner: "ไม่มีเจ้าของ", footer: "เปิดดูที่ {link}", bogus: "x", pending: "   " }),
+  });
+  assert.match(custom, /^\*รายงาน 26 ต\.ค\. 2569\*\n\n\*เรื่องใหม่ 1 แคมเปญ\*\n\n\*Account: ไม่มีเจ้าของ\*/);
+  assert.match(custom, /เปิดดูที่ หน้า ADSCAN$/, "{link} falls back when the site URL is unknown");
+  assert.deepEqual(cleanSlackLabels({ bogus: "x", title: 5, fresh: "a".repeat(500) }), { fresh: "a".repeat(200) }, "unknown keys and non-strings dropped, length capped");
 }
 
 console.log("OK — adscan: persistent episodes, severity bands, culprit/best, effect, wait, zero-result, unsupported templates, slack summary");

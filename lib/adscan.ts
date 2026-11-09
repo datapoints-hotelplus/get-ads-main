@@ -283,12 +283,37 @@ export function applyDay(open: Map<string, Episode>, created: Episode[], verdict
  * look after it, and each section groups by them; `link` is the ADSCAN URL when
  * the site URL is known.
  */
+export const SLACK_LABELS_DEFAULT = {
+  title: "*สรุปแคมเปญที่ต้องดูแล ข้อมูลวันที่ {date}*", // {date} = data date
+  fresh: "พบปัญหาใหม่",
+  pending: "ยังไม่ได้แก้",
+  fixed: "กลับมาปกติแล้ว",
+  stopped: "หยุดติดตาม",
+  noOwner: "ยังไม่มีผู้ดูแล", // keeps an alert visible when nobody holds its account
+  empty: "ไม่มีแคมเปญที่ต้องดูแลในวันนี้",
+  footer: "ดูรายละเอียดได้ที่ {link}", // {link} = <url|ADSCAN>, or "หน้า ADSCAN" when the site URL is unknown
+};
+export type SlackLabels = typeof SLACK_LABELS_DEFAULT;
+
+/** Admin-edited wording from an untrusted body: known keys only, trimmed, non-empty, ≤ 200 chars. */
+export function cleanSlackLabels(input: unknown): Partial<SlackLabels> {
+  const out: Partial<SlackLabels> = {};
+  if (!input || typeof input !== "object") return out;
+  for (const k of Object.keys(SLACK_LABELS_DEFAULT) as (keyof SlackLabels)[]) {
+    const v = (input as Record<string, unknown>)[k];
+    if (typeof v === "string" && v.trim()) out[k] = v.trim().slice(0, 200);
+  }
+  return out;
+}
+
 export function slackSummary(p: {
   day: string; created: Episode[]; touched: Episode[];
   names: Map<string, { hotel: string; campaign: string }>; owners: Map<string, string[]>; link: string | null;
+  labels?: Partial<SlackLabels>;
 }): string {
   const MAX = 30; // per person — Slack stays readable; the rest is on the page
-  const NO_OWNER = "ยังไม่มีผู้ดูแล"; // keeps an alert visible when nobody holds its account
+  const L = { ...SLACK_LABELS_DEFAULT, ...p.labels };
+  const NO_OWNER = L.noOwner;
   const dayDiff = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
   const thDay = new Date(p.day + "T00:00:00Z").toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
   const name = (e: Episode) => {
@@ -327,13 +352,13 @@ export function slackSummary(p: {
   const stopped = closed.filter((e) => e.close_reason !== "improved");
 
   const lines = [
-    `*สรุปแคมเปญที่ต้องดูแล ข้อมูลวันที่ ${thDay}*`,
-    ...list("พบปัญหาใหม่", fresh, (e) => `${metric(e)} สูงเกินเกณฑ์, ${sev(e)}`),
-    ...list("ยังไม่ได้แก้", pending, (e) => `${metric(e)} สูงเกินเกณฑ์, ${sev(e)}, ค้างมา ${dayDiff(e.first_seen, p.day) + 1} วัน`),
-    ...list("กลับมาปกติแล้ว", fixed, (e) => `${metric(e)} กลับมาอยู่ในเกณฑ์`),
-    ...list("หยุดติดตาม", stopped, () => "หยุดยิงหรือใช้งบน้อยเกินกว่าจะตัดสิน"),
+    L.title.replaceAll("{date}", thDay),
+    ...list(L.fresh, fresh, (e) => `${metric(e)} สูงเกินเกณฑ์, ${sev(e)}`),
+    ...list(L.pending, pending, (e) => `${metric(e)} สูงเกินเกณฑ์, ${sev(e)}, ค้างมา ${dayDiff(e.first_seen, p.day) + 1} วัน`),
+    ...list(L.fixed, fixed, (e) => `${metric(e)} กลับมาอยู่ในเกณฑ์`),
+    ...list(L.stopped, stopped, () => "หยุดยิงหรือใช้งบน้อยเกินกว่าจะตัดสิน"),
   ];
-  if (!fresh.length && !pending.length && !closed.length) lines.push("", "ไม่มีแคมเปญที่ต้องดูแลในวันนี้");
-  lines.push("", p.link ? `ดูรายละเอียดได้ที่ <${p.link}|ADSCAN>` : "ดูรายละเอียดได้ที่หน้า ADSCAN");
+  if (!fresh.length && !pending.length && !closed.length) lines.push("", L.empty);
+  lines.push("", L.footer.replaceAll("{link}", p.link ? `<${p.link}|ADSCAN>` : "หน้า ADSCAN"));
   return lines.join("\n");
 }

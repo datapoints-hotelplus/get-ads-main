@@ -7,6 +7,16 @@ import type { AdscanPayload } from "@/lib/adscanData";
 
 type SkillRow = { version: number; model: string; prompt: string; note: string | null; is_active: boolean; created_at: string; by: string };
 const card = "bg-white border border-gray-200 rounded-xl shadow-sm";
+const LABEL_FIELDS: { k: string; label: string; hint?: string }[] = [
+  { k: "title", label: "บรรทัดหัวเรื่อง", hint: "{date} = วันที่ของข้อมูล" },
+  { k: "fresh", label: "หัวข้อ: พบปัญหาใหม่" },
+  { k: "pending", label: "หัวข้อ: ยังไม่ได้แก้" },
+  { k: "fixed", label: "หัวข้อ: กลับมาปกติแล้ว" },
+  { k: "stopped", label: "หัวข้อ: หยุดติดตาม" },
+  { k: "noOwner", label: "ชื่อกลุ่มเมื่อไม่มีผู้ดูแล" },
+  { k: "empty", label: "ข้อความเมื่อไม่มีเรื่องต้องดูแล" },
+  { k: "footer", label: "ข้อความท้าย", hint: "{link} = ลิงก์ไปหน้า ADSCAN" },
+];
 const when = (iso: string) => new Date(iso).toLocaleString("th-TH", { day: "numeric", month: "short", year: "2-digit", hour: "2-digit", minute: "2-digit" });
 
 /** TOR ส่วนที่ 6: edit the AI Skill without touching code; every save is a new version (history). */
@@ -23,9 +33,11 @@ export default function AdscanSkillAdmin() {
   const [msg, setMsg] = useState("");
   const [openV, setOpenV] = useState<number | null>(null);
   const [models, setModels] = useState<{ id: string; name: string; context: number | null; inPerM: number | null; outPerM: number | null }[]>([]);
-  const [slack, setSlack] = useState<{ enabled: boolean; hasUrl: boolean; urlMasked: string | null } | null>(null);
+  const [slack, setSlack] = useState<{ enabled: boolean; hasUrl: boolean; urlMasked: string | null; labels?: Record<string, string>; labelDefaults?: Record<string, string> } | null>(null);
   const [slackUrl, setSlackUrl] = useState("");
   const [slackMsg, setSlackMsg] = useState("");
+  const [labelsForm, setLabelsForm] = useState<Record<string, string>>({});
+  const [labelsPreview, setLabelsPreview] = useState("");
   async function slackCall(body: object) {
     const r = await fetch("/api/admin/adscan-settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const j = await r.json().catch(() => ({}));
@@ -55,7 +67,10 @@ export default function AdscanSkillAdmin() {
     load();
     fetch("/api/admin/adscan-settings")
       .then((r) => r.json())
-      .then((d) => setSlack(d))
+      .then((d) => {
+        setSlack(d);
+        setLabelsForm(d.labels ?? {});
+      })
       .catch(() => {});
     fetch("/api/admin/adscan-models")
       .then((r) => r.json())
@@ -224,6 +239,68 @@ export default function AdscanSkillAdmin() {
             />
             เปิดการแจ้งเตือน Slack {!slack?.hasUrl && <span className="text-xs text-gray-400">(บันทึก URL ก่อน)</span>}
           </label>
+
+          <div className="border-t border-gray-100 pt-3 space-y-3">
+            <div>
+              <h3 className="font-semibold text-sm">ข้อความที่ส่งเข้า Slack</h3>
+              <p className="text-xs text-gray-500">
+                แก้หัวข้อและข้อความประจำได้ รายชื่อแคมเปญและตัวเลขสร้างจากข้อมูลจริงทุกวัน · ใช้ <code>*ข้อความ*</code> เพื่อทำตัวหนาตามแบบ Slack · ช่องที่เว้นว่างจะใช้ข้อความเริ่มต้น
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {LABEL_FIELDS.map((f) => (
+                <label key={f.k} className={`block text-sm ${f.k === "title" || f.k === "footer" ? "sm:col-span-2" : ""}`}>
+                  <span className="text-gray-600">{f.label}{f.hint && <span className="text-xs text-gray-400"> · {f.hint}</span>}</span>
+                  <input
+                    value={labelsForm[f.k] ?? ""}
+                    maxLength={200}
+                    onChange={(e) => setLabelsForm({ ...labelsForm, [f.k]: e.target.value })}
+                    placeholder={slack?.labelDefaults?.[f.k]}
+                    className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-2 justify-end">
+              <button
+                disabled={!!busy}
+                onClick={() => run("labelreset", async () => {
+                  if (!confirm("คืนข้อความทั้งหมดเป็นค่าเริ่มต้น?")) return;
+                  const j = await slackCall({ labels: {} });
+                  setSlack(j);
+                  setLabelsForm(j.labels ?? {});
+                  setLabelsPreview("");
+                  setSlackMsg("คืนค่าเริ่มต้นแล้ว");
+                })}
+                className="px-4 min-h-11 rounded-lg border border-gray-300 text-gray-700 font-semibold disabled:opacity-40"
+              >
+                คืนค่าเริ่มต้น
+              </button>
+              <button
+                disabled={!!busy}
+                onClick={() => run("labelpreview", async () => {
+                  const j = await slackCall({ previewLabels: labelsForm });
+                  setLabelsPreview(j.text);
+                })}
+                className="px-4 min-h-11 rounded-lg border border-secondary text-secondary font-semibold disabled:opacity-40"
+              >
+                {busy === "labelpreview" ? "กำลังสร้างตัวอย่าง…" : "ดูตัวอย่าง (ไม่ส่ง Slack)"}
+              </button>
+              <button
+                disabled={!!busy}
+                onClick={() => run("labelsave", async () => {
+                  const j = await slackCall({ labels: labelsForm });
+                  setSlack(j);
+                  setLabelsForm(j.labels ?? {});
+                  setSlackMsg("บันทึกข้อความแล้ว จะใช้กับการแจ้งเตือนรอบถัดไป");
+                })}
+                className="px-4 min-h-11 rounded-lg bg-secondary text-white font-semibold disabled:opacity-40"
+              >
+                {busy === "labelsave" ? "กำลังบันทึก…" : "บันทึกข้อความ"}
+              </button>
+            </div>
+            {labelsPreview && <pre className="bg-gray-50 rounded-lg p-3 text-sm whitespace-pre-wrap font-sans">{labelsPreview}</pre>}
+          </div>
         </div>
 
         <div className={`${card} p-5 space-y-2`}>
