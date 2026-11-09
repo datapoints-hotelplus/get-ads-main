@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { WEBHOOK_PREFIX, getSlackLabels, getSlackSettings, saveSlackLabels, saveSlackSettings } from "@/lib/adscanSlack";
-import { SLACK_LABELS_DEFAULT, cleanSlackLabels } from "@/lib/adscan";
+import { SLACK_LABELS_DEFAULT, cleanSlackLabels, slackLineError } from "@/lib/adscan";
 import { previewSummary } from "@/lib/adscanScan";
 import { logAccess } from "@/lib/accessLog";
 
@@ -31,6 +31,12 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const b = (await req.json().catch(() => ({}))) as { url?: string; enabled?: boolean; labels?: unknown; previewLabels?: unknown };
   try {
+    // Say why a bad line format is refused instead of silently falling back to the default.
+    for (const raw of [b.labels, b.previewLabels]) {
+      const line = (raw as { line?: unknown } | undefined)?.line;
+      const err = typeof line === "string" && line.trim() ? slackLineError(line.trim()) : null;
+      if (err) return NextResponse.json({ error: err }, { status: 400 });
+    }
     if (b.previewLabels !== undefined) {
       const text = await previewSummary(cleanSlackLabels(b.previewLabels));
       return NextResponse.json({ text: text ?? "ยังไม่มีข้อมูลที่ตรวจแล้ว จึงยังสร้างตัวอย่างไม่ได้" });

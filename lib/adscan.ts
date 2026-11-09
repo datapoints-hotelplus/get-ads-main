@@ -276,13 +276,11 @@ export function applyDay(open: Map<string, Episode>, created: Episode[], verdict
 }
 
 
-/**
- * The Slack summary after a scan, in plain Thai with each campaign named.
- * Pure (no I/O) so the check can pin the wording. `names` maps campaign_id →
- * hotel + campaign name; `owners` maps a bare account id → the Specialists who
- * look after it, and each section groups by them; `link` is the ADSCAN URL when
- * the site URL is known.
- */
+export const SLACK_SORTS = ["severity_age", "age", "newest", "hotel"] as const;
+export const SLACK_GROUPS = ["owner", "hotel", "none"] as const;
+/** Placeholders usable in the per-campaign line format. */
+export const SLACK_LINE_VARS = ["hotel", "campaign", "metric", "status", "severity", "days"] as const;
+
 export const SLACK_LABELS_DEFAULT = {
   title: "*สรุปแคมเปญที่ต้องดูแล ข้อมูลวันที่ {date}*", // {date} = data date
   fresh: "พบปัญหาใหม่",
@@ -292,34 +290,67 @@ export const SLACK_LABELS_DEFAULT = {
   noOwner: "ยังไม่มีผู้ดูแล", // keeps an alert visible when nobody holds its account
   empty: "ไม่มีแคมเปญที่ต้องดูแลในวันนี้",
   footer: "ดูรายละเอียดได้ที่ {link}", // {link} = <url|ADSCAN>, or "หน้า ADSCAN" when the site URL is unknown
+  line: "{hotel} — {campaign} ({metric} {status}, {severity}, {days})", // one line per campaign
+  sort: "severity_age", // one of SLACK_SORTS
+  group: "owner", // one of SLACK_GROUPS
 };
 export type SlackLabels = typeof SLACK_LABELS_DEFAULT;
 
-/** Admin-edited wording from an untrusted body: known keys only, trimmed, non-empty, ≤ 200 chars. */
+/** Why a line format can't be used, in Thai for the admin, or null when it is fine. */
+export function slackLineError(format: string): string | null {
+  if (format.length > 200) return "รูปแบบบรรทัดยาวเกิน 200 ตัวอักษร";
+  const unknown = [...format.matchAll(/\{(\w*)\}/g)].map((m) => m[1]).filter((v) => !(SLACK_LINE_VARS as readonly string[]).includes(v));
+  if (unknown.length) return `ไม่รู้จักตัวแปร ${unknown.map((v) => `{${v}}`).join(" ")} — ใช้ได้เฉพาะ ${SLACK_LINE_VARS.map((v) => `{${v}}`).join(" ")}`;
+  if (!format.includes("{campaign}")) return "รูปแบบบรรทัดต้องมี {campaign}";
+  return null;
+}
+
+/** Fills the placeholders, then tidies punctuation left behind by values that don't apply (e.g. {days} on a new issue). */
+export function renderSlackLine(format: string, vars: Partial<Record<(typeof SLACK_LINE_VARS)[number], string>>): string {
+  let s = format.replace(/\{(\w+)\}/g, (_, k: string) => (vars as Record<string, string | undefined>)[k] ?? "");
+  for (let i = 0; i < 3; i++) {
+    s = s.replace(/[ \t]{2,}/g, " ").replace(/,\s*,/g, ",").replace(/\(\s*,\s*/g, "(").replace(/\s*,\s*\)/g, ")")
+      .replace(/\(\s+/g, "(").replace(/\s+\)/g, ")").replace(/\s*\(\)/g, "").replace(/\s+,/g, ",")
+      .replace(/\[\s+/g, "[").replace(/\s+\]/g, "]").replace(/\s*\[\]/g, "");
+  }
+  return s.trim();
+}
+
+/** Admin-edited wording/options from an untrusted body: known keys only, trimmed, valid, ≤ 200 chars. */
 export function cleanSlackLabels(input: unknown): Partial<SlackLabels> {
   const out: Partial<SlackLabels> = {};
   if (!input || typeof input !== "object") return out;
   for (const k of Object.keys(SLACK_LABELS_DEFAULT) as (keyof SlackLabels)[]) {
-    const v = (input as Record<string, unknown>)[k];
-    if (typeof v === "string" && v.trim()) out[k] = v.trim().slice(0, 200);
+    const raw = (input as Record<string, unknown>)[k];
+    const v = typeof raw === "string" ? raw.trim().slice(0, 200) : "";
+    if (!v) continue;
+    if (k === "sort" && !(SLACK_SORTS as readonly string[]).includes(v)) continue;
+    if (k === "group" && !(SLACK_GROUPS as readonly string[]).includes(v)) continue;
+    if (k === "line" && slackLineError(v)) continue;
+    out[k] = v;
   }
   return out;
 }
 
+/**
+ * The Slack summary after a scan, in plain Thai with each campaign named.
+ * Pure (no I/O) so the check can pin the wording. `names` maps campaign_id →
+ * hotel + campaign name; `owners` maps a bare account id → the Specialists who
+ * look after it, and each section groups by them (or by hotel / not at all,
+ * per labels.group); `link` is the ADSCAN URL when the site URL is known.
+ */
 export function slackSummary(p: {
   day: string; created: Episode[]; touched: Episode[];
   names: Map<string, { hotel: string; campaign: string }>; owners: Map<string, string[]>; link: string | null;
   labels?: Partial<SlackLabels>;
 }): string {
-  const MAX = 30; // per person — Slack stays readable; the rest is on the page
+  const MAX = 30; // per group — Slack stays readable; the rest is on the page
   const L = { ...SLACK_LABELS_DEFAULT, ...p.labels };
   const NO_OWNER = L.noOwner;
   const dayDiff = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
   const thDay = new Date(p.day + "T00:00:00Z").toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
-  const name = (e: Episode) => {
-    const n = p.names.get(e.campaign_id);
-    return `${n?.hotel ?? e.account_id} — ${n?.campaign ?? e.campaign_id}`;
-  };
+  const hotelOf = (e: Episode) => p.names.get(e.campaign_id)?.hotel ?? e.account_id;
+  const campaignOf = (e: Episode) => p.names.get(e.campaign_id)?.campaign ?? e.campaign_id;
   const sev = (e: Episode) => (e.sev === "critical" ? "เร่งด่วน" : "ควรดู");
   // Every ADSCAN metric is a cost, so "too high" is the failure.
   const METRIC_TH: Record<string, string> = {
@@ -327,36 +358,47 @@ export function slackSummary(p: {
     cost_per_lead: "ต้นทุนต่อ Lead", cost_per_purchase: "ต้นทุนต่อการซื้อ", cost_per_result: "ต้นทุนต่อผลลัพธ์",
   };
   const metric = (e: Episode) => METRIC_TH[e.metric] ?? e.metric;
-  const list = (title: string, eps: Episode[], detail: (e: Episode) => string) => {
+
+  const bySeverity = (a: Episode, b: Episode) => (a.sev === b.sev ? a.first_seen.localeCompare(b.first_seen) : a.sev === "critical" ? -1 : 1);
+  const SORTS: Record<string, (a: Episode, b: Episode) => number> = {
+    severity_age: bySeverity,
+    age: (a, b) => a.first_seen.localeCompare(b.first_seen),
+    newest: (a, b) => b.first_seen.localeCompare(a.first_seen),
+    hotel: (a, b) => hotelOf(a).localeCompare(hotelOf(b), "th") || campaignOf(a).localeCompare(campaignOf(b), "th"),
+  };
+  const order = SORTS[L.sort] ?? bySeverity;
+
+  type Vars = Parameters<typeof renderSlackLine>[1];
+  const list = (title: string, eps: Episode[], vars: (e: Episode) => Vars) => {
     if (!eps.length) return [];
-    // Shared accounts list under each owner; the header still counts campaigns once.
+    // Owner grouping: shared accounts list under each owner; the header still counts campaigns once.
     const groups = new Map<string, Episode[]>();
-    for (const e of eps) {
-      for (const who of p.owners.get(e.account_id.replace(/^act_/, "")) ?? [NO_OWNER]) groups.set(who, [...(groups.get(who) ?? []), e]);
+    for (const e of [...eps].sort(order)) {
+      const keys = L.group === "hotel" ? [hotelOf(e)] : L.group === "none" ? [""] : p.owners.get(e.account_id.replace(/^act_/, "")) ?? [NO_OWNER];
+      for (const k of keys) groups.set(k, [...(groups.get(k) ?? []), e]);
     }
-    const order = [...groups.keys()].sort((a, b) => (a === NO_OWNER ? 1 : b === NO_OWNER ? -1 : a.localeCompare(b)));
-    return ["", `*${title} ${eps.length} แคมเปญ*`, ...order.flatMap((who) => {
-      const mine = groups.get(who)!;
-      const lines = mine.slice(0, MAX).map((e) => `• ${name(e)} (${detail(e)})`);
+    const keys = [...groups.keys()].sort((a, b) => (a === NO_OWNER ? 1 : b === NO_OWNER ? -1 : a.localeCompare(b, "th")));
+    return ["", `*${title} ${eps.length} แคมเปญ*`, ...keys.flatMap((k) => {
+      const mine = groups.get(k)!;
+      const lines = mine.slice(0, MAX).map((e) => `• ${renderSlackLine(L.line, { hotel: hotelOf(e), campaign: campaignOf(e), ...vars(e) })}`);
       if (mine.length > MAX) lines.push(`และอีก ${mine.length - MAX} แคมเปญ`);
-      return ["", `*Account: ${who}*`, ...lines];
+      return L.group === "none" ? lines : ["", L.group === "hotel" ? `*${k}*` : `*Account: ${k}*`, ...lines];
     })];
   };
-  const bySeverity = (a: Episode, b: Episode) => (a.sev === b.sev ? a.first_seen.localeCompare(b.first_seen) : a.sev === "critical" ? -1 : 1);
 
   const isNew = (e: Episode) => e.first_seen === p.day && e.closed_at == null;
-  const fresh = p.created.filter(isNew).sort(bySeverity);
-  const pending = [...p.touched, ...p.created].filter((e) => e.closed_at == null && !isNew(e)).sort(bySeverity);
+  const fresh = p.created.filter(isNew);
+  const pending = [...p.touched, ...p.created].filter((e) => e.closed_at == null && !isNew(e));
   const closed = p.touched.filter((e) => e.closed_at != null);
   const fixed = closed.filter((e) => e.close_reason === "improved");
   const stopped = closed.filter((e) => e.close_reason !== "improved");
 
   const lines = [
     L.title.replaceAll("{date}", thDay),
-    ...list(L.fresh, fresh, (e) => `${metric(e)} สูงเกินเกณฑ์, ${sev(e)}`),
-    ...list(L.pending, pending, (e) => `${metric(e)} สูงเกินเกณฑ์, ${sev(e)}, ค้างมา ${dayDiff(e.first_seen, p.day) + 1} วัน`),
-    ...list(L.fixed, fixed, (e) => `${metric(e)} กลับมาอยู่ในเกณฑ์`),
-    ...list(L.stopped, stopped, () => "หยุดยิงหรือใช้งบน้อยเกินกว่าจะตัดสิน"),
+    ...list(L.fresh, fresh, (e) => ({ metric: metric(e), status: "สูงเกินเกณฑ์", severity: sev(e) })),
+    ...list(L.pending, pending, (e) => ({ metric: metric(e), status: "สูงเกินเกณฑ์", severity: sev(e), days: `ค้างมา ${dayDiff(e.first_seen, p.day) + 1} วัน` })),
+    ...list(L.fixed, fixed, (e) => ({ metric: metric(e), status: "กลับมาอยู่ในเกณฑ์" })),
+    ...list(L.stopped, stopped, () => ({ status: "หยุดยิงหรือใช้งบน้อยเกินกว่าจะตัดสิน" })),
   ];
   if (!fresh.length && !pending.length && !closed.length) lines.push("", L.empty);
   lines.push("", L.footer.replaceAll("{link}", p.link ? `<${p.link}|ADSCAN>` : "หน้า ADSCAN"));

@@ -3,7 +3,7 @@
  * Run: node --experimental-strip-types lib/adscan.check.ts
  */
 import assert from "node:assert/strict";
-import { applyDay, cleanSlackLabels, evaluate, slackSummary, type Episode, type RawRow, type Template, type Verdict } from "./adscan.ts";
+import { SLACK_LABELS_DEFAULT, applyDay, cleanSlackLabels, evaluate, renderSlackLine, slackLineError, slackSummary, type Episode, type RawRow, type Template, type Verdict } from "./adscan.ts";
 
 const T: Template[] = [
   { name: "Message Campaign", metric: "cost_per_message", direction: "lower_better", green_min: 54, yellow_min: 66, green_op: "<=", yellow_op: "<=", campaign_filter: "MES" },
@@ -107,6 +107,30 @@ assert.equal(created[1].close_reason, "stopped", "campaign gone from the data = 
   assert.match(custom, /^\*รายงาน 26 ต\.ค\. 2569\*\n\n\*เรื่องใหม่ 1 แคมเปญ\*\n\n\*Account: ไม่มีเจ้าของ\*/);
   assert.match(custom, /เปิดดูที่ หน้า ADSCAN$/, "{link} falls back when the site URL is unknown");
   assert.deepEqual(cleanSlackLabels({ bogus: "x", title: 5, fresh: "a".repeat(500) }), { fresh: "a".repeat(200) }, "unknown keys and non-strings dropped, length capped");
+
+  // line format: reorder, drop, and punctuation tidy-up when a value doesn't apply
+  assert.equal(slackLineError("{hotel} {nope} {campaign}"), "ไม่รู้จักตัวแปร {nope} — ใช้ได้เฉพาะ {hotel} {campaign} {metric} {status} {severity} {days}");
+  assert.match(slackLineError("{hotel} only") ?? "", /ต้องมี \{campaign\}/);
+  assert.equal(slackLineError("{campaign} @ {hotel}"), null);
+  assert.equal(renderSlackLine("{campaign} @ {hotel} · {severity} · {days}", { campaign: "C", hotel: "H", severity: "ควรดู" }), "C @ H · ควรดู ·", "empty {days} leaves only the plain separator");
+  assert.equal(renderSlackLine("[{severity}] {hotel} — {campaign} {days}", { hotel: "H", campaign: "C" }), "H — C", "empty [] is dropped too");
+  assert.equal(renderSlackLine(SLACK_LABELS_DEFAULT.line, { hotel: "H", campaign: "C", metric: "M", status: "S" }), "H — C (M S)", "default format on a row with no severity/days");
+  assert.deepEqual(cleanSlackLabels({ line: "{hotel} {nope}", sort: "bogus", group: "hotel" }), { group: "hotel" }, "invalid line/sort ignored, valid group kept");
+
+  // group by hotel and sort by age (oldest first), flat list when group is "none"
+  const eps = [
+    ep("c1", { account_id: "1", first_seen: "2026-10-22", sev: "medium" }),
+    ep("c2", { account_id: "act_2", first_seen: "2026-10-10" }),
+    ep("c3", { account_id: "3", first_seen: "2026-10-01" }),
+  ];
+  const base = { day: "2026-10-26", created: [], touched: eps, names, owners: new Map<string, string[]>(), link: null };
+  const byHotel = slackSummary({ ...base, labels: { group: "hotel", sort: "age" } });
+  assert.match(byHotel, /\*Hotel A\*\n• Hotel A — MES Oct/);
+  assert.match(byHotel, /\*Hotel B\*\n• Hotel B — AWN Reach/);
+  assert.doesNotMatch(byHotel, /Account:/);
+  const flat = slackSummary({ ...base, labels: { group: "none", sort: "age" } });
+  assert.match(flat, /แคมเปญ\*\n• Hotel C — MES Sep.*\n• Hotel B — AWN Reach.*\n• Hotel A — MES Oct/, "oldest first, no group headers");
+  assert.doesNotMatch(flat, /Account:/);
 }
 
 console.log("OK — adscan: persistent episodes, severity bands, culprit/best, effect, wait, zero-result, unsupported templates, slack summary");
