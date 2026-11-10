@@ -35,8 +35,8 @@ export async function POST(req: NextRequest) {
   try {
     if (b.previewLabels !== undefined || b.labels !== undefined) {
       // Say why a bad template is refused (line number + reason) instead of silently using defaults.
-      const { labels, error } = slackLabelsFromForm(b.previewLabels ?? b.labels);
-      if (error) return NextResponse.json({ error }, { status: 400 });
+      const { labels, error, line } = slackLabelsFromForm(b.previewLabels ?? b.labels);
+      if (error) return NextResponse.json({ error, line }, { status: 400 });
       if (b.previewLabels !== undefined) {
         const text = await previewSummary(labels);
         return NextResponse.json({ text: text ?? "ยังไม่มีข้อมูลที่ตรวจแล้ว จึงยังสร้างตัวอย่างไม่ได้" });

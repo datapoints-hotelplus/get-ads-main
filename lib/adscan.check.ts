@@ -165,6 +165,21 @@ assert.equal(created[1].close_reason, "stopped", "campaign gone from the data = 
   assert.match(slackTemplateToLabels("*{section}*\n{campaign} {n}").error ?? "", /บรรทัดแคมเปญ: ไม่รู้จักตัวแปร \{n\}/, "{n} is not a campaign-line variable");
   assert.match(slackTemplateToLabels("*{section}*\nplain text").error ?? "", /ไม่พบบรรทัดโครงสร้าง|ต้องมีบรรทัดแคมเปญ/);
   assert.match(slackTemplateToLabels("*{section}*\n{hotel}\nstray\n{campaign}").error ?? "", /บรรทัดที่ 3 “stray” ไม่รู้ว่าเป็นส่วนไหน/);
+  // no section heading line = one merged list; the {status} / {days} in each line still tell the kinds apart
+  const mergedTpl = target.replace("*{section} {count} แคมเปญ*\n\n", "");
+  const m = slackTemplateToLabels(mergedTpl);
+  assert.equal(m.error, null, "section heading is optional");
+  assert.equal(m.labels.sections, "merged");
+  assert.equal(slackTemplateFromLabels(m.labels).includes("{section}"), false, "merged template shows no section line");
+  const mergedOut = slackSummary({
+    ...base, created: [ep("c1", { account_id: "1" })], touched: [ep("c2", { account_id: "act_2", first_seen: "2026-10-20" })],
+    owners: new Map([["1", ["BEER"]], ["2", ["BEER"]]]), labels: { ...m.labels, line: "{campaign} ({status}, {days})" },
+  });
+  assert.doesNotMatch(mergedOut, /แคมเปญ\*\n/, "no section heading");
+  assert.match(mergedOut, /\*Account: BEER\*\n1\. Hotel B\n• AWN Reach \(สูงเกินเกณฑ์, ค้างมา 7 วัน\)\n\n2\. Hotel A\n• MES Oct \(สูงเกินเกณฑ์\)/, "new + pending under one owner, one list, oldest first");
+  assert.equal((mergedOut.match(/Account:/g) ?? []).length, 1, "owner heading appears once, not once per section");
+  assert.match(slackTemplateToLabels("*x*\n{hotel}\n{owner}\n{campaign}").error ?? "", /ลำดับต้องเป็น/);
+  assert.equal(slackTemplateToLabels("*x*\n{hotel}\n{owner}\n{campaign}").line, 3, "error carries the line number");
   // form: the template decides structure, the small fields still apply, no template = plain labels
   const form = slackLabelsFromForm({ template: target, fresh: "ใหม่", group: "none", line: "ignored {campaign}" });
   assert.equal(form.labels.fresh, "ใหม่");

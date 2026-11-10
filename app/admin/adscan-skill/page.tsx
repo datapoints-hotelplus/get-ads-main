@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ReactSelect from "react-select";
 import AppHeader from "@/app/components/AppHeader";
 import type { AdscanPayload } from "@/lib/adscanData";
@@ -54,6 +54,11 @@ const TEMPLATE_EXAMPLES: { note: string; text: string; out: string }[] = [
     out: "Account: Beer Marcom\n1. Sea U Pattaya\n• MES | SEA U PATTAYA (ต้นทุนต่อข้อความ สูงเกินเกณฑ์, เร่งด่วน, ค้างมา 56 วัน)",
   },
   {
+    note: "รวมทุกหมวดเป็นรายการเดียว ไม่มีหัวหมวด (ลบบรรทัด {section} ออก)",
+    text: "*สรุปแคมเปญที่ต้องดูแล ข้อมูลวันที่ {date}*\n\n*Account: {owner}*\n{n}. {hotel}\n{campaign} ({metric} {status}, {severity}, {days})\n\nดูรายละเอียดได้ที่ {link}",
+    out: "Account: Beer Marcom\n1. Sea U Pattaya\n• MES | SEA U PATTAYA (ต้นทุนต่อข้อความ สูงเกินเกณฑ์, เร่งด่วน, ค้างมา 56 วัน)\n• (แคมเปญที่กลับมาปกติแล้วอยู่ในรายการเดียวกัน ขึ้นว่า “กลับมาอยู่ในเกณฑ์”)",
+  },
+  {
     note: "จัดกลุ่มตามโรงแรมอย่างเดียว (หัวโรงแรมตัวหนา)",
     text: `${TEMPLATE_HEAD}*{hotel}*\n{campaign} ({metric} {status}, {severity}, {days})${TEMPLATE_FOOT}`,
     out: "Sea U Pattaya\n• MES | SEA U PATTAYA (ต้นทุนต่อข้อความ สูงเกินเกณฑ์, เร่งด่วน, ค้างมา 56 วัน)",
@@ -64,6 +69,24 @@ const TEMPLATE_EXAMPLES: { note: string; text: string; out: string }[] = [
     out: "• Sea U Pattaya — MES | SEA U PATTAYA (ต้นทุนต่อข้อความ สูงเกินเกณฑ์, เร่งด่วน, ค้างมา 56 วัน)",
   },
 ];
+/** A failed call to /api/admin/adscan-settings: `status` 0 = never reached the server; `line` = the template line to blame. */
+class SlackCallError extends Error {
+  status: number;
+  line?: number;
+  constructor(message: string, status: number, line?: number) {
+    super(message);
+    this.status = status;
+    this.line = line;
+  }
+}
+type SlackErr = { title: string; message: string; detail?: string; line?: number };
+/** User-facing wording first (Thai); the raw status/message stays folded under “รายละเอียด”. */
+function describeSlackErr(e: unknown): SlackErr {
+  if (e instanceof SlackCallError && e.status === 400) return { title: "ข้อความยังไม่ถูกต้อง จึงยังไม่ได้บันทึก", message: e.message, line: e.line };
+  if (e instanceof SlackCallError && e.status === 401) return { title: "หมดเวลาการเข้าสู่ระบบ", message: "กรุณาเข้าสู่ระบบใหม่แล้วลองอีกครั้ง", detail: `HTTP ${e.status}: ${e.message}` };
+  if (e instanceof SlackCallError && e.status > 0) return { title: "ระบบขัดข้อง ยังไม่ได้บันทึก", message: "เกิดข้อผิดพลาดจากเซิร์ฟเวอร์ ลองใหม่อีกครั้ง ถ้ายังไม่ได้ให้แจ้งผู้ดูแลระบบ", detail: `HTTP ${e.status}: ${e.message}` };
+  return { title: "เชื่อมต่อเซิร์ฟเวอร์ไม่ได้", message: "ตรวจการเชื่อมต่ออินเทอร์เน็ตแล้วลองใหม่อีกครั้ง", detail: e instanceof Error ? e.message : String(e) };
+}
 const when = (iso: string) => new Date(iso).toLocaleString("th-TH", { day: "numeric", month: "short", year: "2-digit", hour: "2-digit", minute: "2-digit" });
 
 /** TOR ส่วนที่ 6: edit the AI Skill without touching code; every save is a new version (history). */
@@ -86,6 +109,9 @@ export default function AdscanSkillAdmin() {
   const [labelsForm, setLabelsForm] = useState<Record<string, string>>({});
   const [labelsPreview, setLabelsPreview] = useState("");
   const [helpOpen, setHelpOpen] = useState(false);
+  const [labelsErr, setLabelsErr] = useState<SlackErr | null>(null);
+  const [labelsOk, setLabelsOk] = useState("");
+  const templateRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     if (!helpOpen) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setHelpOpen(false);
@@ -95,8 +121,28 @@ export default function AdscanSkillAdmin() {
   async function slackCall(body: object) {
     const r = await fetch("/api/admin/adscan-settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(j.error || "ไม่สำเร็จ");
+    if (!r.ok) throw new SlackCallError(j.error || r.statusText || "ไม่สำเร็จ", r.status, j.line);
     return j;
+  }
+  /** Same as run() but the error is shown right under the textarea, and the faulty line is selected. */
+  async function runLabels(kind: string, fn: () => Promise<void>) {
+    setBusy(kind);
+    setLabelsErr(null);
+    setLabelsOk("");
+    try {
+      await fn();
+    } catch (e) {
+      const err = describeSlackErr(e);
+      setLabelsErr(err);
+      const ta = templateRef.current;
+      if (ta && err.line) {
+        const lines = (labelsForm.template ?? "").split(/\r?\n/);
+        const start = lines.slice(0, err.line - 1).reduce((n, l) => n + l.length + 1, 0);
+        ta.focus();
+        ta.setSelectionRange(start, start + (lines[err.line - 1]?.length ?? 0));
+      }
+    }
+    setBusy("");
   }
 
   const load = useCallback(
@@ -317,13 +363,28 @@ export default function AdscanSkillAdmin() {
               <span className="text-gray-600">ข้อความทั้งหมด <span className="text-xs text-gray-400">· ใส่ *…* เพื่อทำตัวหนา · ระบบใส่ • หน้าบรรทัดแคมเปญให้เอง</span></span>
               <textarea
                 id="slack-template"
+                ref={templateRef}
                 value={labelsForm.template ?? ""}
                 onChange={(e) => setLabelsForm({ ...labelsForm, template: e.target.value })}
                 rows={10}
                 spellCheck={false}
-                className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono leading-relaxed"
+                aria-invalid={!!labelsErr?.line}
+                className={`mt-1 w-full border rounded-lg px-3 py-2 text-sm font-mono leading-relaxed ${labelsErr ? "border-red-400" : "border-gray-300"}`}
               />
             </label>
+            {labelsErr && (
+              <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 space-y-1">
+                <div className="font-semibold">{labelsErr.title}</div>
+                <div>{labelsErr.message}</div>
+                {labelsErr.line && <div className="text-xs text-red-700">บรรทัดที่ {labelsErr.line} ถูกเลือกไว้ในช่องข้อความให้แล้ว</div>}
+                {labelsErr.detail && (
+                  <details className="text-xs text-red-700">
+                    <summary className="cursor-pointer">รายละเอียด</summary>
+                    <pre className="mt-1 whitespace-pre-wrap">{labelsErr.detail}</pre>
+                  </details>
+                )}
+              </div>
+            )}
 
             <div className="grid gap-3 sm:grid-cols-2">
               {LABEL_FIELDS.map((f) => (
@@ -353,13 +414,13 @@ export default function AdscanSkillAdmin() {
             <div className="flex flex-wrap gap-2 justify-end">
               <button
                 disabled={!!busy}
-                onClick={() => run("labelreset", async () => {
+                onClick={() => runLabels("labelreset", async () => {
                   if (!confirm("คืนข้อความทั้งหมดเป็นค่าเริ่มต้น?")) return;
                   const j = await slackCall({ labels: {} });
                   setSlack(j);
                   setLabelsForm({ ...j.labels, template: j.template });
                   setLabelsPreview("");
-                  setSlackMsg("คืนค่าเริ่มต้นแล้ว");
+                  setLabelsOk("คืนค่าเริ่มต้นแล้ว");
                 })}
                 className="px-4 min-h-11 rounded-lg border border-gray-300 text-gray-700 font-semibold disabled:opacity-40"
               >
@@ -367,7 +428,7 @@ export default function AdscanSkillAdmin() {
               </button>
               <button
                 disabled={!!busy}
-                onClick={() => run("labelpreview", async () => {
+                onClick={() => runLabels("labelpreview", async () => {
                   const j = await slackCall({ previewLabels: labelsForm });
                   setLabelsPreview(j.text);
                 })}
@@ -377,17 +438,18 @@ export default function AdscanSkillAdmin() {
               </button>
               <button
                 disabled={!!busy}
-                onClick={() => run("labelsave", async () => {
+                onClick={() => runLabels("labelsave", async () => {
                   const j = await slackCall({ labels: labelsForm });
                   setSlack(j);
                   setLabelsForm({ ...j.labels, template: j.template });
-                  setSlackMsg("บันทึกข้อความแล้ว จะใช้กับการแจ้งเตือนรอบถัดไป");
+                  setLabelsOk("บันทึกข้อความแล้ว จะใช้กับการแจ้งเตือนรอบถัดไป");
                 })}
                 className="px-4 min-h-11 rounded-lg bg-secondary text-white font-semibold disabled:opacity-40"
               >
                 {busy === "labelsave" ? "กำลังบันทึก…" : "บันทึกข้อความ"}
               </button>
             </div>
+            {labelsOk && <div role="status" className="rounded-lg border border-green-200 bg-green-50 px-4 py-2.5 text-sm text-green-800">{labelsOk}</div>}
             {labelsPreview && <pre className="bg-gray-50 rounded-lg p-3 text-sm whitespace-pre-wrap font-sans">{labelsPreview}</pre>}
           </div>
         </div>
@@ -444,7 +506,7 @@ export default function AdscanSkillAdmin() {
               <p className="text-gray-700">ในช่องเขียนตัวอย่างข้อความหนึ่งชุด ระบบดูว่าแต่ละบรรทัดมีตัวแปรอะไร แล้วเอาไปทำซ้ำกับข้อมูลจริง บรรทัดว่างไม่มีผล</p>
               <ul className="list-disc pl-5 space-y-1 text-gray-700">
                 <li>บรรทัดที่มี <code>{"{campaign}"}</code> = บรรทัดของแต่ละแคมเปญ (ต้องมี และมีได้บรรทัดเดียว)</li>
-                <li>บรรทัดที่มี <code>{"{section}"}</code> หรือ <code>{"{count}"}</code> = หัวหมวด (พบปัญหาใหม่ / ยังไม่ได้แก้ / กลับมาปกติแล้ว / หยุดติดตาม) ต้องมี</li>
+                <li>บรรทัดที่มี <code>{"{section}"}</code> หรือ <code>{"{count}"}</code> = หัวหมวด (พบปัญหาใหม่ / ยังไม่ได้แก้ / กลับมาปกติแล้ว / หยุดติดตาม) <strong>ลบบรรทัดนี้ = รวมทุกหมวดเป็นรายการเดียว ไม่มีหัวหมวด</strong> (ใช้ <code>{"{status}"}</code> ในบรรทัดแคมเปญบอกว่าแคมเปญนั้นอยู่สถานะไหน)</li>
                 <li>บรรทัดที่มี <code>{"{owner}"}</code> = หัวผู้ดูแล <strong>ลบบรรทัดนี้ = ไม่จัดกลุ่มตามผู้ดูแล</strong></li>
                 <li>บรรทัดที่มี <code>{"{hotel}"}</code> หรือ <code>{"{n}"}</code> แต่ไม่มี <code>{"{campaign}"}</code> = หัวโรงแรม <strong>ลบบรรทัดนี้ = ไม่แยกโรงแรม</strong></li>
                 <li>บรรทัดที่อยู่เหนือหัวหมวด = หัวเรื่อง และบรรทัดที่อยู่ใต้บรรทัดแคมเปญ = ข้อความท้าย ถ้าลบออก ระบบใช้ข้อความเริ่มต้น</li>
