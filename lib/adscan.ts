@@ -292,6 +292,7 @@ export const SLACK_LABELS_DEFAULT = {
   footer: "ดูรายละเอียดได้ที่ {link}", // {link} = <url|ADSCAN>, or "หน้า ADSCAN" when the site URL is unknown
   line: "{hotel} — {campaign} ({metric} {status}, {severity}, {days})", // one line per campaign
   hotelHeading: "{n}. {hotel}", // hotel heading under an owner (group "owner_hotel"); {n} = 1, 2, 3 … restarting per owner
+  hotelGroup: "*{hotel}*", // hotel heading when grouping by hotel alone (group "hotel"); {n} = 1, 2, 3 … per section
   sort: "severity_age", // one of SLACK_SORTS
   group: "owner", // one of SLACK_GROUPS
 };
@@ -301,7 +302,10 @@ export type SlackLabels = typeof SLACK_LABELS_DEFAULT;
 export function slackLineError(format: string): string | null {
   if (format.length > 200) return "รูปแบบบรรทัดยาวเกิน 200 ตัวอักษร";
   const unknown = [...format.matchAll(/\{(\w*)\}/g)].map((m) => m[1]).filter((v) => !(SLACK_LINE_VARS as readonly string[]).includes(v));
-  if (unknown.length) return `ไม่รู้จักตัวแปร ${unknown.map((v) => `{${v}}`).join(" ")} — ใช้ได้เฉพาะ ${SLACK_LINE_VARS.map((v) => `{${v}}`).join(" ")}`;
+  if (unknown.length) {
+    const hint = unknown.includes("n") ? " ({n} ใช้ได้เฉพาะช่อง “หัวโรงแรม” ไม่ใช่ช่องรูปแบบบรรทัดของแคมเปญ)" : "";
+    return `ไม่รู้จักตัวแปร ${unknown.map((v) => `{${v}}`).join(" ")} — ใช้ได้เฉพาะ ${SLACK_LINE_VARS.map((v) => `{${v}}`).join(" ")}${hint}`;
+  }
   if (!format.includes("{campaign}")) return "รูปแบบบรรทัดต้องมี {campaign}";
   return null;
 }
@@ -336,7 +340,7 @@ export function cleanSlackLabels(input: unknown): Partial<SlackLabels> {
     if (k === "sort" && !(SLACK_SORTS as readonly string[]).includes(v)) continue;
     if (k === "group" && !(SLACK_GROUPS as readonly string[]).includes(v)) continue;
     if (k === "line" && slackLineError(v)) continue;
-    if (k === "hotelHeading" && slackHeadingError(v)) continue;
+    if ((k === "hotelHeading" || k === "hotelGroup") && slackHeadingError(v)) continue;
     out[k] = v;
   }
   return out;
@@ -389,7 +393,7 @@ export function slackSummary(p: {
     }
     const keys = [...groups.keys()].sort((a, b) => (a === NO_OWNER ? 1 : b === NO_OWNER ? -1 : a.localeCompare(b, "th")));
     const row = (e: Episode) => `• ${renderSlackLine(L.line, { hotel: hotelOf(e), campaign: campaignOf(e), ...vars(e) })}`;
-    return ["", `*${title} ${eps.length} แคมเปญ*`, ...keys.flatMap((k) => {
+    return ["", `*${title} ${eps.length} แคมเปญ*`, ...keys.flatMap((k, ki) => {
       const mine = groups.get(k)!;
       const more = mine.length > MAX ? [`และอีก ${mine.length - MAX} แคมเปญ`] : [];
       if (L.group === "none") return [...mine.slice(0, MAX).map(row), ...more];
@@ -399,7 +403,8 @@ export function slackSummary(p: {
         for (const e of mine.slice(0, MAX)) byHotel.set(hotelOf(e), [...(byHotel.get(hotelOf(e)) ?? []), e]);
         return [`*Account: ${k}*`, ...[...byHotel].flatMap(([hotel, es], i) => [...(i ? [""] : []), L.hotelHeading.replaceAll("{n}", String(i + 1)).replaceAll("{hotel}", hotel), ...es.map(row)]), ...more].flatMap((l, i) => (i === 0 ? ["", l] : [l]));
       }
-      return ["", L.group === "hotel" ? `*${k}*` : `*Account: ${k}*`, ...mine.slice(0, MAX).map(row), ...more];
+      const head = L.group === "hotel" ? L.hotelGroup.replaceAll("{n}", String(ki + 1)).replaceAll("{hotel}", k) : `*Account: ${k}*`;
+      return ["", head, ...mine.slice(0, MAX).map(row), ...more];
     })];
   };
 

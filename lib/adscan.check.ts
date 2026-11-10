@@ -110,6 +110,7 @@ assert.equal(created[1].close_reason, "stopped", "campaign gone from the data = 
 
   // line format: reorder, drop, and punctuation tidy-up when a value doesn't apply
   assert.equal(slackLineError("{hotel} {nope} {campaign}"), "ไม่รู้จักตัวแปร {nope} — ใช้ได้เฉพาะ {hotel} {campaign} {metric} {status} {severity} {days}");
+  assert.match(slackLineError("{n}. {campaign}") ?? "", /ไม่รู้จักตัวแปร \{n\}.*หัวโรงแรม/, "{n} in the campaign line points to the heading field");
   assert.match(slackLineError("{hotel} only") ?? "", /ต้องมี \{campaign\}/);
   assert.equal(slackLineError("{campaign} @ {hotel}"), null);
   assert.equal(renderSlackLine("{campaign} @ {hotel} · {severity} · {days}", { campaign: "C", hotel: "H", severity: "ควรดู" }), "C @ H · ควรดู ·", "empty {days} leaves only the plain separator");
@@ -141,6 +142,8 @@ assert.equal(created[1].close_reason, "stopped", "campaign gone from the data = 
   assert.match(two, /\*Account: OAM\*\n1\. Hotel C\n• MES Sep/, "numbering restarts per owner");
   const bold = slackSummary({ ...base, owners: new Map([["1", ["BEER"]]]), labels: { group: "owner_hotel", hotelHeading: "*{n}) {hotel}*" } });
   assert.match(bold, /\*Account: BEER\*\n\*1\) Hotel A\*\n• /, "hotel heading is editable");
+  const hg = slackSummary({ ...base, labels: { group: "hotel", sort: "age", hotelGroup: "{n}) {hotel}" } });
+  assert.match(hg, /\n1\) Hotel A\n• .*\n\n2\) Hotel B\n• .*\n\n3\) Hotel C\n• /, "hotel-only heading is editable, numbered (hotels A–Z)");
   assert.equal(slackHeadingError("{n}. no hotel"), "หัวโรงแรมต้องมี {hotel}");
   assert.match(slackHeadingError("{n} {hotel} {x}") ?? "", /ไม่รู้จักตัวแปร \{x\}/);
   assert.deepEqual(cleanSlackLabels({ hotelHeading: "{n}. nope" }), {}, "invalid heading ignored");
