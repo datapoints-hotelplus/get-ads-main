@@ -277,7 +277,7 @@ export function applyDay(open: Map<string, Episode>, created: Episode[], verdict
 
 
 export const SLACK_SORTS = ["severity_age", "age", "newest", "hotel"] as const;
-export const SLACK_GROUPS = ["owner", "hotel", "none"] as const;
+export const SLACK_GROUPS = ["owner", "owner_hotel", "hotel", "none"] as const;
 /** Placeholders usable in the per-campaign line format. */
 export const SLACK_LINE_VARS = ["hotel", "campaign", "metric", "status", "severity", "days"] as const;
 
@@ -291,6 +291,7 @@ export const SLACK_LABELS_DEFAULT = {
   empty: "ไม่มีแคมเปญที่ต้องดูแลในวันนี้",
   footer: "ดูรายละเอียดได้ที่ {link}", // {link} = <url|ADSCAN>, or "หน้า ADSCAN" when the site URL is unknown
   line: "{hotel} — {campaign} ({metric} {status}, {severity}, {days})", // one line per campaign
+  hotelHeading: "{n}. {hotel}", // hotel heading under an owner (group "owner_hotel"); {n} = 1, 2, 3 … restarting per owner
   sort: "severity_age", // one of SLACK_SORTS
   group: "owner", // one of SLACK_GROUPS
 };
@@ -302,6 +303,14 @@ export function slackLineError(format: string): string | null {
   const unknown = [...format.matchAll(/\{(\w*)\}/g)].map((m) => m[1]).filter((v) => !(SLACK_LINE_VARS as readonly string[]).includes(v));
   if (unknown.length) return `ไม่รู้จักตัวแปร ${unknown.map((v) => `{${v}}`).join(" ")} — ใช้ได้เฉพาะ ${SLACK_LINE_VARS.map((v) => `{${v}}`).join(" ")}`;
   if (!format.includes("{campaign}")) return "รูปแบบบรรทัดต้องมี {campaign}";
+  return null;
+}
+
+/** Same for the hotel heading: only {n} and {hotel}, and it must name the hotel. */
+export function slackHeadingError(format: string): string | null {
+  const unknown = [...format.matchAll(/\{(\w*)\}/g)].map((m) => m[1]).filter((v) => v !== "n" && v !== "hotel");
+  if (unknown.length) return `หัวโรงแรมไม่รู้จักตัวแปร ${unknown.map((v) => `{${v}}`).join(" ")} — ใช้ได้เฉพาะ {n} และ {hotel}`;
+  if (!format.includes("{hotel}")) return "หัวโรงแรมต้องมี {hotel}";
   return null;
 }
 
@@ -327,6 +336,7 @@ export function cleanSlackLabels(input: unknown): Partial<SlackLabels> {
     if (k === "sort" && !(SLACK_SORTS as readonly string[]).includes(v)) continue;
     if (k === "group" && !(SLACK_GROUPS as readonly string[]).includes(v)) continue;
     if (k === "line" && slackLineError(v)) continue;
+    if (k === "hotelHeading" && slackHeadingError(v)) continue;
     out[k] = v;
   }
   return out;
@@ -378,11 +388,18 @@ export function slackSummary(p: {
       for (const k of keys) groups.set(k, [...(groups.get(k) ?? []), e]);
     }
     const keys = [...groups.keys()].sort((a, b) => (a === NO_OWNER ? 1 : b === NO_OWNER ? -1 : a.localeCompare(b, "th")));
+    const row = (e: Episode) => `• ${renderSlackLine(L.line, { hotel: hotelOf(e), campaign: campaignOf(e), ...vars(e) })}`;
     return ["", `*${title} ${eps.length} แคมเปญ*`, ...keys.flatMap((k) => {
       const mine = groups.get(k)!;
-      const lines = mine.slice(0, MAX).map((e) => `• ${renderSlackLine(L.line, { hotel: hotelOf(e), campaign: campaignOf(e), ...vars(e) })}`);
-      if (mine.length > MAX) lines.push(`และอีก ${mine.length - MAX} แคมเปญ`);
-      return L.group === "none" ? lines : ["", L.group === "hotel" ? `*${k}*` : `*Account: ${k}*`, ...lines];
+      const more = mine.length > MAX ? [`และอีก ${mine.length - MAX} แคมเปญ`] : [];
+      if (L.group === "none") return [...mine.slice(0, MAX).map(row), ...more];
+      if (L.group === "owner_hotel") {
+        // Hotels numbered 1., 2. … in the order of their first (top-sorted) campaign, restarting per owner.
+        const byHotel = new Map<string, Episode[]>();
+        for (const e of mine.slice(0, MAX)) byHotel.set(hotelOf(e), [...(byHotel.get(hotelOf(e)) ?? []), e]);
+        return [`*Account: ${k}*`, ...[...byHotel].flatMap(([hotel, es], i) => [...(i ? [""] : []), L.hotelHeading.replaceAll("{n}", String(i + 1)).replaceAll("{hotel}", hotel), ...es.map(row)]), ...more].flatMap((l, i) => (i === 0 ? ["", l] : [l]));
+      }
+      return ["", L.group === "hotel" ? `*${k}*` : `*Account: ${k}*`, ...mine.slice(0, MAX).map(row), ...more];
     })];
   };
 

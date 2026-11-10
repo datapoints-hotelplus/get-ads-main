@@ -3,7 +3,7 @@
  * Run: node --experimental-strip-types lib/adscan.check.ts
  */
 import assert from "node:assert/strict";
-import { SLACK_LABELS_DEFAULT, applyDay, cleanSlackLabels, evaluate, renderSlackLine, slackLineError, slackSummary, type Episode, type RawRow, type Template, type Verdict } from "./adscan.ts";
+import { SLACK_LABELS_DEFAULT, applyDay, cleanSlackLabels, evaluate, renderSlackLine, slackHeadingError, slackLineError, slackSummary, type Episode, type RawRow, type Template, type Verdict } from "./adscan.ts";
 
 const T: Template[] = [
   { name: "Message Campaign", metric: "cost_per_message", direction: "lower_better", green_min: 54, yellow_min: 66, green_op: "<=", yellow_op: "<=", campaign_filter: "MES" },
@@ -131,6 +131,19 @@ assert.equal(created[1].close_reason, "stopped", "campaign gone from the data = 
   const flat = slackSummary({ ...base, labels: { group: "none", sort: "age" } });
   assert.match(flat, /แคมเปญ\*\n• Hotel C — MES Sep.*\n• Hotel B — AWN Reach.*\n• Hotel A — MES Oct/, "oldest first, no group headers");
   assert.doesNotMatch(flat, /Account:/);
+
+  // owner › numbered hotel: hotels ordered by their top campaign, numbering restarts per owner, no blank line right after the owner
+  const two = slackSummary({
+    ...base, owners: new Map([["1", ["BEER"]], ["2", ["BEER"]], ["3", ["OAM"]]]),
+    labels: { group: "owner_hotel", sort: "age", line: "{campaign} ({metric} {status})" },
+  });
+  assert.match(two, /\*Account: BEER\*\n1\. Hotel B\n• AWN Reach \(ต้นทุนต่อข้อความ สูงเกินเกณฑ์\)\n\n2\. Hotel A\n• MES Oct \(/, "oldest hotel first, numbered");
+  assert.match(two, /\*Account: OAM\*\n1\. Hotel C\n• MES Sep/, "numbering restarts per owner");
+  const bold = slackSummary({ ...base, owners: new Map([["1", ["BEER"]]]), labels: { group: "owner_hotel", hotelHeading: "*{n}) {hotel}*" } });
+  assert.match(bold, /\*Account: BEER\*\n\*1\) Hotel A\*\n• /, "hotel heading is editable");
+  assert.equal(slackHeadingError("{n}. no hotel"), "หัวโรงแรมต้องมี {hotel}");
+  assert.match(slackHeadingError("{n} {hotel} {x}") ?? "", /ไม่รู้จักตัวแปร \{x\}/);
+  assert.deepEqual(cleanSlackLabels({ hotelHeading: "{n}. nope" }), {}, "invalid heading ignored");
 }
 
 console.log("OK — adscan: persistent episodes, severity bands, culprit/best, effect, wait, zero-result, unsupported templates, slack summary");

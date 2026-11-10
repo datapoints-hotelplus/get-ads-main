@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { WEBHOOK_PREFIX, getSlackLabels, getSlackSettings, saveSlackLabels, saveSlackSettings } from "@/lib/adscanSlack";
-import { SLACK_LABELS_DEFAULT, cleanSlackLabels, slackLineError } from "@/lib/adscan";
+import { SLACK_LABELS_DEFAULT, cleanSlackLabels, slackHeadingError, slackLineError } from "@/lib/adscan";
 import { previewSummary } from "@/lib/adscanScan";
 import { logAccess } from "@/lib/accessLog";
 
@@ -33,8 +33,9 @@ export async function POST(req: NextRequest) {
   try {
     // Say why a bad line format is refused instead of silently falling back to the default.
     for (const raw of [b.labels, b.previewLabels]) {
-      const line = (raw as { line?: unknown } | undefined)?.line;
-      const err = typeof line === "string" && line.trim() ? slackLineError(line.trim()) : null;
+      const f = (raw ?? {}) as { line?: unknown; hotelHeading?: unknown };
+      const check = (v: unknown, test: (s: string) => string | null) => (typeof v === "string" && v.trim() ? test(v.trim()) : null);
+      const err = check(f.line, slackLineError) ?? check(f.hotelHeading, slackHeadingError);
       if (err) return NextResponse.json({ error: err }, { status: 400 });
     }
     if (b.previewLabels !== undefined) {

@@ -14,6 +14,7 @@ const LABEL_FIELDS: { k: string; label: string; hint?: string }[] = [
   { k: "fixed", label: "หัวข้อ: กลับมาปกติแล้ว" },
   { k: "stopped", label: "หัวข้อ: หยุดติดตาม" },
   { k: "noOwner", label: "ชื่อกลุ่มเมื่อไม่มีผู้ดูแล" },
+  { k: "hotelHeading", label: "หัวโรงแรม (ใช้กับจัดกลุ่ม ผู้ดูแล › โรงแรม)", hint: "{n} = เลขลำดับ · {hotel} = ชื่อโรงแรม · ใส่ *…* เพื่อทำตัวหนา" },
   { k: "empty", label: "ข้อความเมื่อไม่มีเรื่องต้องดูแล" },
   { k: "footer", label: "ข้อความท้าย", hint: "{link} = ลิงก์ไปหน้า ADSCAN" },
 ];
@@ -25,6 +26,7 @@ const SORT_OPTIONS = [
 ];
 const GROUP_OPTIONS = [
   { v: "owner", label: "ผู้ดูแล (Specialist)" },
+  { v: "owner_hotel", label: "ผู้ดูแล › โรงแรม (มีเลขลำดับโรงแรม)" },
   { v: "hotel", label: "โรงแรม" },
   { v: "none", label: "ไม่จัดกลุ่ม (รายการเดียวต่อเนื่อง)" },
 ];
@@ -36,8 +38,9 @@ const LINE_VARS = [
   { v: "{severity}", note: "ระดับ (ไม่มีในหมวด “กลับมาปกติแล้ว” และ “หยุดติดตาม”)", ex: "ควรดู" },
   { v: "{days}", note: "จำนวนวันที่ค้าง (มีเฉพาะหมวด “ยังไม่ได้แก้”)", ex: "ค้างมา 4 วัน" },
 ];
-const LINE_EXAMPLES = [
+const LINE_EXAMPLES: { v: string; out: string; note: string; group?: string }[] = [
   { v: "{hotel} — {campaign} ({metric} {status}, {severity}, {days})", out: "Sea U Pattaya H+ — ENG VDO | Sea u pattaya (ต้นทุนต่อ Engagement สูงเกินเกณฑ์, ควรดู, ค้างมา 4 วัน)", note: "แบบเริ่มต้น" },
+  { v: "{campaign} ({metric} {status}, {severity}, {days})", out: "ENG VDO | Sea u pattaya (ต้นทุนต่อ Engagement สูงเกินเกณฑ์, ควรดู, ค้างมา 4 วัน)", note: "ไม่ใส่ชื่อโรงแรมในบรรทัด ใช้คู่กับจัดกลุ่ม “ผู้ดูแล › โรงแรม” (ปุ่มจะตั้งการจัดกลุ่มให้ด้วย)", group: "owner_hotel" },
   { v: "{campaign} @ {hotel} · {severity} · {days}", out: "ENG VDO | Sea u pattaya @ Sea U Pattaya H+ · ควรดู · ค้างมา 4 วัน", note: "ชื่อแคมเปญนำหน้า" },
   { v: "[{severity}] {hotel} — {campaign} {days}", out: "[ควรดู] Sea U Pattaya H+ — ENG VDO | Sea u pattaya ค้างมา 4 วัน", note: "ระดับอยู่หน้าสุด" },
 ];
@@ -465,7 +468,7 @@ export default function AdscanSkillAdmin() {
                       <span className="text-xs text-gray-500">{x.note}</span>
                       <button
                         type="button"
-                        onClick={() => { setLabelsForm({ ...labelsForm, line: x.v }); setHelpOpen(false); }}
+                        onClick={() => { setLabelsForm({ ...labelsForm, line: x.v, ...(x.group ? { group: x.group } : {}) }); setHelpOpen(false); }}
                         className="px-3 min-h-10 rounded-lg border border-secondary text-secondary text-xs font-semibold"
                       >
                         ใช้รูปแบบนี้
@@ -483,6 +486,7 @@ export default function AdscanSkillAdmin() {
               <ul className="list-disc pl-5 space-y-1 text-gray-700">
                 <li><strong>เรียงแคมเปญ:</strong> ค่าเริ่มต้นคือเร่งด่วนก่อนแล้วค้างนานสุด หรือเลือกเรียงตามวันที่พบ หรือชื่อโรงแรม ก-ฮ</li>
                 <li><strong>จัดกลุ่มตามผู้ดูแล:</strong> หัวกลุ่มเป็น <code>Account: ชื่อ</code> ถ้า Account ยังไม่ถูกผูกกับ Specialist จะอยู่ในกลุ่ม “ยังไม่มีผู้ดูแล” ทั้งหมด</li>
+                <li><strong>จัดกลุ่มผู้ดูแล › โรงแรม:</strong> หัวกลุ่มเป็น <code>Account: ชื่อ</code> ใต้นั้นแยกเป็นโรงแรมมีเลขลำดับ (1. 2. 3. เริ่มใหม่ในแต่ละผู้ดูแล) เรียงตามแคมเปญที่อยู่บนสุดของแต่ละโรงแรม แก้หน้าตาหัวโรงแรมได้ที่ช่อง “หัวโรงแรม” เช่น <code>*{"{n}"}. {"{hotel}"}*</code> ให้เป็นตัวหนา หรือ <code>{"{n}) {hotel}"}</code> ควรเอา <code>{"{hotel}"}</code> ออกจากรูปแบบบรรทัดเพราะชื่อโรงแรมอยู่ที่หัวข้อแล้ว</li>
                 <li><strong>จัดกลุ่มตามโรงแรม:</strong> หัวกลุ่มเป็นชื่อโรงแรม อ่านง่ายเมื่อยังไม่มีผู้ดูแล</li>
                 <li><strong>ไม่จัดกลุ่ม:</strong> เป็นรายการเดียวต่อเนื่องในแต่ละหมวด</li>
                 <li>แต่ละกลุ่มแสดงสูงสุด 30 แคมเปญ ที่เหลือบอกจำนวนว่า “และอีก N แคมเปญ”</li>
