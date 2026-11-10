@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { WEBHOOK_PREFIX, getSlackLabels, getSlackSettings, saveSlackLabels, saveSlackSettings } from "@/lib/adscanSlack";
-import { SLACK_LABELS_DEFAULT, cleanSlackLabels, slackHeadingError, slackLineError } from "@/lib/adscan";
+import { SLACK_LABELS_DEFAULT, slackLabelsFromForm, slackTemplateFromLabels } from "@/lib/adscan";
 import { previewSummary } from "@/lib/adscanScan";
 import { logAccess } from "@/lib/accessLog";
 
@@ -10,9 +10,11 @@ const mask = (u: string) => `${WEBHOOK_PREFIX}…${u.slice(-4)}`;
 
 async function status() {
   const s = await getSlackSettings();
+  const saved = await getSlackLabels();
   return {
     enabled: s.enabled, hasUrl: !!s.url, urlMasked: s.url ? mask(s.url) : null,
-    labels: { ...SLACK_LABELS_DEFAULT, ...(await getSlackLabels()) }, labelDefaults: SLACK_LABELS_DEFAULT,
+    labels: { ...SLACK_LABELS_DEFAULT, ...saved }, labelDefaults: SLACK_LABELS_DEFAULT,
+    template: slackTemplateFromLabels(saved), // the whole message as the one editable text
   };
 }
 
@@ -24,27 +26,23 @@ export async function GET() {
 /**
  * POST /api/admin/adscan-settings
  *   { url?: string, enabled?: boolean }  → save
- *   { labels: {...} }                    → save the message wording ({} = back to defaults)
+ *   { labels: { template, fresh, … } }   → save the message ({} = back to defaults); `template` is the whole message as text
  *   { previewLabels: {...} }             → the message built from live data with that wording; sends and saves nothing
  * Every save is written to ads_user_access_logs (who, IP, when) — shown on /admin/logs.
  */
 export async function POST(req: NextRequest) {
   const b = (await req.json().catch(() => ({}))) as { url?: string; enabled?: boolean; labels?: unknown; previewLabels?: unknown };
   try {
-    // Say why a bad line format is refused instead of silently falling back to the default.
-    for (const raw of [b.labels, b.previewLabels]) {
-      const f = (raw ?? {}) as { line?: unknown; hotelHeading?: unknown; hotelGroup?: unknown };
-      const check = (v: unknown, test: (s: string) => string | null) => (typeof v === "string" && v.trim() ? test(v.trim()) : null);
-      const err = check(f.line, slackLineError) ?? check(f.hotelHeading, slackHeadingError) ?? check(f.hotelGroup, slackHeadingError);
-      if (err) return NextResponse.json({ error: err }, { status: 400 });
-    }
-    if (b.previewLabels !== undefined) {
-      const text = await previewSummary(cleanSlackLabels(b.previewLabels));
-      return NextResponse.json({ text: text ?? "ยังไม่มีข้อมูลที่ตรวจแล้ว จึงยังสร้างตัวอย่างไม่ได้" });
-    }
-    if (b.labels !== undefined) {
+    if (b.previewLabels !== undefined || b.labels !== undefined) {
+      // Say why a bad template is refused (line number + reason) instead of silently using defaults.
+      const { labels, error } = slackLabelsFromForm(b.previewLabels ?? b.labels);
+      if (error) return NextResponse.json({ error }, { status: 400 });
+      if (b.previewLabels !== undefined) {
+        const text = await previewSummary(labels);
+        return NextResponse.json({ text: text ?? "ยังไม่มีข้อมูลที่ตรวจแล้ว จึงยังสร้างตัวอย่างไม่ได้" });
+      }
       await logAccess(req, "adscan_slack_labels_save");
-      await saveSlackLabels(cleanSlackLabels(b.labels));
+      await saveSlackLabels(labels);
       return NextResponse.json(await status());
     }
     // Logged before acting so a click that then fails still shows who pressed it.

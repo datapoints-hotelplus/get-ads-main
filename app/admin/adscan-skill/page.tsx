@@ -7,17 +7,13 @@ import type { AdscanPayload } from "@/lib/adscanData";
 
 type SkillRow = { version: number; model: string; prompt: string; note: string | null; is_active: boolean; created_at: string; by: string };
 const card = "bg-white border border-gray-200 rounded-xl shadow-sm";
-const LABEL_FIELDS: { k: string; label: string; hint?: string }[] = [
-  { k: "title", label: "บรรทัดหัวเรื่อง", hint: "{date} = วันที่ของข้อมูล" },
-  { k: "fresh", label: "หัวข้อ: พบปัญหาใหม่" },
-  { k: "pending", label: "หัวข้อ: ยังไม่ได้แก้" },
-  { k: "fixed", label: "หัวข้อ: กลับมาปกติแล้ว" },
-  { k: "stopped", label: "หัวข้อ: หยุดติดตาม" },
+const LABEL_FIELDS: { k: string; label: string }[] = [
+  { k: "fresh", label: "ชื่อหมวด: พบปัญหาใหม่" },
+  { k: "pending", label: "ชื่อหมวด: ยังไม่ได้แก้" },
+  { k: "fixed", label: "ชื่อหมวด: กลับมาปกติแล้ว" },
+  { k: "stopped", label: "ชื่อหมวด: หยุดติดตาม" },
   { k: "noOwner", label: "ชื่อกลุ่มเมื่อไม่มีผู้ดูแล" },
-  { k: "hotelHeading", label: "หัวโรงแรม (ใช้กับจัดกลุ่ม ผู้ดูแล › โรงแรม)", hint: "{n} = เลขลำดับ · {hotel} = ชื่อโรงแรม · ใส่ *…* เพื่อทำตัวหนา" },
-  { k: "hotelGroup", label: "หัวโรงแรม (ใช้กับจัดกลุ่ม โรงแรม)", hint: "{n} = เลขลำดับ · {hotel} = ชื่อโรงแรม · ใส่ *…* เพื่อทำตัวหนา" },
   { k: "empty", label: "ข้อความเมื่อไม่มีเรื่องต้องดูแล" },
-  { k: "footer", label: "ข้อความท้าย", hint: "{link} = ลิงก์ไปหน้า ADSCAN" },
 ];
 const SORT_OPTIONS = [
   { v: "severity_age", label: "เร่งด่วนก่อน แล้วค้างนานสุด" },
@@ -25,25 +21,48 @@ const SORT_OPTIONS = [
   { v: "newest", label: "เพิ่งพบก่อน" },
   { v: "hotel", label: "ชื่อโรงแรม ก-ฮ" },
 ];
-const GROUP_OPTIONS = [
-  { v: "owner", label: "ผู้ดูแล (Specialist)" },
-  { v: "owner_hotel", label: "ผู้ดูแล › โรงแรม (มีเลขลำดับโรงแรม)" },
-  { v: "hotel", label: "โรงแรม" },
-  { v: "none", label: "ไม่จัดกลุ่ม (รายการเดียวต่อเนื่อง)" },
+/** Placeholders by the kind of line they go on (what the server accepts, see slackTemplateToLabels). */
+const PLACEHOLDERS: { where: string; vars: { v: string; note: string; ex: string }[] }[] = [
+  { where: "หัวเรื่อง (บนสุด)", vars: [{ v: "{date}", note: "วันที่ของข้อมูล", ex: "9 พ.ย. 2569" }] },
+  { where: "หัวหมวด", vars: [{ v: "{section}", note: "ชื่อหมวด (พบปัญหาใหม่ ยังไม่ได้แก้ …)", ex: "ยังไม่ได้แก้" }, { v: "{count}", note: "จำนวนแคมเปญในหมวด", ex: "7" }] },
+  { where: "หัวผู้ดูแล", vars: [{ v: "{owner}", note: "ชื่อผู้ดูแล", ex: "Beer Marcom" }] },
+  { where: "หัวโรงแรม", vars: [{ v: "{n}", note: "เลขลำดับ 1, 2, 3 …", ex: "1" }, { v: "{hotel}", note: "ชื่อโรงแรม", ex: "Sea U Pattaya" }] },
+  {
+    where: "บรรทัดแคมเปญ",
+    vars: [
+      { v: "{campaign}", note: "ชื่อแคมเปญ (ต้องมีเสมอ)", ex: "ENG VDO | Sea u pattaya" },
+      { v: "{hotel}", note: "ชื่อโรงแรม", ex: "Sea U Pattaya H+" },
+      { v: "{metric}", note: "ชนิดต้นทุน (ไม่มีในหมวด “หยุดติดตาม”)", ex: "ต้นทุนต่อ Engagement" },
+      { v: "{status}", note: "สถานะ", ex: "สูงเกินเกณฑ์" },
+      { v: "{severity}", note: "ระดับ (ไม่มีในหมวด “กลับมาปกติแล้ว” และ “หยุดติดตาม”)", ex: "ควรดู" },
+      { v: "{days}", note: "จำนวนวันที่ค้าง (มีเฉพาะหมวด “ยังไม่ได้แก้”)", ex: "ค้างมา 4 วัน" },
+    ],
+  },
+  { where: "ข้อความท้าย (ล่างสุด)", vars: [{ v: "{link}", note: "ลิงก์ไปหน้า ADSCAN", ex: "ADSCAN" }] },
 ];
-const LINE_VARS = [
-  { v: "{hotel}", note: "ชื่อโรงแรม", ex: "Sea U Pattaya H+" },
-  { v: "{campaign}", note: "ชื่อแคมเปญ (ต้องมีเสมอ)", ex: "ENG VDO | Sea u pattaya" },
-  { v: "{metric}", note: "ชนิดต้นทุน (ไม่มีในหมวด “หยุดติดตาม”)", ex: "ต้นทุนต่อ Engagement" },
-  { v: "{status}", note: "สถานะ", ex: "สูงเกินเกณฑ์" },
-  { v: "{severity}", note: "ระดับ (ไม่มีในหมวด “กลับมาปกติแล้ว” และ “หยุดติดตาม”)", ex: "ควรดู" },
-  { v: "{days}", note: "จำนวนวันที่ค้าง (มีเฉพาะหมวด “ยังไม่ได้แก้”)", ex: "ค้างมา 4 วัน" },
-];
-const LINE_EXAMPLES: { v: string; out: string; note: string; group?: string }[] = [
-  { v: "{hotel} — {campaign} ({metric} {status}, {severity}, {days})", out: "Sea U Pattaya H+ — ENG VDO | Sea u pattaya (ต้นทุนต่อ Engagement สูงเกินเกณฑ์, ควรดู, ค้างมา 4 วัน)", note: "แบบเริ่มต้น" },
-  { v: "{campaign} ({metric} {status}, {severity}, {days})", out: "ENG VDO | Sea u pattaya (ต้นทุนต่อ Engagement สูงเกินเกณฑ์, ควรดู, ค้างมา 4 วัน)", note: "ไม่ใส่ชื่อโรงแรมในบรรทัด ใช้คู่กับจัดกลุ่ม “ผู้ดูแล › โรงแรม” (ปุ่มจะตั้งการจัดกลุ่มให้ด้วย)", group: "owner_hotel" },
-  { v: "{campaign} @ {hotel} · {severity} · {days}", out: "ENG VDO | Sea u pattaya @ Sea U Pattaya H+ · ควรดู · ค้างมา 4 วัน", note: "ชื่อแคมเปญนำหน้า" },
-  { v: "[{severity}] {hotel} — {campaign} {days}", out: "[ควรดู] Sea U Pattaya H+ — ENG VDO | Sea u pattaya ค้างมา 4 วัน", note: "ระดับอยู่หน้าสุด" },
+const TEMPLATE_HEAD = "*สรุปแคมเปญที่ต้องดูแล ข้อมูลวันที่ {date}*\n\n*{section} {count} แคมเปญ*\n\n";
+const TEMPLATE_FOOT = "\n\nดูรายละเอียดได้ที่ {link}";
+const TEMPLATE_EXAMPLES: { note: string; text: string; out: string }[] = [
+  {
+    note: "แบบเริ่มต้น: จัดกลุ่มตามผู้ดูแล",
+    text: `${TEMPLATE_HEAD}*Account: {owner}*\n{hotel} — {campaign} ({metric} {status}, {severity}, {days})${TEMPLATE_FOOT}`,
+    out: "Account: Beer Marcom\n• Sea U Pattaya — MES | SEA U PATTAYA (ต้นทุนต่อข้อความ สูงเกินเกณฑ์, เร่งด่วน, ค้างมา 56 วัน)",
+  },
+  {
+    note: "ผู้ดูแล › โรงแรม แยกโรงแรมมีเลขลำดับ (ไม่ใส่ชื่อโรงแรมในบรรทัดแคมเปญ)",
+    text: `${TEMPLATE_HEAD}*Account: {owner}*\n{n}. {hotel}\n{campaign} ({metric} {status}, {severity}, {days})${TEMPLATE_FOOT}`,
+    out: "Account: Beer Marcom\n1. Sea U Pattaya\n• MES | SEA U PATTAYA (ต้นทุนต่อข้อความ สูงเกินเกณฑ์, เร่งด่วน, ค้างมา 56 วัน)",
+  },
+  {
+    note: "จัดกลุ่มตามโรงแรมอย่างเดียว (หัวโรงแรมตัวหนา)",
+    text: `${TEMPLATE_HEAD}*{hotel}*\n{campaign} ({metric} {status}, {severity}, {days})${TEMPLATE_FOOT}`,
+    out: "Sea U Pattaya\n• MES | SEA U PATTAYA (ต้นทุนต่อข้อความ สูงเกินเกณฑ์, เร่งด่วน, ค้างมา 56 วัน)",
+  },
+  {
+    note: "ไม่จัดกลุ่ม: รายการเดียวต่อเนื่อง",
+    text: `${TEMPLATE_HEAD}{hotel} — {campaign} ({metric} {status}, {severity}, {days})${TEMPLATE_FOOT}`,
+    out: "• Sea U Pattaya — MES | SEA U PATTAYA (ต้นทุนต่อข้อความ สูงเกินเกณฑ์, เร่งด่วน, ค้างมา 56 วัน)",
+  },
 ];
 const when = (iso: string) => new Date(iso).toLocaleString("th-TH", { day: "numeric", month: "short", year: "2-digit", hour: "2-digit", minute: "2-digit" });
 
@@ -61,7 +80,7 @@ export default function AdscanSkillAdmin() {
   const [msg, setMsg] = useState("");
   const [openV, setOpenV] = useState<number | null>(null);
   const [models, setModels] = useState<{ id: string; name: string; context: number | null; inPerM: number | null; outPerM: number | null }[]>([]);
-  const [slack, setSlack] = useState<{ enabled: boolean; hasUrl: boolean; urlMasked: string | null; labels?: Record<string, string>; labelDefaults?: Record<string, string> } | null>(null);
+  const [slack, setSlack] = useState<{ enabled: boolean; hasUrl: boolean; urlMasked: string | null; labels?: Record<string, string>; labelDefaults?: Record<string, string>; template?: string } | null>(null);
   const [slackUrl, setSlackUrl] = useState("");
   const [slackMsg, setSlackMsg] = useState("");
   const [labelsForm, setLabelsForm] = useState<Record<string, string>>({});
@@ -104,7 +123,7 @@ export default function AdscanSkillAdmin() {
       .then((r) => r.json())
       .then((d) => {
         setSlack(d);
-        setLabelsForm(d.labels ?? {});
+        setLabelsForm({ ...d.labels, template: d.template });
       })
       .catch(() => {});
     fetch("/api/admin/adscan-models")
@@ -280,7 +299,7 @@ export default function AdscanSkillAdmin() {
               <div>
                 <h3 className="font-semibold text-sm">ข้อความที่ส่งเข้า Slack</h3>
                 <p className="text-xs text-gray-500">
-                  แก้หัวข้อ รูปแบบบรรทัด การเรียง และการจัดกลุ่มได้ รายชื่อแคมเปญและตัวเลขสร้างจากข้อมูลจริงทุกวัน · ช่องที่เว้นว่างจะใช้ข้อความเริ่มต้น
+                  แก้ทั้งข้อความในช่องเดียว ระบบอ่านโครงสร้างจากบรรทัดและตัวแปรในวงเล็บปีกกา รายชื่อแคมเปญและตัวเลขสร้างจากข้อมูลจริงทุกวัน กดปุ่ม i เพื่อดูวิธีใช้
                 </p>
               </div>
               <button
@@ -293,10 +312,23 @@ export default function AdscanSkillAdmin() {
                 i
               </button>
             </div>
+
+            <label className="block text-sm">
+              <span className="text-gray-600">ข้อความทั้งหมด <span className="text-xs text-gray-400">· ใส่ *…* เพื่อทำตัวหนา · ระบบใส่ • หน้าบรรทัดแคมเปญให้เอง</span></span>
+              <textarea
+                id="slack-template"
+                value={labelsForm.template ?? ""}
+                onChange={(e) => setLabelsForm({ ...labelsForm, template: e.target.value })}
+                rows={10}
+                spellCheck={false}
+                className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono leading-relaxed"
+              />
+            </label>
+
             <div className="grid gap-3 sm:grid-cols-2">
               {LABEL_FIELDS.map((f) => (
-                <label key={f.k} className={`block text-sm ${f.k === "title" || f.k === "footer" ? "sm:col-span-2" : ""}`}>
-                  <span className="text-gray-600">{f.label}{f.hint && <span className="text-xs text-gray-400"> · {f.hint}</span>}</span>
+                <label key={f.k} className="block text-sm">
+                  <span className="text-gray-600">{f.label}</span>
                   <input
                     value={labelsForm[f.k] ?? ""}
                     maxLength={200}
@@ -306,34 +338,6 @@ export default function AdscanSkillAdmin() {
                   />
                 </label>
               ))}
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-sm">
-                <span className="text-gray-600">รูปแบบบรรทัดของแต่ละแคมเปญ <span className="text-xs text-gray-400">· สลับตำแหน่งหรือลบตัวแปรได้ ต้องมี {"{campaign}"}</span></span>
-                <input
-                  value={labelsForm.line ?? ""}
-                  maxLength={200}
-                  onChange={(e) => setLabelsForm({ ...labelsForm, line: e.target.value })}
-                  placeholder={slack?.labelDefaults?.line}
-                  className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono"
-                />
-              </label>
-              <div className="flex flex-wrap gap-1.5" aria-label="กดเพื่อเพิ่มตัวแปรต่อท้าย">
-                {LINE_VARS.map((x) => (
-                  <button
-                    key={x.v}
-                    type="button"
-                    title={x.note}
-                    onClick={() => setLabelsForm({ ...labelsForm, line: `${labelsForm.line ?? ""} ${x.v}`.trim() })}
-                    className="px-2.5 min-h-10 rounded-full border border-gray-300 text-xs font-mono hover:bg-gray-50"
-                  >
-                    {x.v}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
               <label className="block text-sm">
                 <span className="text-gray-600">เรียงแคมเปญในแต่ละกลุ่ม</span>
                 <select
@@ -342,16 +346,6 @@ export default function AdscanSkillAdmin() {
                   className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm min-h-10"
                 >
                   {SORT_OPTIONS.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
-                </select>
-              </label>
-              <label className="block text-sm">
-                <span className="text-gray-600">จัดกลุ่มตาม</span>
-                <select
-                  value={labelsForm.group ?? "owner"}
-                  onChange={(e) => setLabelsForm({ ...labelsForm, group: e.target.value })}
-                  className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm min-h-10"
-                >
-                  {GROUP_OPTIONS.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
                 </select>
               </label>
             </div>
@@ -363,7 +357,7 @@ export default function AdscanSkillAdmin() {
                   if (!confirm("คืนข้อความทั้งหมดเป็นค่าเริ่มต้น?")) return;
                   const j = await slackCall({ labels: {} });
                   setSlack(j);
-                  setLabelsForm(j.labels ?? {});
+                  setLabelsForm({ ...j.labels, template: j.template });
                   setLabelsPreview("");
                   setSlackMsg("คืนค่าเริ่มต้นแล้ว");
                 })}
@@ -386,7 +380,7 @@ export default function AdscanSkillAdmin() {
                 onClick={() => run("labelsave", async () => {
                   const j = await slackCall({ labels: labelsForm });
                   setSlack(j);
-                  setLabelsForm(j.labels ?? {});
+                  setLabelsForm({ ...j.labels, template: j.template });
                   setSlackMsg("บันทึกข้อความแล้ว จะใช้กับการแจ้งเตือนรอบถัดไป");
                 })}
                 className="px-4 min-h-11 rounded-lg bg-secondary text-white font-semibold disabled:opacity-40"
@@ -438,7 +432,7 @@ export default function AdscanSkillAdmin() {
             <section className="space-y-1.5">
               <h3 className="font-semibold">ขั้นตอน</h3>
               <ol className="list-decimal pl-5 space-y-1 text-gray-700">
-                <li>แก้ช่องที่ต้องการ ช่องที่เว้นว่างจะใช้ข้อความเริ่มต้น</li>
+                <li>แก้ข้อความในช่อง “ข้อความทั้งหมด” หรือกด “ใช้แบบนี้” ที่ตัวอย่างด้านล่างแล้วแก้ต่อ</li>
                 <li>กด <strong>ดูตัวอย่าง (ไม่ส่ง Slack)</strong> ระบบสร้างข้อความจากข้อมูลจริงล่าสุดให้ดู ยังไม่บันทึกและไม่ส่งอะไร</li>
                 <li>พอใจแล้วกด <strong>บันทึกข้อความ</strong></li>
                 <li>ข้อความใหม่จะใช้ตอน n8n ส่งสรุปรอบถัดไป (ส่งวันละครั้งต่อวันข้อมูล) ถ้าวันนี้ส่งไปแล้ว จะเห็นผลในรอบของวันข้อมูลถัดไป</li>
@@ -446,60 +440,71 @@ export default function AdscanSkillAdmin() {
             </section>
 
             <section className="space-y-2">
-              <h3 className="font-semibold">รูปแบบบรรทัดของแต่ละแคมเปญ</h3>
-              <p className="text-gray-700">พิมพ์ตัวแปรในวงเล็บปีกกา ระบบแทนด้วยค่าจริงของแต่ละแคมเปญ สลับตำแหน่ง ลบ หรือเปลี่ยนเครื่องหมายคั่นเองได้</p>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left min-w-[480px]">
-                  <thead className="bg-gray-50 text-xs text-gray-500">
-                    <tr><th className="px-3 py-2 font-medium">ตัวแปร</th><th className="px-3 py-2 font-medium">คืออะไร</th><th className="px-3 py-2 font-medium">ตัวอย่างค่า</th></tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {LINE_VARS.map((x) => (
-                      <tr key={x.v}><td className="px-3 py-2 font-mono">{x.v}</td><td className="px-3 py-2">{x.note}</td><td className="px-3 py-2 text-gray-600">{x.ex}</td></tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <p className="text-gray-700">ตัวแปรที่ไม่มีค่าในหมวดนั้นจะถูกตัดออก พร้อมจัดเครื่องหมาย <code>,</code> <code>()</code> <code>[]</code> ที่ค้างอยู่ให้ ส่วนเครื่องหมายอื่นที่พิมพ์เอง (เช่น <code>·</code> <code>|</code> <code>—</code>) จะอยู่ตามที่พิมพ์ จึงควรกดดูตัวอย่างก่อนบันทึก</p>
-              <div className="space-y-2">
-                <h4 className="font-semibold text-gray-800">ตัวอย่างรูปแบบ (กดปุ่มเพื่อใช้)</h4>
-                {LINE_EXAMPLES.map((x) => (
-                  <div key={x.v} className="border border-gray-200 rounded-lg p-3 space-y-1.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs text-gray-500">{x.note}</span>
-                      <button
-                        type="button"
-                        onClick={() => { setLabelsForm({ ...labelsForm, line: x.v, ...(x.group ? { group: x.group } : {}) }); setHelpOpen(false); }}
-                        className="px-3 min-h-10 rounded-lg border border-secondary text-secondary text-xs font-semibold"
-                      >
-                        ใช้รูปแบบนี้
-                      </button>
-                    </div>
-                    <div className="font-mono text-xs break-words">{x.v}</div>
-                    <div className="text-xs text-gray-600 break-words">→ • {x.out}</div>
-                  </div>
+              <h3 className="font-semibold">ระบบอ่านข้อความอย่างไร</h3>
+              <p className="text-gray-700">ในช่องเขียนตัวอย่างข้อความหนึ่งชุด ระบบดูว่าแต่ละบรรทัดมีตัวแปรอะไร แล้วเอาไปทำซ้ำกับข้อมูลจริง บรรทัดว่างไม่มีผล</p>
+              <ul className="list-disc pl-5 space-y-1 text-gray-700">
+                <li>บรรทัดที่มี <code>{"{campaign}"}</code> = บรรทัดของแต่ละแคมเปญ (ต้องมี และมีได้บรรทัดเดียว)</li>
+                <li>บรรทัดที่มี <code>{"{section}"}</code> หรือ <code>{"{count}"}</code> = หัวหมวด (พบปัญหาใหม่ / ยังไม่ได้แก้ / กลับมาปกติแล้ว / หยุดติดตาม) ต้องมี</li>
+                <li>บรรทัดที่มี <code>{"{owner}"}</code> = หัวผู้ดูแล <strong>ลบบรรทัดนี้ = ไม่จัดกลุ่มตามผู้ดูแล</strong></li>
+                <li>บรรทัดที่มี <code>{"{hotel}"}</code> หรือ <code>{"{n}"}</code> แต่ไม่มี <code>{"{campaign}"}</code> = หัวโรงแรม <strong>ลบบรรทัดนี้ = ไม่แยกโรงแรม</strong></li>
+                <li>บรรทัดที่อยู่เหนือหัวหมวด = หัวเรื่อง และบรรทัดที่อยู่ใต้บรรทัดแคมเปญ = ข้อความท้าย ถ้าลบออก ระบบใช้ข้อความเริ่มต้น</li>
+                <li>ลำดับต้องเป็น หัวหมวด › หัวผู้ดูแล › หัวโรงแรม › บรรทัดแคมเปญ สลับไม่ได้</li>
+              </ul>
+              <p className="text-gray-700">เมื่อมีทั้งหัวผู้ดูแลและหัวโรงแรม จะได้การจัดกลุ่มผู้ดูแล › โรงแรม เลขลำดับ <code>{"{n}"}</code> เริ่มใหม่ในแต่ละผู้ดูแล และโรงแรมเรียงตามแคมเปญที่อยู่บนสุดของโรงแรมนั้น แต่ละกลุ่มแสดงสูงสุด 30 แคมเปญ ที่เหลือบอกจำนวนว่า “และอีก N แคมเปญ”</p>
+            </section>
+
+            <section className="space-y-2">
+              <h3 className="font-semibold">ตัวแปรที่ใช้ได้ในแต่ละบรรทัด</h3>
+              <div className="overflow-x-auto space-y-3">
+                {PLACEHOLDERS.map((g) => (
+                  <table key={g.where} className="w-full text-left min-w-[480px]">
+                    <caption className="text-left text-xs font-semibold text-gray-500 pb-1">{g.where}</caption>
+                    <tbody className="divide-y divide-gray-100 border border-gray-100">
+                      {g.vars.map((x) => (
+                        <tr key={x.v}><td className="px-3 py-1.5 font-mono w-28">{x.v}</td><td className="px-3 py-1.5">{x.note}</td><td className="px-3 py-1.5 text-gray-600">{x.ex}</td></tr>
+                      ))}
+                    </tbody>
+                  </table>
                 ))}
               </div>
+              <p className="text-gray-700">ถ้าตัวแปรไม่มีค่าในหมวดนั้น จะถูกตัดออก พร้อมจัดเครื่องหมาย <code>,</code> <code>()</code> <code>[]</code> ที่ค้างอยู่ให้ ส่วนเครื่องหมายอื่นที่พิมพ์เอง (เช่น <code>·</code> <code>|</code> <code>—</code>) จะอยู่ตามที่พิมพ์ จึงควรกดดูตัวอย่างก่อนบันทึก</p>
+            </section>
+
+            <section className="space-y-2">
+              <h3 className="font-semibold">ตัวอย่าง (กดเพื่อใช้)</h3>
+              {TEMPLATE_EXAMPLES.map((x) => (
+                <div key={x.note} className="border border-gray-200 rounded-lg p-3 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-gray-500">{x.note}</span>
+                    <button
+                      type="button"
+                      onClick={() => { setLabelsForm({ ...labelsForm, template: x.text }); setHelpOpen(false); }}
+                      className="shrink-0 px-3 min-h-10 rounded-lg border border-secondary text-secondary text-xs font-semibold"
+                    >
+                      ใช้แบบนี้
+                    </button>
+                  </div>
+                  <pre className="font-mono text-xs whitespace-pre-wrap">{x.text}</pre>
+                  <pre className="text-xs text-gray-600 whitespace-pre-wrap font-sans border-t border-dashed border-gray-200 pt-1.5">ผลลัพธ์ (ส่วนแคมเปญ):{"\n"}{x.out}</pre>
+                </div>
+              ))}
             </section>
 
             <section className="space-y-1.5">
-              <h3 className="font-semibold">เรียงและจัดกลุ่ม</h3>
+              <h3 className="font-semibold">ช่องอื่นใต้ข้อความ</h3>
               <ul className="list-disc pl-5 space-y-1 text-gray-700">
-                <li><strong>เรียงแคมเปญ:</strong> ค่าเริ่มต้นคือเร่งด่วนก่อนแล้วค้างนานสุด หรือเลือกเรียงตามวันที่พบ หรือชื่อโรงแรม ก-ฮ</li>
-                <li><strong>จัดกลุ่มตามผู้ดูแล:</strong> หัวกลุ่มเป็น <code>Account: ชื่อ</code> ถ้า Account ยังไม่ถูกผูกกับ Specialist จะอยู่ในกลุ่ม “ยังไม่มีผู้ดูแล” ทั้งหมด</li>
-                <li><strong>จัดกลุ่มผู้ดูแล › โรงแรม:</strong> หัวกลุ่มเป็น <code>Account: ชื่อ</code> ใต้นั้นแยกเป็นโรงแรมมีเลขลำดับ (1. 2. 3. เริ่มใหม่ในแต่ละผู้ดูแล) เรียงตามแคมเปญที่อยู่บนสุดของแต่ละโรงแรม แก้หน้าตาหัวโรงแรมได้ที่ช่อง “หัวโรงแรม” เช่น <code>*{"{n}"}. {"{hotel}"}*</code> ให้เป็นตัวหนา หรือ <code>{"{n}) {hotel}"}</code> ควรเอา <code>{"{hotel}"}</code> ออกจากรูปแบบบรรทัดเพราะชื่อโรงแรมอยู่ที่หัวข้อแล้ว</li>
-                <li><strong>จัดกลุ่มตามโรงแรม:</strong> หัวกลุ่มเป็นชื่อโรงแรม อ่านง่ายเมื่อยังไม่มีผู้ดูแล แก้หน้าตาหัวได้ที่ช่อง “หัวโรงแรม (ใช้กับจัดกลุ่ม โรงแรม)” ค่าเริ่มต้นคือ <code>{"*{hotel}*"}</code> (ตัวหนา)</li>
-                <li><strong>ไม่จัดกลุ่ม:</strong> เป็นรายการเดียวต่อเนื่องในแต่ละหมวด</li>
-                <li>แต่ละกลุ่มแสดงสูงสุด 30 แคมเปญ ที่เหลือบอกจำนวนว่า “และอีก N แคมเปญ”</li>
+                <li><strong>ชื่อหมวด 4 ช่อง</strong> คือคำที่แทน <code>{"{section}"}</code> และ <strong>ชื่อกลุ่มเมื่อไม่มีผู้ดูแล</strong> คือคำที่แทน <code>{"{owner}"}</code> เมื่อ Account ยังไม่ถูกผูกกับ Specialist</li>
+                <li><strong>ข้อความเมื่อไม่มีเรื่องต้องดูแล</strong> ใช้เมื่อวันนั้นไม่มีแคมเปญให้แจ้ง</li>
+                <li><strong>เรียงแคมเปญ</strong> ค่าเริ่มต้นคือเร่งด่วนก่อนแล้วค้างนานสุด หรือเลือกเรียงตามวันที่พบ หรือชื่อโรงแรม ก-ฮ</li>
+                <li>ช่องที่เว้นว่างจะใช้ข้อความเริ่มต้น</li>
               </ul>
             </section>
 
             <section className="space-y-1.5">
               <h3 className="font-semibold">ข้อควรรู้</h3>
               <ul className="list-disc pl-5 space-y-1 text-gray-700">
-                <li>รูปแบบบรรทัดต้องมี <code>{"{campaign}"}</code> และใช้ได้เฉพาะตัวแปรในตาราง ถ้าสะกดผิดระบบจะแจ้งว่าผิดตรงไหนและไม่บันทึก</li>
-                <li>ใน Slack ใช้ <code>*ข้อความ*</code> ทำตัวหนา เช่นหัวเรื่องและหัวข้อ</li>
-                <li><code>{"{date}"}</code> ในหัวเรื่อง แทนวันที่ของข้อมูล และ <code>{"{link}"}</code> ในข้อความท้าย แทนลิงก์ไปหน้า ADSCAN</li>
+                <li>ถ้าเขียนผิด เช่น ใช้ตัวแปรที่ไม่รู้จัก หรือสลับลำดับ ระบบจะบอกว่าผิดที่บรรทัดไหนและไม่บันทึก</li>
+                <li>ใน Slack ใช้ <code>*ข้อความ*</code> ทำตัวหนา</li>
                 <li>กด <strong>คืนค่าเริ่มต้น</strong> เพื่อกลับไปใช้ข้อความเดิมทั้งหมด ทุกครั้งที่บันทึกจะมีบันทึกใน Log การใช้งานว่าใครแก้</li>
               </ul>
             </section>

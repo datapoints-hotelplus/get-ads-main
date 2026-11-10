@@ -3,7 +3,7 @@
  * Run: node --experimental-strip-types lib/adscan.check.ts
  */
 import assert from "node:assert/strict";
-import { SLACK_LABELS_DEFAULT, applyDay, cleanSlackLabels, evaluate, renderSlackLine, slackHeadingError, slackLineError, slackSummary, type Episode, type RawRow, type Template, type Verdict } from "./adscan.ts";
+import { SLACK_LABELS_DEFAULT, applyDay, cleanSlackLabels, evaluate, renderSlackLine, slackHeadingError, slackLabelsFromForm, slackLineError, slackSummary, slackTemplateFromLabels, slackTemplateToLabels, type Episode, type RawRow, type Template, type Verdict } from "./adscan.ts";
 
 const T: Template[] = [
   { name: "Message Campaign", metric: "cost_per_message", direction: "lower_better", green_min: 54, yellow_min: 66, green_op: "<=", yellow_op: "<=", campaign_filter: "MES" },
@@ -144,6 +144,34 @@ assert.equal(created[1].close_reason, "stopped", "campaign gone from the data = 
   assert.match(bold, /\*Account: BEER\*\n\*1\) Hotel A\*\n• /, "hotel heading is editable");
   const hg = slackSummary({ ...base, labels: { group: "hotel", sort: "age", hotelGroup: "{n}) {hotel}" } });
   assert.match(hg, /\n1\) Hotel A\n• .*\n\n2\) Hotel B\n• .*\n\n3\) Hotel C\n• /, "hotel-only heading is editable, numbered (hotels A–Z)");
+  // one-textarea template: default round-trips, structure lines decide the grouping, mistakes point at the line
+  const tpl = slackTemplateFromLabels({});
+  assert.equal(tpl, "*สรุปแคมเปญที่ต้องดูแล ข้อมูลวันที่ {date}*\n\n*{section} {count} แคมเปญ*\n\n*Account: {owner}*\n{hotel} — {campaign} ({metric} {status}, {severity}, {days})\n\nดูรายละเอียดได้ที่ {link}");
+  const back = slackTemplateToLabels(tpl);
+  assert.equal(back.error, null);
+  assert.equal(back.labels.group, "owner");
+  assert.equal(back.labels.line, SLACK_LABELS_DEFAULT.line);
+  assert.equal(slackSummary({ ...base, labels: back.labels }), slackSummary(base), "default template renders the same message");
+
+  const target = "*สรุป {date}*\n\n*{section} {count} แคมเปญ*\n\n*Account: {owner}*\n{n}. {hotel}\n{campaign} ({metric} {status})\n\nท้าย {link}";
+  const t2 = slackTemplateToLabels(target);
+  assert.equal(t2.labels.group, "owner_hotel", "owner + hotel heading lines = owner › hotel");
+  assert.equal(t2.labels.line, "{campaign} ({metric} {status})");
+  assert.equal(slackTemplateToLabels(target.replace("{n}. {hotel}\n", "")).labels.group, "owner", "no hotel heading line = owner only");
+  assert.equal(slackTemplateToLabels(target.replace("*Account: {owner}*\n", "")).labels.group, "hotel", "no owner heading line = hotel only");
+  assert.equal(slackTemplateToLabels(target.replace("*Account: {owner}*\n", "").replace("{n}. {hotel}\n", "")).labels.group, "none");
+  assert.match(slackTemplateToLabels("*x*\n*{section}*\n{hotel}\n{owner}\n{campaign}").error ?? "", /บรรทัดที่ 4: ลำดับต้องเป็น/, "wrong order is refused with the line number");
+  assert.match(slackTemplateToLabels("*{section}*\n{campaign}\n{campaign}").error ?? "", /บรรทัดที่ 3: มีบรรทัดแคมเปญซ้ำ/);
+  assert.match(slackTemplateToLabels("*{section}*\n{campaign} {n}").error ?? "", /บรรทัดแคมเปญ: ไม่รู้จักตัวแปร \{n\}/, "{n} is not a campaign-line variable");
+  assert.match(slackTemplateToLabels("*{section}*\nplain text").error ?? "", /ไม่พบบรรทัดโครงสร้าง|ต้องมีบรรทัดแคมเปญ/);
+  assert.match(slackTemplateToLabels("*{section}*\n{hotel}\nstray\n{campaign}").error ?? "", /บรรทัดที่ 3 “stray” ไม่รู้ว่าเป็นส่วนไหน/);
+  // form: the template decides structure, the small fields still apply, no template = plain labels
+  const form = slackLabelsFromForm({ template: target, fresh: "ใหม่", group: "none", line: "ignored {campaign}" });
+  assert.equal(form.labels.fresh, "ใหม่");
+  assert.equal(form.labels.group, "owner_hotel", "template wins over a stale group field");
+  assert.equal(form.labels.line, "{campaign} ({metric} {status})");
+  assert.deepEqual(slackLabelsFromForm({ fresh: "ใหม่" }).labels, { fresh: "ใหม่" });
+  assert.deepEqual(slackLabelsFromForm({}).labels, {}, "empty form = reset to defaults");
   assert.equal(slackHeadingError("{n}. no hotel"), "หัวโรงแรมต้องมี {hotel}");
   assert.match(slackHeadingError("{n} {hotel} {x}") ?? "", /ไม่รู้จักตัวแปร \{x\}/);
   assert.deepEqual(cleanSlackLabels({ hotelHeading: "{n}. nope" }), {}, "invalid heading ignored");

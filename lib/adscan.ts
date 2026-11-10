@@ -291,6 +291,8 @@ export const SLACK_LABELS_DEFAULT = {
   empty: "ไม่มีแคมเปญที่ต้องดูแลในวันนี้",
   footer: "ดูรายละเอียดได้ที่ {link}", // {link} = <url|ADSCAN>, or "หน้า ADSCAN" when the site URL is unknown
   line: "{hotel} — {campaign} ({metric} {status}, {severity}, {days})", // one line per campaign
+  sectionHeading: "*{section} {count} แคมเปญ*", // heading of each section; {section} = its name above, {count} = number of campaigns
+  ownerHeading: "*Account: {owner}*", // owner heading (group "owner" / "owner_hotel")
   hotelHeading: "{n}. {hotel}", // hotel heading under an owner (group "owner_hotel"); {n} = 1, 2, 3 … restarting per owner
   hotelGroup: "*{hotel}*", // hotel heading when grouping by hotel alone (group "hotel"); {n} = 1, 2, 3 … per section
   sort: "severity_age", // one of SLACK_SORTS
@@ -341,9 +343,99 @@ export function cleanSlackLabels(input: unknown): Partial<SlackLabels> {
     if (k === "group" && !(SLACK_GROUPS as readonly string[]).includes(v)) continue;
     if (k === "line" && slackLineError(v)) continue;
     if ((k === "hotelHeading" || k === "hotelGroup") && slackHeadingError(v)) continue;
+    if (k === "sectionHeading" && placeholderError(v, ["section", "count"], "section")) continue;
+    if (k === "ownerHeading" && placeholderError(v, ["owner"], "owner")) continue;
     out[k] = v;
   }
   return out;
+}
+
+const varsOf = (s: string) => [...s.matchAll(/\{(\w*)\}/g)].map((m) => m[1]);
+/** Thai reason when `s` uses a placeholder outside `allowed` or lacks the `must` one, else null. */
+function placeholderError(s: string, allowed: readonly string[], must?: string): string | null {
+  const bad = varsOf(s).filter((v) => !allowed.includes(v));
+  if (bad.length) return `ไม่รู้จักตัวแปร ${bad.map((v) => `{${v}}`).join(" ")} — ใช้ได้เฉพาะ ${allowed.map((v) => `{${v}}`).join(" ")}`;
+  if (must && !s.includes(`{${must}}`)) return `ต้องมี {${must}}`;
+  return null;
+}
+
+/**
+ * The whole message as one editable text: title, section heading, owner / hotel
+ * headings (only the levels the grouping uses), one campaign line, footer.
+ * slackTemplateToLabels() reads it back, so what the admin sees is what is stored.
+ */
+export function slackTemplateFromLabels(labels: Partial<SlackLabels>): string {
+  const L = { ...SLACK_LABELS_DEFAULT, ...labels };
+  const heads = L.group === "owner_hotel" ? [L.ownerHeading, L.hotelHeading] : L.group === "owner" ? [L.ownerHeading] : L.group === "hotel" ? [L.hotelGroup] : [];
+  return [L.title, "", L.sectionHeading, ...(heads.length ? [""] : []), ...heads, L.line, "", L.footer].join("\n");
+}
+
+const KIND_RANK = { section: 0, owner: 1, hotel: 2, campaign: 3 } as const;
+const KIND_TH = { section: "หัวหมวด", owner: "หัวผู้ดูแล", hotel: "หัวโรงแรม", campaign: "บรรทัดแคมเปญ" } as const;
+type TemplateKind = keyof typeof KIND_RANK;
+
+/**
+ * Reads the template text back into labels. Each line is classified by its
+ * placeholders ({campaign} → campaign line, {section}/{count} → section heading,
+ * {owner} → owner heading, {hotel}/{n} → hotel heading); lines above the first of
+ * those are the title, below the last the footer. Grouping follows which
+ * heading lines exist. Blank lines are cosmetic.
+ */
+export function slackTemplateToLabels(text: string): { labels: Partial<SlackLabels>; error: string | null } {
+  const fail = (error: string) => ({ labels: {} as Partial<SlackLabels>, error });
+  const rows = text.split(/\r?\n/).map((s, i) => ({ s: s.trim(), n: i + 1 })).filter((r) => r.s);
+  const kindOf = (s: string): TemplateKind | null => {
+    const v = varsOf(s);
+    return v.includes("campaign") ? "campaign" : v.includes("section") || v.includes("count") ? "section" : v.includes("owner") ? "owner" : v.includes("hotel") || v.includes("n") ? "hotel" : null;
+  };
+  const kinds = rows.map((r) => kindOf(r.s));
+  const first = kinds.findIndex((k) => k);
+  if (first < 0) return fail("ไม่พบบรรทัดโครงสร้าง ต้องมีหัวหมวด ({section}) และบรรทัดแคมเปญ ({campaign})");
+  const last = kinds.length - 1 - [...kinds].reverse().findIndex((k) => k);
+
+  const pick: Partial<Record<TemplateKind, string>> = {};
+  let prev = -1;
+  for (let i = first; i <= last; i++) {
+    const k = kinds[i];
+    if (!k) return fail(`บรรทัดที่ ${rows[i].n} “${rows[i].s}” ไม่รู้ว่าเป็นส่วนไหน — บรรทัดตรงกลางต้องมี {section} {owner} {hotel} หรือ {campaign}`);
+    if (pick[k]) return fail(`บรรทัดที่ ${rows[i].n}: มี${KIND_TH[k]}ซ้ำ ใส่ได้อย่างละบรรทัด`);
+    if (KIND_RANK[k] < prev) return fail(`บรรทัดที่ ${rows[i].n}: ลำดับต้องเป็น หัวหมวด › หัวผู้ดูแล › หัวโรงแรม › บรรทัดแคมเปญ`);
+    prev = KIND_RANK[k];
+    pick[k] = rows[i].s;
+  }
+  if (!pick.section) return fail("ต้องมีบรรทัดหัวหมวดที่มี {section}");
+  if (!pick.campaign) return fail("ต้องมีบรรทัดแคมเปญที่มี {campaign}");
+
+  const title = rows.slice(0, first).map((r) => r.s).join("\n");
+  const footer = rows.slice(last + 1).map((r) => r.s).join("\n");
+  const rules: [string, string | undefined, readonly string[], string?][] = [
+    ["หัวเรื่อง", title, ["date"]], ["ข้อความท้าย", footer, ["link"]],
+    ["หัวหมวด", pick.section, ["section", "count"], "section"], ["หัวผู้ดูแล", pick.owner, ["owner"], "owner"],
+    ["หัวโรงแรม", pick.hotel, ["n", "hotel"], "hotel"], ["บรรทัดแคมเปญ", pick.campaign, SLACK_LINE_VARS, "campaign"],
+  ];
+  for (const [name, s, allowed, must] of rules) {
+    const err = s ? placeholderError(s, allowed, must) : null;
+    if (err) return fail(`${name}: ${err}`);
+  }
+
+  const group = pick.owner && pick.hotel ? "owner_hotel" : pick.owner ? "owner" : pick.hotel ? "hotel" : "none";
+  const labels: Partial<SlackLabels> = { group, sectionHeading: pick.section, line: pick.campaign };
+  if (title) labels.title = title; // a deleted title / footer falls back to the default
+  if (footer) labels.footer = footer;
+  if (pick.owner) labels.ownerHeading = pick.owner;
+  if (pick.hotel) labels[pick.owner ? "hotelHeading" : "hotelGroup"] = pick.hotel;
+  return { labels, error: null };
+}
+
+const STRUCTURE_KEYS = ["title", "footer", "line", "hotelHeading", "hotelGroup", "group", "sectionHeading", "ownerHeading"];
+/** Admin form → labels. With a `template` it decides the structure; the other fields (section names, no-owner, empty, sort) come from the form. */
+export function slackLabelsFromForm(form: unknown): { labels: Partial<SlackLabels>; error: string | null } {
+  const f = (form && typeof form === "object" ? form : {}) as Record<string, unknown>;
+  if (typeof f.template !== "string" || !f.template.trim()) return { labels: cleanSlackLabels(f), error: null };
+  const t = slackTemplateToLabels(f.template);
+  if (t.error) return t;
+  const rest = Object.fromEntries(Object.entries(cleanSlackLabels(f)).filter(([k]) => !STRUCTURE_KEYS.includes(k)));
+  return { labels: { ...rest, ...cleanSlackLabels(t.labels) }, error: null };
 }
 
 /**
@@ -393,7 +485,8 @@ export function slackSummary(p: {
     }
     const keys = [...groups.keys()].sort((a, b) => (a === NO_OWNER ? 1 : b === NO_OWNER ? -1 : a.localeCompare(b, "th")));
     const row = (e: Episode) => `• ${renderSlackLine(L.line, { hotel: hotelOf(e), campaign: campaignOf(e), ...vars(e) })}`;
-    return ["", `*${title} ${eps.length} แคมเปญ*`, ...keys.flatMap((k, ki) => {
+    const ownerHead = (who: string) => L.ownerHeading.replaceAll("{owner}", who);
+    return ["", L.sectionHeading.replaceAll("{section}", title).replaceAll("{count}", String(eps.length)), ...keys.flatMap((k, ki) => {
       const mine = groups.get(k)!;
       const more = mine.length > MAX ? [`และอีก ${mine.length - MAX} แคมเปญ`] : [];
       if (L.group === "none") return [...mine.slice(0, MAX).map(row), ...more];
@@ -401,9 +494,9 @@ export function slackSummary(p: {
         // Hotels numbered 1., 2. … in the order of their first (top-sorted) campaign, restarting per owner.
         const byHotel = new Map<string, Episode[]>();
         for (const e of mine.slice(0, MAX)) byHotel.set(hotelOf(e), [...(byHotel.get(hotelOf(e)) ?? []), e]);
-        return [`*Account: ${k}*`, ...[...byHotel].flatMap(([hotel, es], i) => [...(i ? [""] : []), L.hotelHeading.replaceAll("{n}", String(i + 1)).replaceAll("{hotel}", hotel), ...es.map(row)]), ...more].flatMap((l, i) => (i === 0 ? ["", l] : [l]));
+        return [ownerHead(k), ...[...byHotel].flatMap(([hotel, es], i) => [...(i ? [""] : []), L.hotelHeading.replaceAll("{n}", String(i + 1)).replaceAll("{hotel}", hotel), ...es.map(row)]), ...more].flatMap((l, i) => (i === 0 ? ["", l] : [l]));
       }
-      const head = L.group === "hotel" ? L.hotelGroup.replaceAll("{n}", String(ki + 1)).replaceAll("{hotel}", k) : `*Account: ${k}*`;
+      const head = L.group === "hotel" ? L.hotelGroup.replaceAll("{n}", String(ki + 1)).replaceAll("{hotel}", k) : ownerHead(k);
       return ["", head, ...mine.slice(0, MAX).map(row), ...more];
     })];
   };
