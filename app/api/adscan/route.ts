@@ -38,7 +38,8 @@ export async function POST(req: NextRequest) {
     // Recompute for this user: only an open issue on their own account can be recorded.
     const data = await loadAdscan(me.userId, me.role);
     const alert = data.alerts.find((a) => a.id === campaign_id);
-    if (!alert || alert.kind !== "issue") return NextResponse.json({ error: "ไม่พบเรื่องนี้" }, { status: 404 });
+    // Only red (critical) needs a fixed/skipped answer; yellow is shown for awareness only.
+    if (!alert || alert.sev !== "critical") return NextResponse.json({ error: "ไม่พบเรื่องนี้" }, { status: 404 });
     if (alert.status !== "open") return NextResponse.json({ error: "เรื่องนี้บันทึกไปแล้ว" }, { status: 409 });
     const { error } = await getSupabase().from("adscan_actions").insert({
       campaign_id, account_id: alert.hotelId, user_id: me.userId, type, label,

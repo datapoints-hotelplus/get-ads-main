@@ -87,6 +87,30 @@ function describeSlackErr(e: unknown): SlackErr {
   if (e instanceof SlackCallError && e.status > 0) return { title: "ระบบขัดข้อง ยังไม่ได้บันทึก", message: "เกิดข้อผิดพลาดจากเซิร์ฟเวอร์ ลองใหม่อีกครั้ง ถ้ายังไม่ได้ให้แจ้งผู้ดูแลระบบ", detail: `HTTP ${e.status}: ${e.message}` };
   return { title: "เชื่อมต่อเซิร์ฟเวอร์ไม่ได้", message: "ตรวจการเชื่อมต่ออินเทอร์เน็ตแล้วลองใหม่อีกครั้ง", detail: e instanceof Error ? e.message : String(e) };
 }
+/**
+ * The preview as Slack shows it: *bold*, ~strike~, _italic_, `code` and <url|label>.
+ * Like Slack, a marker only counts at a word edge (not glued to a letter/digit on the outside).
+ */
+function SlackText({ text }: { text: string }) {
+  const re = /(?<![\p{L}\p{N}])(?:\*[^*\n]+\*|~[^~\n]+~|_[^_\n]+_|`[^`\n]+`)(?![\p{L}\p{N}])|<https?:\/\/[^|>\s]+\|[^>\n]+>/gu;
+  const out: React.ReactNode[] = [];
+  let last = 0;
+  for (const m of text.matchAll(re)) {
+    const s = m[0];
+    if (m.index > last) out.push(text.slice(last, m.index));
+    const key = m.index;
+    if (s.startsWith("<")) {
+      const [url, label] = [s.slice(1, s.indexOf("|")), s.slice(s.indexOf("|") + 1, -1)];
+      out.push(<a key={key} href={url} target="_blank" rel="noopener noreferrer" className="text-blue-700 underline">{label}</a>);
+    } else {
+      const inner = s.slice(1, -1);
+      out.push(s[0] === "*" ? <strong key={key}>{inner}</strong> : s[0] === "~" ? <s key={key}>{inner}</s> : s[0] === "_" ? <em key={key}>{inner}</em> : <code key={key} className="rounded bg-gray-200 px-1 text-[0.9em]">{inner}</code>);
+    }
+    last = m.index + s.length;
+  }
+  out.push(text.slice(last));
+  return <>{out}</>;
+}
 const when = (iso: string) => new Date(iso).toLocaleString("th-TH", { day: "numeric", month: "short", year: "2-digit", hour: "2-digit", minute: "2-digit" });
 
 /** TOR ส่วนที่ 6: edit the AI Skill without touching code; every save is a new version (history). */
@@ -450,7 +474,12 @@ export default function AdscanSkillAdmin() {
               </button>
             </div>
             {labelsOk && <div role="status" className="rounded-lg border border-green-200 bg-green-50 px-4 py-2.5 text-sm text-green-800">{labelsOk}</div>}
-            {labelsPreview && <pre className="bg-gray-50 rounded-lg p-3 text-sm whitespace-pre-wrap font-sans">{labelsPreview}</pre>}
+            {labelsPreview && (
+              <div className="space-y-1">
+                <div className="text-xs text-gray-500">ตัวอย่างข้อความที่จะส่ง (ตัวหนา ขีดฆ่า ลิงก์ แสดงตามรูปแบบของ Slack)</div>
+                <div className="bg-gray-50 rounded-lg p-3 text-sm whitespace-pre-wrap"><SlackText text={labelsPreview} /></div>
+              </div>
+            )}
           </div>
         </div>
 

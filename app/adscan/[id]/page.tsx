@@ -240,7 +240,7 @@ function Detail({ d, a, reload }: { d: AdscanPayload; a: AdscanAlert; reload: ()
             </div>
           )}
 
-          {a.kind === "issue" && (
+          {a.sev === "critical" && (
             <div className={`${card} p-5 space-y-2.5`}>
               <div className="text-[11px] font-semibold text-gray-500">หลังแก้ใน Ads Manager แล้ว</div>
               {a.status !== "open" ? (

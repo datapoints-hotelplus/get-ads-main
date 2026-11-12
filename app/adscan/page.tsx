@@ -37,25 +37,28 @@ function IssueCard({ a, n, readOnly }: { a: AdscanAlert; n: number; readOnly?: b
   );
 }
 
-/** Good-news card: a link to the detail page, or a plain box for view-only HR. */
-function GoodWrap({ id, readOnly, children }: { id: string; readOnly?: boolean; children: React.ReactNode }) {
-  const cls = `${card} ${SEV.good.border} p-3.5 block space-y-1`;
+/** Small card (good news / yellow watch list): a link to the detail page, or a plain box for view-only HR. */
+function GoodWrap({ id, readOnly, sev = "good", children }: { id: string; readOnly?: boolean; sev?: "good" | "medium"; children: React.ReactNode }) {
+  const cls = `${card} ${SEV[sev].border} p-3.5 block space-y-1`;
   return readOnly ? <div className={cls}>{children}</div> : <Link href={`/adscan/${id}`} className={`${cls} hover:bg-gray-50`}>{children}</Link>;
 }
 
 function Today({ d }: { d: AdscanPayload }) {
   const [filter, setFilter] = useState("all");
   const [allGood, setAllGood] = useState(false);
-  const open = d.alerts.filter((a) => a.kind === "issue" && a.status === "open");
-  const shown = filter === "all" ? open : open.filter((a) => a.hotelId === filter);
+  // Red must be answered (fixed / skipped); yellow is listed below it for awareness only.
+  const open = d.alerts.filter((a) => a.sev === "critical" && a.status === "open");
+  const watch = d.alerts.filter((a) => a.sev === "medium");
+  const byHotel = <T extends AdscanAlert>(xs: T[]) => (filter === "all" ? xs : xs.filter((a) => a.hotelId === filter));
+  const shown = byHotel(open);
+  const watchShown = byHotel(watch);
   const good = d.alerts.filter((a) => a.kind === "good");
   const waits = d.alerts.filter((a) => a.kind === "wait");
   const follows = followUps(d);
-  const crit = open.filter((a) => a.sev === "critical").length;
-  const issueHotels = d.hotels.filter((h) => open.some((a) => a.hotelId === h.id));
+  const issueHotels = d.hotels.filter((h) => open.some((a) => a.hotelId === h.id) || watch.some((a) => a.hotelId === h.id));
 
   const kpis = [
-    { label: "ต้องแก้", value: open.length, sub: `เร่งด่วน ${crit} · ปานกลาง ${open.length - crit}` },
+    { label: "ต้องแก้ (แดง)", value: open.length, sub: `ควรเฝ้าดู (เหลือง) ${watch.length}` },
     { label: "ข่าวดี", value: good.length, sub: "Campaign ที่ถูกกว่าเกณฑ์ ≥ 30%" },
     { label: "กำลังติดตามผล", value: follows.length, sub: `แก้แล้วใน ${FOLLOW_DAYS} วันที่ผ่านมา` },
     { label: "โรงแรมที่ดูแล", value: d.hotels.length, sub: `มีเรื่องต้องแก้ ${issueHotels.length} โรงแรม` },
@@ -66,6 +69,7 @@ function Today({ d }: { d: AdscanPayload }) {
       <div>
         <DataNote d={d} />
         <h1 className="text-2xl font-bold text-gray-900">{open.length ? `มี ${open.length} เรื่องต้องแก้` : "ไม่มีเรื่องต้องแก้"}</h1>
+        {watch.length > 0 && <div className="text-sm text-gray-500">และอีก {watch.length} เรื่องควรเฝ้าดู (เหลือง) ไม่ต้องบันทึกว่าแก้/ไม่แก้</div>}
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -87,7 +91,7 @@ function Today({ d }: { d: AdscanPayload }) {
               <button key={f.id} aria-pressed={active} onClick={() => setFilter(f.id)}
                 className={`inline-flex items-center gap-2 min-h-9 px-3.5 rounded-full text-sm font-semibold border ${active ? "bg-secondary text-white border-secondary ring-2 ring-primary" : "bg-white text-gray-900 border-gray-300"}`}>
                 {f.name}
-                <span className="min-w-5 px-1.5 rounded-full text-[11px] leading-[18px] bg-red-600 text-white">{count}</span>
+                {count > 0 && <span className="min-w-5 px-1.5 rounded-full text-[11px] leading-[18px] bg-red-600 text-white">{count}</span>}
               </button>
             );
           })}
@@ -101,7 +105,20 @@ function Today({ d }: { d: AdscanPayload }) {
           {!shown.length && (
             <div className={`${card} p-7 text-center`}>
               <div className="font-semibold">ไม่มีเรื่องค้าง</div>
-              <div className="text-sm text-gray-500">ทุก Campaign ที่ตรวจได้อยู่ในเกณฑ์ หรือบันทึกแล้ว</div>
+              <div className="text-sm text-gray-500">ไม่มี Campaign ที่เกินเกณฑ์แดง หรือบันทึกครบแล้ว</div>
+            </div>
+          )}
+
+          {watchShown.length > 0 && (
+            <div className="space-y-2.5 pt-2">
+              <h2 className="font-semibold text-gray-900">ควรเฝ้าดู (เหลือง) — ไม่ต้องบันทึกว่าแก้/ไม่แก้</h2>
+              {watchShown.map((w) => (
+                <GoodWrap key={w.id} id={w.id} readOnly={d.readOnly} sev="medium">
+                  <div className="flex justify-between gap-2 flex-wrap"><span className={hotelPill}>{w.hotel}</span><span className="font-mono text-sm font-bold text-amber-800">{costText(w)}</span></div>
+                  <div className="text-sm font-semibold">{w.headline}</div>
+                  <div className="text-xs text-gray-500 font-mono truncate" title={w.campaign}>{w.campaign}</div>
+                </GoodWrap>
+              ))}
             </div>
           )}
         </section>
@@ -140,7 +157,7 @@ function Today({ d }: { d: AdscanPayload }) {
             <h2 className="font-semibold text-gray-900">รอข้อมูล</h2>
             {waits.map((w) => (
               <div key={w.id} className={`${card} px-3.5 py-3 space-y-1.5 bg-gray-50`}>
-                <div className="flex justify-between gap-2"><strong className="text-sm">{w.hotel}</strong><Chip sev="wait" /></div>
+                <div className="flex justify-between gap-2"><strong className="text-sm">{w.hotel}</strong><span className="flex items-center gap-2"><span className="font-mono text-sm">{costText(w)}</span><Chip sev="wait" /></span></div>
                 <div className="text-sm text-gray-500"><span className="font-mono">{w.campaign}</span> — {w.headline}</div>
               </div>
             ))}

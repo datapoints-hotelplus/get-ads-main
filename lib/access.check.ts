@@ -58,6 +58,7 @@ for (const p of ["/adscan/hotels", "/adscan/history", "/adscan/hotels/h1"]) {
   assert.equal(canOpen("hr", p), false, `hr must not open ${p}`);
 }
 assert.equal(homeFor("specialist", { facebook: true, tiktok: false }), "/adscan");
+assert.equal(homeFor("admin", { facebook: true, tiktok: true }), "/adscan");
 
 // ── Performance Report: admin + HR only; HR sees nothing else of ADSCAN except the overview ──
 assert.equal(canOpen("hr", "/adscan/report"), true);

@@ -10,8 +10,8 @@ const ORDER: Record<Sev, number> = { critical: 0, medium: 1, good: 2, wait: 3, o
 function Hotels({ d }: { d: AdscanPayload }) {
   const rows = d.hotels.map((h) => {
     const mine = d.alerts.filter((a) => a.hotelId === h.id);
-    const open = mine.filter((a) => a.kind === "issue" && a.status === "open");
-    const sev: Sev = open[0]?.sev ?? (mine.some((a) => a.kind === "good") ? "good" : mine.length ? (mine.every((a) => a.kind === "wait") ? "wait" : "ok") : "ok");
+    const open = mine.filter((a) => a.sev === "critical" && a.status === "open");
+    const sev: Sev = open[0]?.sev ?? (mine.some((a) => a.sev === "medium") ? "medium" : mine.some((a) => a.kind === "good") ? "good" : mine.length ? (mine.every((a) => a.kind === "wait") ? "wait" : "ok") : "ok");
     return { ...h, mine, open, sev, spend: mine.reduce((s, a) => s + a.spend, 0) };
   }).sort((a, b) => ORDER[a.sev] - ORDER[b.sev] || b.spend - a.spend);
 
