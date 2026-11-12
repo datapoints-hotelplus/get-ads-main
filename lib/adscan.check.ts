@@ -42,7 +42,7 @@ assert.equal(v.bad.trend.length, 30);
 assert.equal(v.good.sev, "good", "฿25 ≤ 70% of ฿54");
 assert.equal(v.zero.sev, "critical", "spend with zero results is the worst case, not skipped");
 assert.equal(v.zero.value, null);
-assert.equal(v.new.sev, "wait", "started within the window → not judged yet");
+assert.equal(v.new.sev, "critical", "a 3-day-old campaign is judged at once (฿100 > yellow ฿66), like Portfolio");
 assert.equal(v.awn, undefined, "Reach template needs de-duplicated reach — not judged from daily rows");
 assert.equal(v.x, undefined, "campaign with no matching prefix is ignored");
 
@@ -192,5 +192,5 @@ assert.equal(created[1].close_reason, "stopped", "campaign gone from the data = 
   assert.deepEqual(cleanSlackLabels({ hotelHeading: "{n}. nope" }), {}, "invalid heading ignored");
 }
 
-console.log("OK — adscan: persistent episodes, severity bands, culprit/best, effect, wait, zero-result, unsupported templates, slack summary");
+console.log("OK — adscan: persistent episodes, severity bands, culprit/best, effect, new campaigns judged at once, zero-result, unsupported templates, slack summary");
 

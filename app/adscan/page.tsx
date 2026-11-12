@@ -53,7 +53,6 @@ function Today({ d }: { d: AdscanPayload }) {
   const shown = byHotel(open);
   const watchShown = byHotel(watch);
   const good = d.alerts.filter((a) => a.kind === "good");
-  const waits = d.alerts.filter((a) => a.kind === "wait");
   const follows = followUps(d);
   const issueHotels = d.hotels.filter((h) => open.some((a) => a.hotelId === h.id) || watch.some((a) => a.hotelId === h.id));
 
@@ -151,17 +150,6 @@ function Today({ d }: { d: AdscanPayload }) {
               </div>
             ))}
             {!follows.length && <div className="text-sm text-gray-500">ยังไม่มีเรื่องที่บันทึกว่าแก้แล้ว</div>}
-          </section>
-
-          <section className="space-y-2.5">
-            <h2 className="font-semibold text-gray-900">รอข้อมูล</h2>
-            {waits.map((w) => (
-              <div key={w.id} className={`${card} px-3.5 py-3 space-y-1.5 bg-gray-50`}>
-                <div className="flex justify-between gap-2"><strong className="text-sm">{w.hotel}</strong><span className="flex items-center gap-2"><span className="font-mono text-sm">{costText(w)}</span><Chip sev="wait" /></span></div>
-                <div className="text-sm text-gray-500"><span className="font-mono">{w.campaign}</span> — {w.headline}</div>
-              </div>
-            ))}
-            {!waits.length && <div className="text-sm text-gray-500">ไม่มี</div>}
           </section>
         </aside>
       </div>

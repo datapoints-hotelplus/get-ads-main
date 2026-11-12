@@ -58,7 +58,7 @@ export type Node = {
 
 export type Verdict = {
   id: string; // campaign_id
-  sev: Sev; kind: "issue" | "good" | "ok" | "wait";
+  sev: Sev; kind: "issue" | "good" | "ok";
   hotel: string; hotelId: string; campaign: string; template: string; templateMetric: string;
   metric: string; resLabel: string; green: number; yellow: number; dec: number;
   windowFrom: string; windowTo: string; dataDays: number;
@@ -172,7 +172,6 @@ export function evaluate(rows: RawRow[], templates: Template[], latest: string):
 
     const value = costOf(total);
     const dataDays = new Set(crow.map((r) => r.date_start)).size;
-    const startedRecently = crow.every((r) => r.date_start >= windowFrom);
     const base = {
       id: cid, hotel: first.account_name, hotelId: "act_" + first.account_id, campaign: first.campaign_name,
       template: t.name, templateMetric: t.metric, metric, resLabel, green, yellow, dec,
@@ -182,10 +181,8 @@ export function evaluate(rows: RawRow[], templates: Template[], latest: string):
     const deltaPct = value != null && value !== Infinity ? Math.round(((value - green) / green) * 100) : null;
     const fmt = (v: number | null) => (v === Infinity ? `ยังไม่มี ${resLabel}` : money(v, dec));
 
-    if (startedRecently) {
-      out.push({ ...base, kind: "wait", sev: "wait", deltaPct, headline: `เพิ่งเริ่ม ${dataDays} วัน — ต้องมีข้อมูลครบ ${WINDOW} วันก่อนตัดสิน`, action: "", why: "", effect: "", analysis: "" });
-      continue;
-    }
+    // New campaigns are judged on the days they have, like Portfolio (business call, 2026-11-12);
+    // MIN_SPEND is the only guard against judging on too little data.
     if (total.spend < MIN_SPEND) {
       out.push({ ...base, kind: "ok", sev: "ok", deltaPct, headline: `Spend ${WINDOW} วัน ${money(total.spend, 0)} น้อยเกินกว่าจะตัดสิน`, action: "", why: "", effect: "", analysis: "" });
       continue;
