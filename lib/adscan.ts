@@ -30,7 +30,7 @@ export const RESULT_COL: Record<string, { col: keyof RawRow; label: string; metr
   cost_per_purchase: { col: "purchases", label: "Purchases", metric: "Cost per Purchase" },
 };
 
-export const DONE_CHOICES = ["ปิด Ad Set / Ad", "ย้าย Budget", "ลด Budget", "ขยาย Audience", "เปลี่ยน Creative", "อื่น ๆ"];
+export const DONE_CHOICES = ["ปิด Ad Set / Ad", "ย้าย Budget", "ลด Budget", "เพิ่ม Budget", "ขยาย Audience", "เปลี่ยน Creative", "อื่น ๆ"];
 export const SKIP_CHOICES = ["ลูกค้าสั่งให้คงไว้", "กำลังทดสอบอยู่", "ข้อมูลน่าจะไม่ถูกต้อง", "งบหมด ลูกค้ายังไม่เติม", "อื่น ๆ"];
 
 export type RawRow = {

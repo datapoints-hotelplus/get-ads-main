@@ -80,9 +80,11 @@ function AiBox({ id }: { id: string }) {
 function Detail({ d, a, reload }: { d: AdscanPayload; a: AdscanAlert; reload: () => void }) {
   const [open, setOpen] = useState<Record<number, boolean>>({});
   const [modal, setModal] = useState<"fixed" | "skipped" | null>(null);
-  const [pick, setPick] = useState<string | null>(null);
+  const [pick, setPick] = useState<string[]>([]); // several choices allowed
   const [note, setNote] = useState("");
-  const noteNeeded = pick === "อื่น ๆ" && !note.trim();
+  const other = pick.includes("อื่น ๆ");
+  const noteNeeded = other && !note.trim();
+  const toggle = (c: string) => setPick((p) => (p.includes(c) ? p.filter((x) => x !== c) : [...p, c]));
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
@@ -96,7 +98,7 @@ function Detail({ d, a, reload }: { d: AdscanPayload; a: AdscanAlert; reload: ()
     setSaving(true);
     setErr("");
     try {
-      const r = await fetch("/api/adscan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ campaign_id: a.id, type: modal, label: pick, note }) });
+      const r = await fetch("/api/adscan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ campaign_id: a.id, type: modal, labels: pick, note }) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) return setErr(j.error || "บันทึกไม่สำเร็จ");
     } catch {
@@ -257,8 +259,8 @@ function Detail({ d, a, reload }: { d: AdscanPayload; a: AdscanAlert; reload: ()
               ) : (
                 <>
                   <div className="grid grid-cols-2 gap-2">
-                    <button onClick={() => { setModal("fixed"); setPick(null); setNote(""); setErr(""); }} className="min-h-12 rounded-lg bg-secondary text-white font-semibold">✓ แก้แล้ว</button>
-                    <button onClick={() => { setModal("skipped"); setPick(null); setNote(""); setErr(""); }} className="min-h-12 rounded-lg border border-gray-300 text-gray-700 font-semibold">ไม่แก้ เพราะ…</button>
+                    <button onClick={() => { setModal("fixed"); setPick([]); setNote(""); setErr(""); }} className="min-h-12 rounded-lg bg-secondary text-white font-semibold">✓ แก้แล้ว</button>
+                    <button onClick={() => { setModal("skipped"); setPick([]); setNote(""); setErr(""); }} className="min-h-12 rounded-lg border border-gray-300 text-gray-700 font-semibold">ไม่แก้ เพราะ…</button>
                   </div>
                   <div className="text-xs text-gray-500 text-center">บันทึกแล้วเรื่องนี้จะย้ายไป “ติดตามผล” และระบบเทียบตัวเลขก่อน–หลังให้</div>
                 </>
@@ -288,15 +290,19 @@ function Detail({ d, a, reload }: { d: AdscanPayload; a: AdscanAlert; reload: ()
         <div className="fixed inset-0 z-40 bg-slate-900/50 flex items-center justify-center p-5" onClick={() => setModal(null)}>
           <div role="dialog" aria-modal="true" aria-labelledby="dlg" onClick={(e) => e.stopPropagation()} className="w-full max-w-md bg-white rounded-xl shadow-xl p-6 space-y-3.5">
             <h2 id="dlg" className="text-lg font-semibold">{modal === "fixed" ? "แก้อะไรไปใน Ads Manager?" : "ทำไมถึงไม่แก้?"}</h2>
+            <div className="text-sm text-gray-500">เลือกได้มากกว่า 1 ข้อ</div>
             <div className="flex flex-wrap gap-2">
-              {(modal === "fixed" ? DONE_CHOICES : SKIP_CHOICES).map((c) => (
-                <button key={c} aria-pressed={pick === c} onClick={() => setPick(c)}
-                  className={`min-h-11 px-4 rounded-full text-sm ${pick === c ? "border-2 border-secondary bg-indigo-50 text-secondary font-bold ring-2 ring-primary" : "border border-gray-300"}`}>
-                  {c}
-                </button>
-              ))}
+              {(modal === "fixed" ? DONE_CHOICES : SKIP_CHOICES).map((c) => {
+                const on = pick.includes(c);
+                return (
+                  <button key={c} aria-pressed={on} onClick={() => toggle(c)}
+                    className={`min-h-11 px-4 rounded-full text-sm ${on ? "border-2 border-secondary bg-indigo-50 text-secondary font-bold ring-2 ring-primary" : "border border-gray-300"}`}>
+                    {on && "✓ "}{c}
+                  </button>
+                );
+              })}
             </div>
-            {pick === "อื่น ๆ" && (
+            {other && (
               <label className="block space-y-1">
                 <span className="text-sm font-semibold">ระบุรายละเอียด</span>
                 <textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} rows={2} autoFocus
@@ -310,7 +316,7 @@ function Detail({ d, a, reload }: { d: AdscanPayload; a: AdscanAlert; reload: ()
             {err && <div className="text-sm text-red-700">{err}</div>}
             <div className="flex justify-end gap-2.5">
               <button onClick={() => setModal(null)} className="px-4 min-h-11 rounded-lg border border-gray-300">ยกเลิก</button>
-              <button disabled={!pick || noteNeeded || saving} onClick={save} className="px-4 min-h-11 rounded-lg bg-secondary text-white font-semibold disabled:opacity-40">
+              <button disabled={!pick.length || noteNeeded || saving} onClick={save} className="px-4 min-h-11 rounded-lg bg-secondary text-white font-semibold disabled:opacity-40">
                 {saving ? "กำลังบันทึก…" : "บันทึก"}
               </button>
             </div>
