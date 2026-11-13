@@ -10,9 +10,6 @@ const card = "bg-white border border-gray-200 rounded-xl shadow-sm";
 const LABEL_FIELDS: { k: string; label: string }[] = [
   { k: "fresh", label: "ชื่อหมวด: พบปัญหาใหม่" },
   { k: "pending", label: "ชื่อหมวด: ยังไม่ได้แก้" },
-  { k: "acted", label: "ชื่อหมวด: บันทึกแล้ว รอดูผล" },
-  { k: "fixed", label: "ชื่อหมวด: กลับมาปกติแล้ว" },
-  { k: "stopped", label: "ชื่อหมวด: หยุดติดตาม" },
   { k: "noOwner", label: "ชื่อกลุ่มเมื่อไม่มีผู้ดูแล" },
   { k: "empty", label: "ข้อความเมื่อไม่มีเรื่องต้องดูแล" },
 ];
@@ -33,9 +30,9 @@ const PLACEHOLDERS: { where: string; vars: { v: string; note: string; ex: string
     vars: [
       { v: "{campaign}", note: "ชื่อแคมเปญ (ต้องมีเสมอ)", ex: "ENG VDO | Sea u pattaya" },
       { v: "{hotel}", note: "ชื่อโรงแรม", ex: "Sea U Pattaya H+" },
-      { v: "{metric}", note: "ชนิดต้นทุน (ไม่มีในหมวด “หยุดติดตาม”)", ex: "ต้นทุนต่อ Engagement" },
+      { v: "{metric}", note: "ชนิดต้นทุน", ex: "ต้นทุนต่อ Engagement" },
       { v: "{status}", note: "สถานะ", ex: "สูงเกินเกณฑ์" },
-      { v: "{severity}", note: "ระดับ (ไม่มีในหมวด “กลับมาปกติแล้ว” และ “หยุดติดตาม”)", ex: "ควรดู" },
+      { v: "{severity}", note: "ระดับ (Slack ส่งเฉพาะสีแดง จึงเป็น “เร่งด่วน” เสมอ)", ex: "เร่งด่วน" },
       { v: "{days}", note: "จำนวนวันที่ค้าง (มีเฉพาะหมวด “ยังไม่ได้แก้”)", ex: "ค้างมา 4 วัน" },
     ],
   },
@@ -57,7 +54,7 @@ const TEMPLATE_EXAMPLES: { note: string; text: string; out: string }[] = [
   {
     note: "รวมทุกหมวดเป็นรายการเดียว ไม่มีหัวหมวด (ลบบรรทัด {section} ออก)",
     text: "*สรุปแคมเปญที่ต้องดูแล ข้อมูลวันที่ {date}*\n\n*Account: {owner}*\n{n}. {hotel}\n{campaign} ({metric} {status}, {severity}, {days})\n\nดูรายละเอียดได้ที่ {link}",
-    out: "Account: Beer Marcom\n1. Sea U Pattaya\n• MES | SEA U PATTAYA (ต้นทุนต่อข้อความ สูงเกินเกณฑ์, เร่งด่วน, ค้างมา 56 วัน)\n• (แคมเปญที่กลับมาปกติแล้วอยู่ในรายการเดียวกัน ขึ้นว่า “กลับมาอยู่ในเกณฑ์”)",
+    out: "Account: Beer Marcom\n1. Sea U Pattaya\n• MES | SEA U PATTAYA (ต้นทุนต่อข้อความ สูงเกินเกณฑ์, เร่งด่วน, ค้างมา 56 วัน)\n• MES | SEA U PATTAYA 2 (ต้นทุนต่อข้อความ สูงเกินเกณฑ์, เร่งด่วน) ← เรื่องใหม่วันนี้ ไม่มีจำนวนวัน",
   },
   {
     note: "จัดกลุ่มตามโรงแรมอย่างเดียว (หัวโรงแรมตัวหนา)",
@@ -536,7 +533,7 @@ export default function AdscanSkillAdmin() {
               <p className="text-gray-700">ในช่องเขียนตัวอย่างข้อความหนึ่งชุด ระบบดูว่าแต่ละบรรทัดมีตัวแปรอะไร แล้วเอาไปทำซ้ำกับข้อมูลจริง บรรทัดว่างไม่มีผล</p>
               <ul className="list-disc pl-5 space-y-1 text-gray-700">
                 <li>บรรทัดที่มี <code>{"{campaign}"}</code> = บรรทัดของแต่ละแคมเปญ (ต้องมี และมีได้บรรทัดเดียว)</li>
-                <li>บรรทัดที่มี <code>{"{section}"}</code> หรือ <code>{"{count}"}</code> = หัวหมวด (พบปัญหาใหม่ / ยังไม่ได้แก้ / กลับมาปกติแล้ว / หยุดติดตาม) <strong>ลบบรรทัดนี้ = รวมทุกหมวดเป็นรายการเดียว ไม่มีหัวหมวด</strong> (ใช้ <code>{"{status}"}</code> ในบรรทัดแคมเปญบอกว่าแคมเปญนั้นอยู่สถานะไหน)</li>
+                <li>บรรทัดที่มี <code>{"{section}"}</code> หรือ <code>{"{count}"}</code> = หัวหมวด (พบปัญหาใหม่ / ยังไม่ได้แก้ — Slack ส่งเฉพาะสีแดงที่ยังไม่มีใครบันทึกว่าแก้/ไม่แก้ในรอบ 7 วัน) <strong>ลบบรรทัดนี้ = รวมทุกหมวดเป็นรายการเดียว ไม่มีหัวหมวด</strong> (ใช้ <code>{"{status}"}</code> ในบรรทัดแคมเปญบอกว่าแคมเปญนั้นอยู่สถานะไหน)</li>
                 <li>บรรทัดที่มี <code>{"{owner}"}</code> = หัวผู้ดูแล <strong>ลบบรรทัดนี้ = ไม่จัดกลุ่มตามผู้ดูแล</strong></li>
                 <li>บรรทัดที่มี <code>{"{hotel}"}</code> หรือ <code>{"{n}"}</code> แต่ไม่มี <code>{"{campaign}"}</code> = หัวโรงแรม <strong>ลบบรรทัดนี้ = ไม่แยกโรงแรม</strong></li>
                 <li>บรรทัดที่อยู่เหนือหัวหมวด = หัวเรื่อง และบรรทัดที่อยู่ใต้บรรทัดแคมเปญ = ข้อความท้าย ถ้าลบออก ระบบใช้ข้อความเริ่มต้น</li>

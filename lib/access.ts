@@ -56,6 +56,7 @@ const PAGE_RULES: { prefix: string; roles: Role[]; exact?: boolean }[] = [
   { prefix: "/tiktok", roles: ["admin"] }, // /tiktok/sync — settings
   { prefix: "/adscan/report", roles: ["admin", "hr"] }, // TOR: Performance Report — per-person numbers, no ad data
   { prefix: "/adscan", exact: true, roles: ["admin", "specialist", "hr"] }, // alerts overview; HR read-only (no detail/actions)
+  { prefix: "/adscan/list", roles: ["admin", "specialist", "hr"] }, // "ดูทั้งหมด" of the overview lists; same read-only view for HR
   { prefix: "/adscan", roles: ["admin", "specialist"] }, // TOR: clients never see ADSCAN
   { prefix: "/account", roles: ALL_ROLES },
   { prefix: "/no-access", roles: ALL_ROLES },

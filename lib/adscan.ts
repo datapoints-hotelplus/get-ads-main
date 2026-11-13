@@ -19,7 +19,7 @@ export const WINDOW = 7;
 export const TREND_DAYS = 30;
 export const MIN_SPEND = 100; // ponytail: one global weekly floor; per-template if small campaigns need judging
 export const GOOD_MARGIN = 0.7;
-export const FOLLOW_DAYS = 14;
+export const FOLLOW_DAYS = 7; // after แก้แล้ว / ไม่แก้: hidden from ต้องแก้ and Slack this long; still red on day 8 → back
 
 /** Template metric → the ads_rawdata column that counts one result. */
 export const RESULT_COL: Record<string, { col: keyof RawRow; label: string; metric: string }> = {
@@ -282,14 +282,11 @@ export const SLACK_LABELS_DEFAULT = {
   title: "*สรุปแคมเปญที่ต้องดูแล ข้อมูลวันที่ {date}*", // {date} = data date
   fresh: "พบปัญหาใหม่",
   pending: "ยังไม่ได้แก้",
-  acted: "บันทึกแล้ว รอดูผล", // someone pressed แก้แล้ว / ไม่แก้ within FOLLOW_DAYS and it's still over the threshold
-  fixed: "กลับมาปกติแล้ว",
-  stopped: "หยุดติดตาม",
   noOwner: "ยังไม่มีผู้ดูแล", // keeps an alert visible when nobody holds its account
   empty: "ไม่มีแคมเปญที่ต้องดูแลในวันนี้",
   footer: "ดูรายละเอียดได้ที่ {link}", // {link} = <url|ADSCAN>, or "หน้า ADSCAN" when the site URL is unknown
   line: "{hotel} — {campaign} ({metric} {status}, {severity}, {days})", // one line per campaign
-  sections: "split", // "split" = four sections with their headings, "merged" = one list, no section headings
+  sections: "split", // "split" = two sections (new / still open) with their headings, "merged" = one list, no section headings
   sectionHeading: "*{section} {count} แคมเปญ*", // heading of each section; {section} = its name above, {count} = number of campaigns
   ownerHeading: "*Account: {owner}*", // owner heading (group "owner" / "owner_hotel")
   hotelHeading: "{n}. {hotel}", // hotel heading under an owner (group "owner_hotel"); {n} = 1, 2, 3 … restarting per owner
@@ -451,8 +448,8 @@ export function slackSummary(p: {
   day: string; created: Episode[]; touched: Episode[];
   names: Map<string, { hotel: string; campaign: string }>; owners: Map<string, string[]>; link: string | null;
   labels?: Partial<SlackLabels>;
-  /** Newest แก้แล้ว / ไม่แก้ per campaign_id within FOLLOW_DAYS — the same rule that takes it off "ต้องแก้" on the page. */
-  acted?: Map<string, { type: "fixed" | "skipped"; label: string }>;
+  /** Campaigns with a แก้แล้ว / ไม่แก้ within FOLLOW_DAYS — off "ต้องแก้" on the page, so left out of Slack too. */
+  acted?: Set<string>;
 }): string {
   const MAX = 30; // per group — Slack stays readable; the rest is on the page
   const L = { ...SLACK_LABELS_DEFAULT, ...p.labels };
@@ -507,26 +504,17 @@ export function slackSummary(p: {
     return ["", L.sectionHeading.replaceAll("{section}", title).replaceAll("{count}", String(eps.length)), ...inner];
   };
 
-  const isNew = (e: Episode) => e.first_seen === p.day && e.closed_at == null;
-  const acted = p.acted ?? new Map<string, { type: "fixed" | "skipped"; label: string }>();
-  const isActed = (e: Episode) => e.closed_at == null && acted.has(e.campaign_id);
-  const fresh = p.created.filter((e) => isNew(e) && !isActed(e));
-  const pending = [...p.touched, ...p.created].filter((e) => e.closed_at == null && !isNew(e) && !isActed(e));
-  const recorded = [...p.touched, ...p.created].filter(isActed);
-  const closed = p.touched.filter((e) => e.closed_at != null);
-  const fixed = closed.filter((e) => e.close_reason === "improved");
-  const stopped = closed.filter((e) => e.close_reason !== "improved");
+  // Slack carries only red (critical) campaigns nobody has answered in the last FOLLOW_DAYS days —
+  // the same list as "ต้องแก้" on the page. Yellow, recovered and stopped campaigns stay off Slack.
+  const due = (e: Episode) => e.closed_at == null && e.sev === "critical" && !p.acted?.has(e.campaign_id);
+  const isNew = (e: Episode) => e.first_seen === p.day;
+  const fresh = p.created.filter((e) => due(e) && isNew(e));
+  const pending = [...p.touched, ...p.created].filter((e) => due(e) && !isNew(e));
 
   // What each kind of campaign shows in the line placeholders.
   const sections: [string, Episode[], (e: Episode) => Vars][] = [
     [L.fresh, fresh, (e) => ({ metric: metric(e), status: "สูงเกินเกณฑ์", severity: sev(e) })],
     [L.pending, pending, (e) => ({ metric: metric(e), status: "สูงเกินเกณฑ์", severity: sev(e), days: `ค้างมา ${dayDiff(e.first_seen, p.day) + 1} วัน` })],
-    [L.acted, recorded, (e) => {
-      const a = acted.get(e.campaign_id)!;
-      return { metric: metric(e), status: a.type === "fixed" ? `แก้แล้ว (${a.label}) ยังสูงเกินเกณฑ์` : `ไม่แก้: ${a.label}`, severity: sev(e) };
-    }],
-    [L.fixed, fixed, (e) => ({ metric: metric(e), status: "กลับมาอยู่ในเกณฑ์" })],
-    [L.stopped, stopped, () => ({ status: "หยุดยิงหรือใช้งบน้อยเกินกว่าจะตัดสิน" })],
   ];
   const varsFor = new Map<Episode, (e: Episode) => Vars>(sections.flatMap(([, eps, v]) => eps.map((e): [Episode, (e: Episode) => Vars] => [e, v])));
   const lines = [
@@ -535,7 +523,7 @@ export function slackSummary(p: {
       ? list(null, sections.flatMap(([, eps]) => eps), (e) => varsFor.get(e)!(e))
       : sections.flatMap(([title, eps, vars]) => list(title, eps, vars))),
   ];
-  if (!fresh.length && !pending.length && !recorded.length && !closed.length) lines.push("", L.empty);
+  if (!fresh.length && !pending.length) lines.push("", L.empty);
   lines.push("", L.footer.replaceAll("{link}", p.link ? `<${p.link}|ADSCAN>` : "หน้า ADSCAN"));
   return lines.join("\n");
 }

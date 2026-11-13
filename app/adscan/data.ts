@@ -30,7 +30,11 @@ export function useAdscan() {
 
 export const hotelName = (d: AdscanPayload, id: string) => d.hotels.find((h) => h.id === id)?.name ?? id;
 
-/** Fixed in the last FOLLOW_DAYS days → before (at the click) vs now. */
+/**
+ * Fixed in the last FOLLOW_DAYS days → before (at the click) vs now. `improved` =
+ * back within the threshold (≤ green): the ADSCAN page drops those from "ติดตามผล";
+ * history still shows them. Not improved after FOLLOW_DAYS → back on "ต้องแก้".
+ */
 export function followUps(d: AdscanPayload) {
   const cutoff = Date.now() - FOLLOW_DAYS * 864e5;
   const latestPer = new Map<string, (typeof d.actions)[number]>();
@@ -43,12 +47,14 @@ export function followUps(d: AdscanPayload) {
       const now = alert?.value ?? null;
       const better = now != null && act.value_at != null && now < act.value_at;
       const days = Math.max(1, Math.ceil((Date.now() - Date.parse(act.created_at)) / 864e5));
+      const improved = !!alert && now != null && now <= alert.green;
       return {
-        act, alert, days,
+        act, alert, days, improved,
         result: !alert ? "Campaign หยุดยิงแล้ว"
-          : act.value_at == null || now == null ? `กำลังติดตามผล (วันที่ ${days})`
-          : `${better ? "ดีขึ้น" : "ยังไม่ดีขึ้น"} · ${money(act.value_at, dec)} → ${money(now, dec)}`,
-        sev: !alert || act.value_at == null || now == null ? ("follow" as const) : better ? ("ok" as const) : ("critical" as const),
+          : improved ? `กลับมาอยู่ในเกณฑ์ · ${money(now, dec)}`
+          : act.value_at == null || now == null ? `กำลังติดตามผล (วันที่ ${days}/${FOLLOW_DAYS})`
+          : `${better ? "ลดลงแต่ยังเกินเกณฑ์" : "ยังไม่ดีขึ้น"} · ${money(act.value_at, dec)} → ${money(now, dec)} (วันที่ ${days}/${FOLLOW_DAYS})`,
+        sev: !alert || act.value_at == null || now == null ? ("follow" as const) : improved ? ("ok" as const) : better ? ("medium" as const) : ("critical" as const),
       };
     });
 }

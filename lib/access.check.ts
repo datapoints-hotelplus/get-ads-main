@@ -54,6 +54,8 @@ for (const role of ["user", "hr"] as const) {
 }
 // HR: read-only overview page only
 assert.equal(canOpen("hr", "/adscan"), true, "hr may open the ADSCAN overview");
+assert.equal(canOpen("hr", "/adscan/list"), true, "hr may open the overview's see-all lists");
+assert.equal(canOpen("user", "/adscan/list"), false, "clients never see ADSCAN");
 for (const p of ["/adscan/hotels", "/adscan/history", "/adscan/hotels/h1"]) {
   assert.equal(canOpen("hr", p), false, `hr must not open ${p}`);
 }

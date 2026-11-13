@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import type { Mark, Node } from "@/lib/adscan";
-import { DONE_CHOICES, SKIP_CHOICES, WINDOW, money, thDate, useAdscan, type AdscanAlert, type AdscanPayload } from "../data";
+import { DONE_CHOICES, FOLLOW_DAYS, SKIP_CHOICES, WINDOW, money, thDate, useAdscan, type AdscanAlert, type AdscanPayload } from "../data";
 import { ADS_MANAGER, Aging, Chip, DataNote, Gate, SEV, TrendChart, card, costText, hotelPill } from "../ui";
 
 const GRID = "grid grid-cols-[minmax(0,2.6fr)_72px_repeat(5,minmax(0,1fr))_104px] gap-2 px-3 py-2.5 rounded-lg items-center text-sm";
@@ -311,7 +311,7 @@ function Detail({ d, a, reload }: { d: AdscanPayload; a: AdscanAlert; reload: ()
               </label>
             )}
             <div className="text-sm text-gray-500">
-              {modal === "fixed" ? "ระบบจะเทียบตัวเลขก่อน–หลังแก้ให้ใน “ติดตามผล”" : "เรื่องนี้จะไม่แสดงเป็นงานค้างจนกว่าจะครบ 14 วัน"}
+              {modal === "fixed" ? `ติดตามผล ${FOLLOW_DAYS} วัน: กลับมาอยู่ในเกณฑ์ = จบเรื่อง ยังเกินเกณฑ์แดง = กลับมาที่ “ต้องแก้” และแจ้ง Slack` : `เรื่องนี้จะไม่แสดงเป็นงานค้างและไม่แจ้ง Slack ${FOLLOW_DAYS} วัน ถ้ายังเกินเกณฑ์แดงจะกลับมาเตือน`}
             </div>
             {err && <div className="text-sm text-red-700">{err}</div>}
             <div className="flex justify-end gap-2.5">

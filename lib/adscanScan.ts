@@ -143,12 +143,10 @@ export async function previewSummary(labels: Partial<SlackLabels>): Promise<stri
 
 async function buildSummary(day: string, labels?: Partial<SlackLabels>): Promise<string> {
   const sb = getSupabase();
-  const [{ data: open, error: oErr }, { data: closed, error: cErr }] = await Promise.all([
-    sb.from("adscan_alerts").select("*").is("closed_at", null),
-    sb.from("adscan_alerts").select("*").eq("closed_at", day),
-  ]);
-  if (oErr || cErr) throw new Error((oErr ?? cErr)!.message);
-  const eps = [...(open ?? []), ...(closed ?? [])] as Episode[];
+  // Open episodes only: recovered / stopped campaigns are no longer sent to Slack.
+  const { data: open, error: oErr } = await sb.from("adscan_alerts").select("*").is("closed_at", null);
+  if (oErr) throw new Error(oErr.message);
+  const eps = (open ?? []) as Episode[];
 
   const names = new Map<string, { hotel: string; campaign: string }>();
   const ids = [...new Set(eps.map((e) => e.campaign_id))];
@@ -160,14 +158,13 @@ async function buildSummary(day: string, labels?: Partial<SlackLabels>): Promise
     if ((data ?? []).length < 1000) break;
   }
 
-  // Recorded แก้แล้ว / ไม่แก้ in the last FOLLOW_DAYS days (newest per campaign), as on the ADSCAN page.
-  const acted = new Map<string, { type: "fixed" | "skipped"; label: string }>();
+  // Answered (แก้แล้ว / ไม่แก้) in the last FOLLOW_DAYS days → left out, as on the ADSCAN page.
+  const acted = new Set<string>();
   if (ids.length) {
-    const { data: acts, error: aErr } = await sb.from("adscan_actions").select("campaign_id,type,label,created_at")
-      .in("campaign_id", ids).gte("created_at", new Date(Date.now() - FOLLOW_DAYS * 864e5).toISOString())
-      .order("created_at", { ascending: false });
+    const { data: acts, error: aErr } = await sb.from("adscan_actions").select("campaign_id")
+      .in("campaign_id", ids).gte("created_at", new Date(Date.now() - FOLLOW_DAYS * 864e5).toISOString());
     if (aErr) throw new Error(aErr.message);
-    for (const a of acts ?? []) if (!acted.has(a.campaign_id as string)) acted.set(a.campaign_id as string, { type: a.type as "fixed" | "skipped", label: a.label as string });
+    for (const a of acts ?? []) acted.add(a.campaign_id as string);
   }
 
   const site = process.env.NEXT_PUBLIC_APP_URL ?? (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null);

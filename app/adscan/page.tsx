@@ -2,65 +2,32 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { FOLLOW_DAYS, followUps, thDate, useAdscan, type AdscanAlert, type AdscanPayload } from "./data";
-import { ADS_MANAGER, Aging, Chip, DataNote, Gate, Metric, SEV, Sparkline, card, costText, hotelPill, strip } from "./ui";
+import { FOLLOW_DAYS, useAdscan, type AdscanAlert, type AdscanPayload } from "./data";
+import { DataNote, Gate, card } from "./ui";
+import { FollowCard, IssueCard, SmallAlertCard, adscanLists, type ListTab } from "./cards";
 
-function IssueCard({ a, n, readOnly }: { a: AdscanAlert; n: number; readOnly?: boolean }) {
-  return (
-    <article className={`${card} ${SEV[a.sev].border} p-4 space-y-3`}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span className="w-6 h-6 rounded-full bg-secondary text-white text-xs font-bold flex items-center justify-center">{n}</span>
-          <span className={hotelPill}>{a.hotel}</span>
-          <span className="text-gray-500 text-xs">Campaign: <span className="font-mono text-gray-900">{a.campaign}</span></span>
-        </div>
-        <span className="flex items-center gap-2"><Aging a={a} /><Chip sev={a.sev} /></span>
-      </div>
-      <div className="font-semibold text-gray-900">{a.headline}</div>
-      <div className="flex flex-wrap gap-2">
-        {strip(a).map((m) => <Metric key={m.k} {...m} />)}
-        <div className="flex-1 min-w-[140px] bg-gray-50 rounded-md px-2.5 py-2">
-          <div className="text-[11px] font-semibold tracking-wide text-gray-500">14 วันล่าสุด</div>
-          <Sparkline a={a} />
-        </div>
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-3">
-        <div className="flex-[1_1_280px] text-sm"><strong className="text-secondary">ต้องทำ:</strong> {a.action}</div>
-        {!readOnly && (
-          <div className="flex gap-2">
-            <a href={ADS_MANAGER} target="_blank" rel="noopener" className="px-3 py-2 rounded-lg border border-secondary text-secondary text-sm font-semibold">Ads Manager ↗</a>
-            <Link href={`/adscan/${a.id}`} className="px-3 py-2 rounded-lg bg-secondary text-white text-sm font-semibold">ดูรายละเอียด</Link>
-          </div>
-        )}
-      </div>
-    </article>
-  );
-}
+const PREVIEW = 3; // side lists show this many; the rest is on /adscan/list
+const listHref = (tab: ListTab) => `/adscan/list?tab=${tab}`;
 
-/** Small card (good news / yellow watch list): a link to the detail page, or a plain box for view-only HR. */
-function GoodWrap({ id, readOnly, sev = "good", children }: { id: string; readOnly?: boolean; sev?: "good" | "medium"; children: React.ReactNode }) {
-  const cls = `${card} ${SEV[sev].border} p-3.5 block space-y-1`;
-  return readOnly ? <div className={cls}>{children}</div> : <Link href={`/adscan/${id}`} className={`${cls} hover:bg-gray-50`}>{children}</Link>;
+function SeeAll({ tab, total }: { tab: ListTab; total: number }) {
+  return total > PREVIEW ? <Link href={listHref(tab)} className="inline-block text-sm font-semibold text-secondary">ดูทั้งหมด {total} เรื่อง ›</Link> : null;
 }
 
 function Today({ d }: { d: AdscanPayload }) {
   const [filter, setFilter] = useState("all");
-  const [allGood, setAllGood] = useState(false);
-  // Red must be answered (fixed / skipped); yellow is listed below it for awareness only.
-  const open = d.alerts.filter((a) => a.sev === "critical" && a.status === "open");
-  const watch = d.alerts.filter((a) => a.sev === "medium");
+  const { issue: open, watch, good, follow: follows } = adscanLists(d);
   const byHotel = <T extends AdscanAlert>(xs: T[]) => (filter === "all" ? xs : xs.filter((a) => a.hotelId === filter));
   const shown = byHotel(open);
   const watchShown = byHotel(watch);
-  const good = d.alerts.filter((a) => a.kind === "good");
-  const follows = followUps(d);
   const issueHotels = d.hotels.filter((h) => open.some((a) => a.hotelId === h.id) || watch.some((a) => a.hotelId === h.id));
 
-  const kpis = [
-    { label: "ต้องแก้ (แดง)", value: open.length, sub: `ควรเฝ้าดู (เหลือง) ${watch.length}` },
-    { label: "ข่าวดี", value: good.length, sub: "Campaign ที่ถูกกว่าเกณฑ์ ≥ 30%" },
-    { label: "กำลังติดตามผล", value: follows.length, sub: `แก้แล้วใน ${FOLLOW_DAYS} วันที่ผ่านมา` },
-    { label: "โรงแรมที่ดูแล", value: d.hotels.length, sub: `มีเรื่องต้องแก้ ${issueHotels.length} โรงแรม` },
+  // HR may not open /adscan/hotels, so that card is not a link for them.
+  const kpis: { label: string; value: number; sub: string; href: string | null; tone?: string }[] = [
+    { label: "ต้องแก้ (แดง)", value: open.length, sub: "ต้องบันทึกว่าแก้ / ไม่แก้", href: listHref("issue"), tone: "text-red-700" },
+    { label: "ควรเฝ้าดู (เหลือง)", value: watch.length, sub: "ไม่ต้องบันทึก", href: listHref("watch"), tone: "text-amber-800" },
+    { label: "ข่าวดี", value: good.length, sub: "Campaign ที่ถูกกว่าเกณฑ์ ≥ 30%", href: listHref("good") },
+    { label: "กำลังติดตามผล", value: follows.length, sub: `แก้แล้วใน ${FOLLOW_DAYS} วันที่ผ่านมา`, href: listHref("follow") },
+    { label: "โรงแรมที่ดูแล", value: d.hotels.length, sub: `มีเรื่องแดง/เหลือง ${issueHotels.length} โรงแรม`, href: d.readOnly ? null : "/adscan/hotels" },
   ];
 
   return (
@@ -71,14 +38,19 @@ function Today({ d }: { d: AdscanPayload }) {
         {watch.length > 0 && <div className="text-sm text-gray-500">และอีก {watch.length} เรื่องควรเฝ้าดู (เหลือง) ไม่ต้องบันทึกว่าแก้/ไม่แก้</div>}
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {kpis.map((k) => (
-          <div key={k.label} className={`${card} px-4 py-3`}>
-            <div className="text-[11px] font-semibold tracking-wide text-gray-500">{k.label}</div>
-            <div className="text-2xl font-bold font-mono tabular-nums text-gray-900">{k.value}</div>
-            <div className="text-xs text-gray-500">{k.sub}</div>
-          </div>
-        ))}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        {kpis.map((k) => {
+          const inner = (
+            <>
+              <div className="text-[11px] font-semibold tracking-wide text-gray-500">{k.label}</div>
+              <div className={`text-2xl font-bold font-mono tabular-nums ${k.tone ?? "text-gray-900"}`}>{k.value}</div>
+              <div className="text-xs text-gray-500">{k.sub}</div>
+            </>
+          );
+          return k.href
+            ? <Link key={k.label} href={k.href} className={`${card} px-4 py-3 block hover:bg-gray-50`}>{inner}</Link>
+            : <div key={k.label} className={`${card} px-4 py-3`}>{inner}</div>;
+        })}
       </div>
 
       {issueHotels.length > 1 && (
@@ -111,13 +83,8 @@ function Today({ d }: { d: AdscanPayload }) {
           {watchShown.length > 0 && (
             <div className="space-y-2.5 pt-2">
               <h2 className="font-semibold text-gray-900">ควรเฝ้าดู (เหลือง) — ไม่ต้องบันทึกว่าแก้/ไม่แก้</h2>
-              {watchShown.map((w) => (
-                <GoodWrap key={w.id} id={w.id} readOnly={d.readOnly} sev="medium">
-                  <div className="flex justify-between gap-2 flex-wrap"><span className={hotelPill}>{w.hotel}</span><span className="font-mono text-sm font-bold text-amber-800">{costText(w)}</span></div>
-                  <div className="text-sm font-semibold">{w.headline}</div>
-                  <div className="text-xs text-gray-500 font-mono truncate" title={w.campaign}>{w.campaign}</div>
-                </GoodWrap>
-              ))}
+              {watchShown.slice(0, PREVIEW).map((w) => <SmallAlertCard key={w.id} a={w} readOnly={d.readOnly} />)}
+              <SeeAll tab="watch" total={watchShown.length} />
             </div>
           )}
         </section>
@@ -125,31 +92,16 @@ function Today({ d }: { d: AdscanPayload }) {
         <aside className="flex-[2_1_320px] min-w-0 space-y-5">
           <section className="space-y-2.5">
             <h2 className="font-semibold text-gray-900">ข่าวดี</h2>
-            {(allGood ? good : good.slice(0, 5)).map((g) => (
-              <GoodWrap key={g.id} id={g.id} readOnly={d.readOnly}>
-                <div className="flex justify-between gap-2 flex-wrap"><span className={hotelPill}>{g.hotel}</span><span className="font-mono text-sm font-bold text-teal-700">{costText(g)}</span></div>
-                <div className="text-sm font-semibold">{g.headline}</div>
-                <div className="text-xs text-gray-500 font-mono truncate">{g.campaign}</div>
-              </GoodWrap>
-            ))}
-            {good.length > 5 && (
-              <button onClick={() => setAllGood(!allGood)} className="text-sm font-semibold text-secondary">
-                {allGood ? "แสดงน้อยลง" : `ดูทั้งหมด ${good.length} เรื่อง`}
-              </button>
-            )}
+            {good.slice(0, PREVIEW).map((g) => <SmallAlertCard key={g.id} a={g} readOnly={d.readOnly} />)}
+            <SeeAll tab="good" total={good.length} />
             {!good.length && <div className="text-sm text-gray-500">ยังไม่มี</div>}
           </section>
 
           <section className="space-y-2.5">
             <h2 className="font-semibold text-gray-900">ติดตามผล</h2>
-            {follows.map((f) => (
-              <div key={f.act.id} className={`${card} px-3.5 py-3 space-y-1`}>
-                <div className="flex justify-between gap-2"><strong className="text-sm">{f.alert?.hotel ?? "—"}</strong><span className="text-xs text-gray-500">{thDate(f.act.created_at.slice(0, 10))} · {f.act.by}</span></div>
-                <div className="text-sm">{f.act.label} · <span className="font-mono text-xs">{f.alert?.campaign ?? f.act.campaign_id}</span></div>
-                <Chip sev={f.sev}>{f.result}</Chip>
-              </div>
-            ))}
-            {!follows.length && <div className="text-sm text-gray-500">ยังไม่มีเรื่องที่บันทึกว่าแก้แล้ว</div>}
+            {follows.slice(0, PREVIEW).map((f) => <FollowCard key={f.act.id} f={f} />)}
+            <SeeAll tab="follow" total={follows.length} />
+            {!follows.length && <div className="text-sm text-gray-500">ไม่มีเรื่องที่กำลังติดตามผล</div>}
           </section>
         </aside>
       </div>
