@@ -29,11 +29,14 @@ export async function POST(req: NextRequest) {
   if (!me) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (me.role === "hr") return NextResponse.json({ error: "Forbidden" }, { status: 403 }); // HR is view-only
   const body = await req.json().catch(() => null);
-  const { campaign_id, type, label } = (body ?? {}) as Record<string, string>;
+  const { campaign_id, type, label, note: rawNote } = (body ?? {}) as Record<string, unknown>;
   const choices = type === "fixed" ? DONE_CHOICES : type === "skipped" ? SKIP_CHOICES : null;
-  if (!campaign_id || !choices || !choices.includes(label)) {
+  if (typeof campaign_id !== "string" || !campaign_id || !choices || typeof label !== "string" || !choices.includes(label)) {
     return NextResponse.json({ error: "campaign_id, type และ label ไม่ถูกต้อง" }, { status: 400 });
   }
+  const note = typeof rawNote === "string" ? rawNote.trim() : "";
+  if (note.length > 300) return NextResponse.json({ error: "รายละเอียดยาวเกิน 300 ตัวอักษร" }, { status: 400 });
+  if (label === "อื่น ๆ" && !note) return NextResponse.json({ error: "เลือก “อื่น ๆ” ต้องกรอกรายละเอียด" }, { status: 400 });
   try {
     // Recompute for this user: only an open issue on their own account can be recorded.
     const data = await loadAdscan(me.userId, me.role);
@@ -42,7 +45,8 @@ export async function POST(req: NextRequest) {
     if (!alert || alert.sev !== "critical") return NextResponse.json({ error: "ไม่พบเรื่องนี้" }, { status: 404 });
     if (alert.status !== "open") return NextResponse.json({ error: "เรื่องนี้บันทึกไปแล้ว" }, { status: 409 });
     const { error } = await getSupabase().from("adscan_actions").insert({
-      campaign_id, account_id: alert.hotelId, user_id: me.userId, type, label,
+      campaign_id, account_id: alert.hotelId, user_id: me.userId, type,
+      label: label === "อื่น ๆ" ? `อื่น ๆ: ${note}` : label, // free text lives in label; no extra column
       metric: alert.templateMetric, value_at: alert.value,
     });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });

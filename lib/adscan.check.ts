@@ -99,6 +99,17 @@ assert.equal(created[1].close_reason, "stopped", "campaign gone from the data = 
   assert.doesNotMatch(text, /:[a-z_]+:/, "no emoji codes");
   assert.match(text, /<https:\/\/x\.test\/adscan\|ADSCAN>$/);
 
+  // someone pressed แก้แล้ว / ไม่แก้ → leaves "ยังไม่ได้แก้" / "พบปัญหาใหม่", listed under "บันทึกแล้ว รอดูผล"
+  const actedText = slackSummary({
+    day: "2026-10-26", created: [ep("c1", {})], touched: [ep("c2", { account_id: "act_2", first_seen: "2026-10-20" })],
+    names, owners: new Map(), link: null,
+    acted: new Map([["c1", { type: "skipped", label: "งบหมด ลูกค้ายังไม่เติม" }], ["c2", { type: "fixed", label: "ลด Budget" }]]),
+  });
+  assert.doesNotMatch(actedText, /ยังไม่ได้แก้|พบปัญหาใหม่/, "a recorded campaign is not nagged as untouched");
+  assert.match(actedText, /\*บันทึกแล้ว รอดูผล 2 แคมเปญ\*/);
+  assert.match(actedText, /Hotel B — AWN Reach \(ต้นทุนต่อข้อความ แก้แล้ว \(ลด Budget\) ยังสูงเกินเกณฑ์, เร่งด่วน\)/);
+  assert.match(actedText, /Hotel A — MES Oct \(ต้นทุนต่อข้อความ ไม่แก้: งบหมด ลูกค้ายังไม่เติม, เร่งด่วน\)/);
+
   // admin-edited wording replaces the fixed text; anything left unset keeps the default
   const custom = slackSummary({
     day: "2026-10-26", created: [ep("c1", {})], touched: [], names, owners: new Map(), link: null,

@@ -81,6 +81,8 @@ function Detail({ d, a, reload }: { d: AdscanPayload; a: AdscanAlert; reload: ()
   const [open, setOpen] = useState<Record<number, boolean>>({});
   const [modal, setModal] = useState<"fixed" | "skipped" | null>(null);
   const [pick, setPick] = useState<string | null>(null);
+  const [note, setNote] = useState("");
+  const noteNeeded = pick === "อื่น ๆ" && !note.trim();
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
@@ -93,10 +95,15 @@ function Detail({ d, a, reload }: { d: AdscanPayload; a: AdscanAlert; reload: ()
   async function save() {
     setSaving(true);
     setErr("");
-    const r = await fetch("/api/adscan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ campaign_id: a.id, type: modal, label: pick }) });
-    const j = await r.json().catch(() => ({}));
-    setSaving(false);
-    if (!r.ok) return setErr(j.error || "บันทึกไม่สำเร็จ");
+    try {
+      const r = await fetch("/api/adscan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ campaign_id: a.id, type: modal, label: pick, note }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) return setErr(j.error || "บันทึกไม่สำเร็จ");
+    } catch {
+      return setErr("เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ ลองใหม่อีกครั้ง");
+    } finally {
+      setSaving(false);
+    }
     setModal(null);
     reload();
   }
@@ -250,8 +257,8 @@ function Detail({ d, a, reload }: { d: AdscanPayload; a: AdscanAlert; reload: ()
               ) : (
                 <>
                   <div className="grid grid-cols-2 gap-2">
-                    <button onClick={() => { setModal("fixed"); setPick(null); setErr(""); }} className="min-h-12 rounded-lg bg-secondary text-white font-semibold">✓ แก้แล้ว</button>
-                    <button onClick={() => { setModal("skipped"); setPick(null); setErr(""); }} className="min-h-12 rounded-lg border border-gray-300 text-gray-700 font-semibold">ไม่แก้ เพราะ…</button>
+                    <button onClick={() => { setModal("fixed"); setPick(null); setNote(""); setErr(""); }} className="min-h-12 rounded-lg bg-secondary text-white font-semibold">✓ แก้แล้ว</button>
+                    <button onClick={() => { setModal("skipped"); setPick(null); setNote(""); setErr(""); }} className="min-h-12 rounded-lg border border-gray-300 text-gray-700 font-semibold">ไม่แก้ เพราะ…</button>
                   </div>
                   <div className="text-xs text-gray-500 text-center">บันทึกแล้วเรื่องนี้จะย้ายไป “ติดตามผล” และระบบเทียบตัวเลขก่อน–หลังให้</div>
                 </>
@@ -289,13 +296,21 @@ function Detail({ d, a, reload }: { d: AdscanPayload; a: AdscanAlert; reload: ()
                 </button>
               ))}
             </div>
+            {pick === "อื่น ๆ" && (
+              <label className="block space-y-1">
+                <span className="text-sm font-semibold">ระบุรายละเอียด</span>
+                <textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} rows={2} autoFocus
+                  placeholder={modal === "fixed" ? "แก้อะไรไป" : "ทำไมถึงไม่แก้"}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+              </label>
+            )}
             <div className="text-sm text-gray-500">
               {modal === "fixed" ? "ระบบจะเทียบตัวเลขก่อน–หลังแก้ให้ใน “ติดตามผล”" : "เรื่องนี้จะไม่แสดงเป็นงานค้างจนกว่าจะครบ 14 วัน"}
             </div>
             {err && <div className="text-sm text-red-700">{err}</div>}
             <div className="flex justify-end gap-2.5">
               <button onClick={() => setModal(null)} className="px-4 min-h-11 rounded-lg border border-gray-300">ยกเลิก</button>
-              <button disabled={!pick || saving} onClick={save} className="px-4 min-h-11 rounded-lg bg-secondary text-white font-semibold disabled:opacity-40">
+              <button disabled={!pick || noteNeeded || saving} onClick={save} className="px-4 min-h-11 rounded-lg bg-secondary text-white font-semibold disabled:opacity-40">
                 {saving ? "กำลังบันทึก…" : "บันทึก"}
               </button>
             </div>

@@ -10,6 +10,7 @@ const card = "bg-white border border-gray-200 rounded-xl shadow-sm";
 const LABEL_FIELDS: { k: string; label: string }[] = [
   { k: "fresh", label: "ชื่อหมวด: พบปัญหาใหม่" },
   { k: "pending", label: "ชื่อหมวด: ยังไม่ได้แก้" },
+  { k: "acted", label: "ชื่อหมวด: บันทึกแล้ว รอดูผล" },
   { k: "fixed", label: "ชื่อหมวด: กลับมาปกติแล้ว" },
   { k: "stopped", label: "ชื่อหมวด: หยุดติดตาม" },
   { k: "noOwner", label: "ชื่อกลุ่มเมื่อไม่มีผู้ดูแล" },

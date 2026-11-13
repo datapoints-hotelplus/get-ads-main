@@ -10,7 +10,7 @@
  * Scanning never posts to Slack — see sendDailySummary().
  */
 import { getSupabase } from "@/lib/supabase";
-import { TREND_DAYS, applyDay, evaluate, slackSummary, type Episode, type RawRow, type SlackLabels, type Template } from "@/lib/adscan";
+import { FOLLOW_DAYS, TREND_DAYS, applyDay, evaluate, slackSummary, type Episode, type RawRow, type SlackLabels, type Template } from "@/lib/adscan";
 import { getSlackLabels, getSlackSettings, notifySlack } from "@/lib/adscanSlack";
 
 export const BACKFILL_DAYS = 90;
@@ -160,10 +160,20 @@ async function buildSummary(day: string, labels?: Partial<SlackLabels>): Promise
     if ((data ?? []).length < 1000) break;
   }
 
+  // Recorded แก้แล้ว / ไม่แก้ in the last FOLLOW_DAYS days (newest per campaign), as on the ADSCAN page.
+  const acted = new Map<string, { type: "fixed" | "skipped"; label: string }>();
+  if (ids.length) {
+    const { data: acts, error: aErr } = await sb.from("adscan_actions").select("campaign_id,type,label,created_at")
+      .in("campaign_id", ids).gte("created_at", new Date(Date.now() - FOLLOW_DAYS * 864e5).toISOString())
+      .order("created_at", { ascending: false });
+    if (aErr) throw new Error(aErr.message);
+    for (const a of acts ?? []) if (!acted.has(a.campaign_id as string)) acted.set(a.campaign_id as string, { type: a.type as "fixed" | "skipped", label: a.label as string });
+  }
+
   const site = process.env.NEXT_PUBLIC_APP_URL ?? (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null);
   return slackSummary({
     day, created: eps.filter((e) => e.first_seen === day), touched: eps.filter((e) => e.first_seen !== day),
     names, owners: await loadOwners(), link: site ? `${site}/adscan` : null,
-    labels: labels ?? (await getSlackLabels()),
+    labels: labels ?? (await getSlackLabels()), acted,
   });
 }
