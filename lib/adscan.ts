@@ -547,7 +547,7 @@ export function slackSummary(p: {
   // Every ADSCAN metric (a cost, or Frequency) fails by being too high.
   const METRIC_TH: Record<string, string> = {
     cost_per_message: "ต้นทุนต่อข้อความ", cost_per_like: "ต้นทุนต่อไลก์เพจ", cost_per_engagement: "ต้นทุนต่อ Engagement",
-    cost_per_lead: "ต้นทุนต่อ Lead", cost_per_purchase: "ต้นทุนต่อการซื้อ", cost_per_result: "ต้นทุนต่อผลลัพธ์", frequency: "Frequency (ทั้งโรงแรม)",
+    cost_per_lead: "ต้นทุนต่อ Lead", cost_per_purchase: "ต้นทุนต่อการซื้อ", cost_per_result: "ต้นทุนต่อผลลัพธ์", frequency: "Frequency",
   };
   const metric = (e: Episode) => METRIC_TH[e.metric] ?? e.metric;
 

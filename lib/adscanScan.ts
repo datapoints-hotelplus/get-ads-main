@@ -16,6 +16,7 @@ import { fetchAccountReachByAccount } from "@/lib/facebook";
 import { getFacebookAccessToken } from "@/lib/facebook-token";
 
 export const BACKFILL_DAYS = 90;
+const FREQ_CLAIM = "_claim"; // adscan_freq marker row: Frequency for this data date is taken
 export const EXCLUDED_ACCOUNTS = new Set(["act_1378870469122933"]); // H+ Marcom — internal, not a client hotel
 export const RAW_COLS =
   "account_id,account_name,campaign_id,campaign_name,adset_id,adset_name,ad_id,ad_name,date_start,spend,impressions,inline_link_clicks,messaging_conversations_started,page_likes,post_engagement,leads,purchases";
@@ -30,11 +31,11 @@ export const addDays = (iso: string, n: number) => new Date(Date.parse(iso + "T0
  * whose call failed: their open alerts must be left alone, not closed.
  * Throws when Facebook can't be used at all; the caller then skips Frequency for the day.
  */
-async function frequencyFor(day: string, rows: RawRow[], templates: Template[]): Promise<{ verdicts: Verdict[]; failed: Set<string> } | null> {
+async function frequencyFor(day: string, rows: RawRow[], templates: Template[]): Promise<{ verdicts: Verdict[]; failed: Set<string>; reached: number } | null> {
   if (!frequencyTemplate(templates)) return null;
   const from = addDays(day, -(WINDOW - 1));
   const accounts = [...new Set(rows.filter((r) => r.date_start >= from && r.date_start <= day && +r.spend > 0).map((r) => r.account_id))];
-  if (!accounts.length) return { verdicts: [], failed: new Set() };
+  if (!accounts.length) return { verdicts: [], failed: new Set(), reached: 0 };
   const token = await getFacebookAccessToken();
   if (!token) throw new Error("no Facebook token");
   const reach = new Map<string, AccountReach>();
@@ -56,7 +57,7 @@ async function frequencyFor(day: string, rows: RawRow[], templates: Template[]):
     );
     if (error) console.error("[adscan] frequency: could not store reach (migration 046?):", error.message);
   }
-  return { verdicts: evaluateFrequency(rows, templates, reach, day), failed };
+  return { verdicts: evaluateFrequency(rows, templates, reach, day), failed, reached: reach.size };
 }
 
 /** Scan every unscanned data date up to the newest one in ads_rawdata. Returns days applied. */
@@ -70,19 +71,27 @@ export async function scanPending(): Promise<number> {
   if (dErr) throw new Error(dErr.message);
   const lastDone = (done ?? []).map((d) => d.data_date as string).sort().at(-1);
   const start = lastDone ? addDays(lastDone, 1) : floor;
-  if (start > latest) return 0;
 
   const days: string[] = [];
   for (let d = start; d <= latest; d = addDays(d, 1)) days.push(d);
   // Claim the days first; a concurrent request that loses the race skips them.
   // ponytail: day-level claim only — two scanners on interleaved ranges could
   // reorder, fine at this traffic; a DB advisory lock if it ever isn't.
-  const { data: claimed, error: cErr } = await sb.from("adscan_scans")
-    .upsert(days.map((data_date) => ({ data_date })), { onConflict: "data_date", ignoreDuplicates: true }).select("data_date");
-  if (cErr) throw new Error(cErr.message);
-  const mine = new Set((claimed ?? []).map((c) => c.data_date as string));
-  const todo = days.filter((d) => mine.has(d));
-  if (!todo.length) return 0;
+  let todo: string[] = [];
+  if (days.length) {
+    const { data: claimed, error: cErr } = await sb.from("adscan_scans")
+      .upsert(days.map((data_date) => ({ data_date })), { onConflict: "data_date", ignoreDuplicates: true }).select("data_date");
+    if (cErr) throw new Error(cErr.message);
+    const mine = new Set((claimed ?? []).map((c) => c.data_date as string));
+    todo = days.filter((d) => mine.has(d));
+  }
+  // Frequency claims the newest date on its own (a marker row in adscan_freq), so a date whose cost
+  // scan was already done without it (older deploy, failed Facebook call) still gets it.
+  const { data: fClaim, error: fErr } = await sb.from("adscan_freq")
+    .upsert({ account_id: FREQ_CLAIM, data_date: latest, reach: 0, impressions: 0 }, { onConflict: "account_id,data_date", ignoreDuplicates: true }).select("account_id");
+  if (fErr) console.error("[adscan] frequency claim failed (migration 046?):", fErr.message);
+  const freqClaimed = !!fClaim?.length;
+  if (!todo.length && !freqClaimed) return 0;
 
   const { data: pages } = await sb.from("ads_allpage").select("account_id").eq("is_active", true);
   const bare = (pages ?? []).map((p) => p.account_id as string).filter((id) => !EXCLUDED_ACCOUNTS.has(id)).map((id) => id.replace(/^act_/, ""));
@@ -90,7 +99,7 @@ export async function scanPending(): Promise<number> {
   const rows: RawRow[] = [];
   for (let off = 0; ; off += 1000) {
     const { data, error } = await sb.from("ads_rawdata").select(RAW_COLS).in("account_id", bare)
-      .gte("date_start", addDays(todo[0], -(TREND_DAYS - 1))).lte("date_start", latest).order("id").range(off, off + 999);
+      .gte("date_start", addDays(todo[0] ?? latest, -(TREND_DAYS - 1))).lte("date_start", latest).order("id").range(off, off + 999);
     if (error) throw new Error(error.message);
     rows.push(...((data ?? []) as unknown as RawRow[]));
     if ((data ?? []).length < 1000) break;
@@ -106,23 +115,30 @@ export async function scanPending(): Promise<number> {
   // so they are applied once, on that day — and never closed by the cost verdicts of the other days.
   const openFreq = new Map([...open].filter(([id]) => id.startsWith(FREQ_PREFIX)));
   for (const id of openFreq.keys()) open.delete(id);
-  const lastDay = todo[todo.length - 1];
   let freq: Awaited<ReturnType<typeof frequencyFor>> = null;
-  try {
-    freq = await frequencyFor(lastDay, rows, (templates ?? []) as Template[]);
-  } catch (e) {
-    // ponytail: a failed day isn't retried (the day is already claimed); tomorrow's scan picks Frequency up again.
-    console.error("[adscan] frequency skipped for", lastDay, (e as Error).message);
+  if (freqClaimed) {
+    let threw = false;
+    try {
+      freq = await frequencyFor(latest, rows, (templates ?? []) as Template[]);
+    } catch (e) {
+      threw = true;
+      console.error("[adscan] frequency skipped for", latest, (e as Error).message);
+    }
+    // Nothing fetched (no token, Facebook down) → release the claim so the next load retries.
+    // ponytail: every page load retries while Facebook is down; add a backoff if that ever costs.
+    if (threw || (freq && freq.failed.size && !freq.reached)) {
+      await sb.from("adscan_freq").delete().eq("account_id", FREQ_CLAIM).eq("data_date", latest);
+    }
   }
   for (const day of todo) {
     const from = addDays(day, -(TREND_DAYS - 1));
     const slice = rows.filter((r) => r.date_start >= from && r.date_start <= day);
     applyDay(open, created, evaluate(slice, (templates ?? []) as Template[], day), day);
-    if (freq && day === lastDay) {
-      const held = [...openFreq].filter(([, e]) => freq!.failed.has(e.account_id.replace(/^act_/, "")));
-      for (const [id] of held) openFreq.delete(id);
-      applyDay(openFreq, created, freq.verdicts, day);
-    }
+  }
+  if (freq) {
+    // Accounts whose Facebook call failed keep their open alert as is (not closed, not extended).
+    for (const [id, e] of openFreq) if (freq.failed.has(e.account_id.replace(/^act_/, ""))) openFreq.delete(id);
+    applyDay(openFreq, created, freq.verdicts, latest);
   }
 
   const strip = (e: Episode) => ({
@@ -219,7 +235,7 @@ async function buildSummary(day: string, labels?: Partial<SlackLabels>): Promise
   if (freqIds.length) {
     const { data, error } = await sb.from("ads_allpage").select("account_id,account_name").in("account_id", freqIds.map((id) => "act_" + id.slice(FREQ_PREFIX.length)));
     if (error) throw new Error(error.message);
-    for (const p of data ?? []) names.set(FREQ_PREFIX + (p.account_id as string).replace(/^act_/, ""), { hotel: p.account_name as string, campaign: "Frequency ทั้งโรงแรม" });
+    for (const p of data ?? []) names.set(FREQ_PREFIX + (p.account_id as string).replace(/^act_/, ""), { hotel: p.account_name as string, campaign: "ทุก Campaign" });
   }
 
   // Answered (แก้แล้ว / ไม่แก้) in the last FOLLOW_DAYS days → left out, as on the ADSCAN page.
