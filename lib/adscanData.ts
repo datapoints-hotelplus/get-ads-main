@@ -6,7 +6,7 @@
  */
 import { getSupabase } from "@/lib/supabase";
 import type { Role } from "@/lib/access";
-import { FOLLOW_DAYS, TREND_DAYS, evaluate, type RawRow, type Template, type Verdict } from "@/lib/adscan";
+import { FOLLOW_DAYS, TREND_DAYS, bySev, evaluate, evaluateFrequency, type AccountReach, type RawRow, type Template, type Verdict } from "@/lib/adscan";
 import { EXCLUDED_ACCOUNTS, RAW_COLS as COLS, addDays, scanPending } from "@/lib/adscanScan";
 
 export type Action = {
@@ -96,8 +96,17 @@ export async function loadAdscan(userId: string, role: Role): Promise<AdscanPayl
     metric: a.metric, value_at: a.value_at, created_at: a.created_at, by: nameOf.get(a.user_id) ?? "—",
   }));
 
+  // Hotel Frequency: the reach stored by the scan for this data date (never fetched here).
+  const reach = new Map<string, AccountReach>();
+  const { data: fr, error: fErr } = await sb.from("adscan_freq").select("account_id,reach,impressions").eq("data_date", latest).in("account_id", bare);
+  if (fErr && !/adscan_freq/.test(fErr.message)) throw new Error(fErr.message);
+  if (fErr) needsMigration ??= "046_adscan_frequency.sql";
+  for (const r of fr ?? []) reach.set(r.account_id as string, { reach: Number(r.reach), impressions: Number(r.impressions) });
+  const tpls = (templates ?? []) as Template[];
+  const verdicts = [...evaluate(rows, tpls, latest), ...evaluateFrequency(rows, tpls, reach, latest)].sort(bySev);
+
   const cutoff = Date.now() - FOLLOW_DAYS * 864e5;
-  const alerts = evaluate(rows, (templates ?? []) as Template[], latest).map((v): AdscanAlert => {
+  const alerts = verdicts.map((v): AdscanAlert => {
     const mine = actions.filter((a) => a.campaign_id === v.id);
     const recent = mine.find((a) => Date.parse(a.created_at) >= cutoff); // newest first
     const ep = v.kind === "issue" ? episode.get(v.id) : undefined;

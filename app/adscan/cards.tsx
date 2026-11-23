@@ -39,10 +39,12 @@ export function IssueCard({ a, n, readOnly }: { a: AdscanAlert; n: number; readO
       <div className="font-semibold text-gray-900">{a.headline}</div>
       <div className="flex flex-wrap gap-2">
         {strip(a).map((m) => <Metric key={m.k} {...m} />)}
-        <div className="flex-1 min-w-[140px] bg-gray-50 rounded-md px-2.5 py-2">
-          <div className="text-[11px] font-semibold tracking-wide text-gray-500">14 วันล่าสุด</div>
-          <Sparkline a={a} />
-        </div>
+        {a.trend.length > 1 && (
+          <div className="flex-1 min-w-[140px] bg-gray-50 rounded-md px-2.5 py-2">
+            <div className="text-[11px] font-semibold tracking-wide text-gray-500">14 วันล่าสุด</div>
+            <Sparkline a={a} />
+          </div>
+        )}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-3">
         <div className="flex-[1_1_280px] text-sm"><strong className="text-secondary">ต้องทำ:</strong> {a.action}</div>

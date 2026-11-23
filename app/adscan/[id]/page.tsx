@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import type { Mark, Node } from "@/lib/adscan";
-import { DONE_CHOICES, FOLLOW_DAYS, SKIP_CHOICES, WINDOW, money, thDate, useAdscan, type AdscanAlert, type AdscanPayload } from "../data";
+import { DONE_CHOICES, FOLLOW_DAYS, SKIP_CHOICES, WINDOW, money, thDate, useAdscan, val, type AdscanAlert, type AdscanPayload } from "../data";
 import { ADS_MANAGER, Aging, Chip, DataNote, Gate, SEV, TrendChart, card, costText, hotelPill } from "../ui";
 
 const GRID = "grid grid-cols-[minmax(0,2.6fr)_72px_repeat(5,minmax(0,1fr))_104px] gap-2 px-3 py-2.5 rounded-lg items-center text-sm";
@@ -112,12 +112,12 @@ function Detail({ d, a, reload }: { d: AdscanPayload; a: AdscanAlert; reload: ()
 
   const timeline = [
     ...(a.kind === "issue" || a.kind === "good"
-      ? [{ key: "now", date: thDate(d.latestDate!), tag: SEV[a.sev].label, sev: a.sev, text: `${a.metric} ${WINDOW} วัน ${costText(a)} (เกณฑ์ ≤ ${money(a.green, a.dec)})`, sub: "" }]
+      ? [{ key: "now", date: thDate(d.latestDate!), tag: SEV[a.sev].label, sev: a.sev, text: `${a.metric} ${WINDOW} วัน ${costText(a)} (เกณฑ์ ≤ ${val(a, a.green)})`, sub: "" }]
       : []),
     ...a.actions.map((x) => ({
       key: String(x.id), date: thDate(x.created_at.slice(0, 10)), tag: x.type === "fixed" ? "แก้แล้ว" : "ไม่แก้",
       sev: x.type === "fixed" ? ("follow" as const) : ("wait" as const),
-      text: `${x.by}: ${x.label}`, sub: x.value_at != null ? `ตอนบันทึก ${a.metric} ${money(x.value_at, a.dec)}` : "",
+      text: `${x.by}: ${x.label}`, sub: x.value_at != null ? `ตอนบันทึก ${a.metric} ${val(a, x.value_at)}` : "",
     })),
   ];
 
@@ -142,7 +142,7 @@ function Detail({ d, a, reload }: { d: AdscanPayload; a: AdscanAlert; reload: ()
           </div>
           <h1 className="text-xl font-semibold text-gray-900">{a.headline}</h1>
           <div className="text-xs text-gray-600">
-            เกณฑ์จาก Portfolio Template “{a.template}”: ปกติ ≤ {money(a.green, a.dec)} · ปานกลาง ≤ {money(a.yellow, a.dec)} · เกินกว่านั้นเร่งด่วน
+            เกณฑ์จาก Portfolio Template “{a.template}”: ปกติ ≤ {val(a, a.green)} · ปานกลาง ≤ {val(a, a.yellow)} · เกินกว่านั้นเร่งด่วน
           </div>
         </div>
         <div className="flex gap-4 bg-indigo-50 rounded-xl px-4 py-3">
@@ -161,6 +161,13 @@ function Detail({ d, a, reload }: { d: AdscanPayload; a: AdscanAlert; reload: ()
 
       <div className="flex flex-wrap gap-4 items-start">
         <div className="flex-[7_1_560px] min-w-0 space-y-4">
+          {a.unit === "freq" ? (
+            <div className={`${card} p-5 space-y-2`}>
+              <h2 className="font-semibold">Frequency ทั้งโรงแรม {WINDOW} วันล่าสุด</h2>
+              <div className="text-sm text-gray-600">{a.analysis || "อยู่ในเกณฑ์"}</div>
+              {a.why && <div className="text-sm">{a.why}</div>}
+            </div>
+          ) : (
           <div className={`${card} p-5 space-y-3`}>
             <div>
               <h2 className="font-semibold">{a.metric} รายวัน 30 วัน</h2>
@@ -171,6 +178,7 @@ function Detail({ d, a, reload }: { d: AdscanPayload; a: AdscanAlert; reload: ()
             <div className="overflow-x-auto"><TrendChart a={a} /></div>
             {a.analysis && <div className="bg-gray-50 rounded-lg px-3 py-2.5 text-sm"><strong>อ่านกราฟ:</strong> {a.analysis}</div>}
           </div>
+          )}
 
           {kids.length > 1 && a.res > 0 && (
             <div className={`${card} p-5 space-y-3`}>
@@ -207,6 +215,7 @@ function Detail({ d, a, reload }: { d: AdscanPayload; a: AdscanAlert; reload: ()
             </div>
           )}
 
+          {a.unit !== "freq" && (
           <div className={`${card} p-5 space-y-3`}>
             <div>
               <h2 className="font-semibold">ไล่ดูทีละระดับ (Campaign › Ad Set › Ad)</h2>
@@ -228,6 +237,7 @@ function Detail({ d, a, reload }: { d: AdscanPayload; a: AdscanAlert; reload: ()
               </div>
             </div>
           </div>
+          )}
         </div>
 
         <div className="flex-[5_1_340px] min-w-0 space-y-4">

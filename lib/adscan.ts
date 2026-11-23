@@ -10,9 +10,11 @@
  *     ≥ 30% better than green = good news.
  *   - Window: the last WINDOW days that have data (not "today" — the sync can lag).
  *
- * Only cost-per-result templates are used. Reach (cost_per_result on AWN) and
- * Frequency need de-duplicated reach over the window, which daily rows can't
- * give — summing daily reach counts the same person every day.
+ * Cost-per-result templates are judged per campaign from the daily rows.
+ * Reach (cost_per_result on AWN) isn't. Frequency is judged per HOTEL
+ * (evaluateFrequency): it needs de-duplicated reach over the window, which daily
+ * rows can't give — summing daily reach counts the same person every day — so the
+ * reach comes from Facebook at account level, the way Portfolio gets it.
  */
 
 export const WINDOW = 7;
@@ -65,6 +67,8 @@ export type Verdict = {
   spend: number; res: number; value: number | null;
   deltaPct: number | null;
   level: "Ad Set" | "Ad"; culprit?: Node; best?: Node;
+  /** "freq" = a hotel-level Frequency alert: value is a ratio, not money, and there is no daily trend or Ad Set tree. */
+  unit?: "freq";
   headline: string; action: string; why: string; effect: string; analysis: string;
   dates: string[]; trend: (number | null)[]; band: [number, number] | null;
   tree: Node & { sets: (Node & { ads: Node[] })[] };
@@ -75,6 +79,8 @@ const addDays = (iso: string, n: number) => new Date(Date.parse(iso + "T00:00:00
 export const thDate = (iso: string) =>
   new Date(iso + "T00:00:00Z").toLocaleDateString("th-TH", { day: "numeric", month: "short", timeZone: "UTC" });
 const cmp = (v: number, op: string, t: number) => (op === "<" ? v < t : op === ">" ? v > t : op === ">=" ? v >= t : v <= t);
+/** A verdict's value as text: Frequency as a plain ratio, everything else as money. */
+export const val = (a: { unit?: "freq"; dec: number }, v: number | null) => (v == null ? "—" : a.unit === "freq" ? v.toFixed(a.dec) : money(v, a.dec));
 export const money = (v: number | null, dec: number) => (v == null ? "—" : "฿" + v.toLocaleString("en-US", { minimumFractionDigits: dec, maximumFractionDigits: dec }));
 const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0);
 const quantile = (xs: number[], q: number) => {
@@ -230,8 +236,87 @@ export function evaluate(rows: RawRow[], templates: Template[], latest: string):
 
     out.push({ ...base, kind, sev, deltaPct, culprit, best: bestOk, headline, action, why, effect, analysis });
   }
-  const order: Record<Sev, number> = { critical: 0, medium: 1, good: 2, wait: 3, ok: 4, follow: 5 };
-  return out.sort((a, b) => order[a.sev] - order[b.sev] || b.spend - a.spend);
+  return out.sort(bySev);
+}
+
+const SEV_ORDER: Record<Sev, number> = { critical: 0, medium: 1, good: 2, wait: 3, ok: 4, follow: 5 };
+export const bySev = (a: Verdict, b: Verdict) => SEV_ORDER[a.sev] - SEV_ORDER[b.sev] || b.spend - a.spend;
+
+// ── Frequency (hotel level) ──
+
+/** Episode / alert id of a hotel's Frequency alert: "freq-" + bare account id (campaign ids are numeric, so no clash). */
+export const FREQ_PREFIX = "freq-";
+export type AccountReach = { reach: number; impressions: number };
+
+/**
+ * Portfolio's Frequency template, if a usable one exists: lower is better, both
+ * limits set, and no campaign filter — a filtered template is a per-campaign KPI,
+ * which would need per-campaign reach from Facebook (skipped, see docs).
+ */
+export function frequencyTemplate(templates: Template[]): Template | null {
+  return (
+    templates.find(
+      (t) => t.metric === "frequency" && t.direction === "lower_better" && t.green_min != null && t.yellow_min != null && !(t.campaign_filter ?? "").trim(),
+    ) ?? null
+  );
+}
+
+/**
+ * One verdict per hotel that spent in the window and has reach from Facebook.
+ * Frequency = impressions ÷ reach of the whole account over the last WINDOW days
+ * (Portfolio's formula and source). `reach` is keyed by bare account id.
+ * ponytail: Frequency grows with the window, so the Portfolio limits are read as
+ * 7-day limits; a separate limit per window if the team sets them for 30 days.
+ */
+export function evaluateFrequency(rows: RawRow[], templates: Template[], reach: Map<string, AccountReach>, latest: string): Verdict[] {
+  const t = frequencyTemplate(templates);
+  if (!t) return [];
+  const windowFrom = addDays(latest, -(WINDOW - 1));
+  const green = Number(t.green_min), yellow = Number(t.yellow_min);
+
+  const byAccount = new Map<string, RawRow[]>();
+  for (const r of rows) {
+    if (r.date_start < windowFrom || r.date_start > latest) continue;
+    (byAccount.get(r.account_id) ?? byAccount.set(r.account_id, []).get(r.account_id)!).push(r);
+  }
+
+  const out: Verdict[] = [];
+  for (const [acct, win] of byAccount) {
+    const fb = reach.get(acct);
+    if (!fb || !(fb.reach > 0)) continue;
+    const spend = win.reduce((s, r) => s + (+r.spend || 0), 0);
+    if (spend <= 0) continue; // not running this week
+    const value = fb.impressions / fb.reach;
+    const hotel = win[0].account_name;
+    const f = value.toFixed(2);
+    const byCampaign = new Map<string, number>();
+    for (const r of win) byCampaign.set(r.campaign_name, (byCampaign.get(r.campaign_name) ?? 0) + (+r.impressions || 0));
+    const impr = [...byCampaign.values()].reduce((s, x) => s + x, 0);
+    const top = [...byCampaign].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([n, x]) => `${n} (${pct(x, impr)}%)`);
+
+    const tree: Verdict["tree"] = { name: hotel, spend, share: 100, res: fb.reach, cpr: null, cpm: fb.impressions > 0 ? (spend / fb.impressions) * 1000 : null, ctr: null, mark: "", sets: [] };
+    const base = {
+      id: FREQ_PREFIX + acct, hotel, hotelId: "act_" + acct, campaign: "ทั้งโรงแรม (ทุก Campaign)",
+      template: t.name, templateMetric: t.metric, metric: "Frequency", resLabel: "Reach", green, yellow, dec: 2, unit: "freq" as const,
+      windowFrom, windowTo: latest, dataDays: new Set(win.map((r) => r.date_start)).size, spend, res: fb.reach, value,
+      deltaPct: Math.round(((value - green) / green) * 100), level: "Ad Set" as const, dates: [], trend: [], band: null, tree,
+    };
+    if (spend < MIN_SPEND) {
+      out.push({ ...base, kind: "ok", sev: "ok", headline: `Spend ${WINDOW} วัน ${money(spend, 0)} น้อยเกินกว่าจะตัดสิน`, action: "", why: "", effect: "", analysis: "" });
+      continue;
+    }
+    const sev: Sev = !cmp(value, t.yellow_op, yellow) ? "critical" : !cmp(value, t.green_op, green) ? "medium" : "ok";
+    const kind = sev === "ok" ? "ok" : "issue";
+    out.push({
+      ...base, kind, sev,
+      headline: kind === "issue" ? `คนเห็นโฆษณาเฉลี่ย ${f} ครั้งใน ${WINDOW} วัน (เกณฑ์ ≤ ${green})` : `Frequency ${f} อยู่ในเกณฑ์`,
+      action: kind === "issue" ? "ลดการซ้อนกันของกลุ่มเป้าหมายระหว่าง Campaign ขยาย Audience หรือเปลี่ยน Creative เพื่อไม่ให้คนเดิมเห็นโฆษณาซ้ำ ๆ" : "",
+      why: kind === "issue" ? `${fb.impressions.toLocaleString("en-US")} impressions ต่อ ${fb.reach.toLocaleString("en-US")} คน (นับคนไม่ซ้ำทุก Campaign ของโรงแรม)` + (top.length ? ` · Campaign ที่ลงโฆษณามากสุด: ${top.join(", ")}` : "") : "",
+      effect: "",
+      analysis: kind === "issue" ? `ตัวเลขทั้งโรงแรม ไม่ใช่รายแคมเปญ: Reach ไม่ซ้ำข้ามทุก Campaign จาก Facebook ${WINDOW} วันล่าสุด เหมือนหน้า Portfolio` : "",
+    });
+  }
+  return out.sort(bySev);
 }
 
 // ── Persistent alerts ──
@@ -459,10 +544,10 @@ export function slackSummary(p: {
   const hotelOf = (e: Episode) => p.names.get(e.campaign_id)?.hotel ?? e.account_id;
   const campaignOf = (e: Episode) => p.names.get(e.campaign_id)?.campaign ?? e.campaign_id;
   const sev = (e: Episode) => (e.sev === "critical" ? "เร่งด่วน" : "ควรดู");
-  // Every ADSCAN metric is a cost, so "too high" is the failure.
+  // Every ADSCAN metric (a cost, or Frequency) fails by being too high.
   const METRIC_TH: Record<string, string> = {
     cost_per_message: "ต้นทุนต่อข้อความ", cost_per_like: "ต้นทุนต่อไลก์เพจ", cost_per_engagement: "ต้นทุนต่อ Engagement",
-    cost_per_lead: "ต้นทุนต่อ Lead", cost_per_purchase: "ต้นทุนต่อการซื้อ", cost_per_result: "ต้นทุนต่อผลลัพธ์",
+    cost_per_lead: "ต้นทุนต่อ Lead", cost_per_purchase: "ต้นทุนต่อการซื้อ", cost_per_result: "ต้นทุนต่อผลลัพธ์", frequency: "Frequency (ทั้งโรงแรม)",
   };
   const metric = (e: Episode) => METRIC_TH[e.metric] ?? e.metric;
 

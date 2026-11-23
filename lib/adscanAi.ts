@@ -28,6 +28,9 @@ export function alertInput(v: Verdict) {
     daily_30d: v.dates.map((d, i) => [d, r(v.trend[i])]),
     ad_sets: v.tree.sets.map((s) => ({ ...n(s), ads: s.ads.map(n) })),
     rule_engine_hint: { action: v.action, why: v.why, effect: v.effect },
+    ...(v.unit === "freq" && {
+      note: "Frequency ของทั้งโรงแรม = impressions ÷ reach (คนไม่ซ้ำข้ามทุก Campaign) ใน 7 วัน ยิ่งสูงแปลว่าคนเดิมเห็นโฆษณาซ้ำมาก ไม่มีตัวเลขแยก Ad Set / Ad และไม่มีกราฟรายวัน — ให้แนะนำเรื่องการซ้อนกันของ Audience, Creative ที่ซ้ำ และงบที่ลงกับกลุ่มเล็กเกินไป",
+    }),
   };
 }
 

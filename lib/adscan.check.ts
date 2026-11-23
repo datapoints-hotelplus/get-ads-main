@@ -3,7 +3,7 @@
  * Run: node --experimental-strip-types lib/adscan.check.ts
  */
 import assert from "node:assert/strict";
-import { SLACK_LABELS_DEFAULT, applyDay, cleanSlackLabels, evaluate, renderSlackLine, slackHeadingError, slackLabelsFromForm, slackLineError, slackSummary, slackTemplateFromLabels, slackTemplateToLabels, type Episode, type RawRow, type Template, type Verdict } from "./adscan.ts";
+import { SLACK_LABELS_DEFAULT, applyDay, cleanSlackLabels, evaluate, evaluateFrequency, frequencyTemplate, renderSlackLine, slackHeadingError, slackLabelsFromForm, slackLineError, slackSummary, slackTemplateFromLabels, slackTemplateToLabels, type Episode, type RawRow, type Template, type Verdict } from "./adscan.ts";
 
 const T: Template[] = [
   { name: "Message Campaign", metric: "cost_per_message", direction: "lower_better", green_min: 54, yellow_min: 66, green_op: "<=", yellow_op: "<=", campaign_filter: "MES" },
@@ -200,5 +200,41 @@ assert.equal(created[1].close_reason, "stopped", "campaign gone from the data = 
   assert.deepEqual(cleanSlackLabels({ hotelHeading: "{n}. nope" }), {}, "invalid heading ignored");
 }
 
-console.log("OK — adscan: persistent episodes, severity bands, culprit/best, effect, new campaigns judged at once, zero-result, unsupported templates, slack summary");
+// ── Hotel-level Frequency (Portfolio "frequency" template, reach from Facebook) ──
+const FT: Template[] = [
+  ...T,
+  { name: "Frequency", metric: "frequency", direction: "lower_better", green_min: 2.5, yellow_min: 3.5, green_op: "<=", yellow_op: "<=", campaign_filter: null },
+];
+const reachOf = (reach: number, impressions: number) => new Map([["1", { reach, impressions }]]);
+const fv = (reach: number, impressions: number, tpls = FT) => evaluateFrequency(rows, tpls, reachOf(reach, impressions), LATEST)[0];
+assert.equal(evaluateFrequency(rows, T, reachOf(1000, 4000), LATEST).length, 0, "no Frequency template = no Frequency alert");
+assert.equal(evaluate(rows, FT, LATEST).length, evaluate(rows, T, LATEST).length, "cost engine ignores the Frequency template");
+assert.equal(frequencyTemplate([{ ...FT[2], campaign_filter: "MES" }]), null, "a per-campaign Frequency template is skipped (needs per-campaign reach)");
+assert.equal(frequencyTemplate([{ ...FT[2], direction: "higher_better" }]), null);
+const fOk = fv(10000, 20000);      // 2.0 ≤ 2.5
+const fMid = fv(10000, 30000);     // 3.0: over green, within yellow
+const fBad = fv(10000, 40000);     // 4.0 > 3.5
+assert.deepEqual([fOk.sev, fMid.sev, fBad.sev], ["ok", "medium", "critical"]);
+assert.equal(fBad.kind, "issue");
+assert.equal(fOk.kind, "ok");
+assert.equal(fBad.value, 4, "impressions ÷ reach, the Portfolio formula");
+assert.equal(fBad.id, "freq-1");
+assert.equal(fBad.hotelId, "act_1");
+assert.equal(fBad.unit, "freq");
+assert.equal(fBad.deltaPct, 60, "(4.0 − 2.5) ÷ 2.5");
+assert.match(fBad.headline, /4\.00 ครั้ง/);
+assert.match(fBad.why, /Campaign ที่ลงโฆษณามากสุด/, "names the campaigns carrying the impressions");
+assert.equal(evaluateFrequency(rows, FT, reachOf(0, 0), LATEST).length, 0, "no reach from Facebook = nothing to judge");
+assert.equal(evaluateFrequency(rows, FT, new Map(), LATEST).length, 0);
+assert.equal(evaluateFrequency(rows.map((r) => ({ ...r, spend: 1 })), FT, reachOf(10000, 40000), LATEST)[0].kind, "ok", "tiny spend is not judged");
+// an episode of its own: opens, extends, closes "improved" — and is not closed by cost days (applyDay is fed separately)
+{
+  const o = new Map<string, Episode>(), c: Episode[] = [];
+  applyDay(o, c, [fBad], day(1));
+  applyDay(o, c, [fBad], LATEST);
+  assert.equal(o.get("freq-1")?.times_seen, 2);
+  applyDay(o, c, [fOk], day(-1));
+  assert.equal(c[0].close_reason, "improved");
+}
 
+console.log("OK — adscan: persistent episodes, severity bands, culprit/best, effect, new campaigns judged at once, zero-result, unsupported templates, slack summary, hotel Frequency");

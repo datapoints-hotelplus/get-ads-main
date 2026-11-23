@@ -10,8 +10,10 @@
  * Scanning never posts to Slack — see sendDailySummary().
  */
 import { getSupabase } from "@/lib/supabase";
-import { FOLLOW_DAYS, TREND_DAYS, applyDay, evaluate, slackSummary, type Episode, type RawRow, type SlackLabels, type Template } from "@/lib/adscan";
+import { FOLLOW_DAYS, FREQ_PREFIX, TREND_DAYS, WINDOW, applyDay, evaluate, evaluateFrequency, frequencyTemplate, slackSummary, type AccountReach, type Episode, type RawRow, type SlackLabels, type Template, type Verdict } from "@/lib/adscan";
 import { getSlackLabels, getSlackSettings, notifySlack } from "@/lib/adscanSlack";
+import { fetchAccountReachByAccount } from "@/lib/facebook";
+import { getFacebookAccessToken } from "@/lib/facebook-token";
 
 export const BACKFILL_DAYS = 90;
 export const EXCLUDED_ACCOUNTS = new Set(["act_1378870469122933"]); // H+ Marcom — internal, not a client hotel
@@ -19,6 +21,43 @@ export const RAW_COLS =
   "account_id,account_name,campaign_id,campaign_name,adset_id,adset_name,ad_id,ad_name,date_start,spend,impressions,inline_link_clicks,messaging_conversations_started,page_likes,post_engagement,leads,purchases";
 
 export const addDays = (iso: string, n: number) => new Date(Date.parse(iso + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10);
+
+/**
+ * Hotel-level Frequency for one data date: the de-duplicated reach of the last
+ * WINDOW days from Facebook (account level, same call as Portfolio), one request
+ * per account that spent — none at all when Portfolio has no Frequency template.
+ * Stored in adscan_freq so the page never calls Facebook. `failed` = accounts
+ * whose call failed: their open alerts must be left alone, not closed.
+ * Throws when Facebook can't be used at all; the caller then skips Frequency for the day.
+ */
+async function frequencyFor(day: string, rows: RawRow[], templates: Template[]): Promise<{ verdicts: Verdict[]; failed: Set<string> } | null> {
+  if (!frequencyTemplate(templates)) return null;
+  const from = addDays(day, -(WINDOW - 1));
+  const accounts = [...new Set(rows.filter((r) => r.date_start >= from && r.date_start <= day && +r.spend > 0).map((r) => r.account_id))];
+  if (!accounts.length) return { verdicts: [], failed: new Set() };
+  const token = await getFacebookAccessToken();
+  if (!token) throw new Error("no Facebook token");
+  const reach = new Map<string, AccountReach>();
+  const failed = new Set<string>();
+  // One call per account so a revoked / erroring account doesn't hide the rest.
+  await Promise.all(accounts.map(async (id) => {
+    try {
+      const r = (await fetchAccountReachByAccount([`act_${id}`], token, from, day)).get(`act_${id}`);
+      if (r && r.reach > 0) reach.set(id, r);
+    } catch (e) {
+      failed.add(id);
+      console.error(`[adscan] frequency: reach failed for act_${id}:`, (e as Error).message);
+    }
+  }));
+  if (reach.size) {
+    const { error } = await getSupabase().from("adscan_freq").upsert(
+      [...reach].map(([account_id, r]) => ({ account_id, data_date: day, reach: r.reach, impressions: r.impressions })),
+      { onConflict: "account_id,data_date" },
+    );
+    if (error) console.error("[adscan] frequency: could not store reach (migration 046?):", error.message);
+  }
+  return { verdicts: evaluateFrequency(rows, templates, reach, day), failed };
+}
 
 /** Scan every unscanned data date up to the newest one in ads_rawdata. Returns days applied. */
 export async function scanPending(): Promise<number> {
@@ -56,17 +95,34 @@ export async function scanPending(): Promise<number> {
     rows.push(...((data ?? []) as unknown as RawRow[]));
     if ((data ?? []).length < 1000) break;
   }
-  const { data: templates } = await sb.from("ads_portfolio_templates").select("*");
+  const { data: templates } = await sb.from("ads_portfolio_templates").select("*").order("sort_order").order("created_at");
   const { data: openRows, error: oErr } = await sb.from("adscan_alerts").select("*").is("closed_at", null);
   if (oErr) throw new Error(oErr.message);
 
   const open = new Map<string, Episode>((openRows ?? []).map((e) => [e.campaign_id as string, e as Episode]));
   const touched = new Set<Episode>(open.values());
   const created: Episode[] = [];
+  // Hotel Frequency alerts follow their own rule: only the newest day has Facebook reach (no backfill),
+  // so they are applied once, on that day — and never closed by the cost verdicts of the other days.
+  const openFreq = new Map([...open].filter(([id]) => id.startsWith(FREQ_PREFIX)));
+  for (const id of openFreq.keys()) open.delete(id);
+  const lastDay = todo[todo.length - 1];
+  let freq: Awaited<ReturnType<typeof frequencyFor>> = null;
+  try {
+    freq = await frequencyFor(lastDay, rows, (templates ?? []) as Template[]);
+  } catch (e) {
+    // ponytail: a failed day isn't retried (the day is already claimed); tomorrow's scan picks Frequency up again.
+    console.error("[adscan] frequency skipped for", lastDay, (e as Error).message);
+  }
   for (const day of todo) {
     const from = addDays(day, -(TREND_DAYS - 1));
     const slice = rows.filter((r) => r.date_start >= from && r.date_start <= day);
     applyDay(open, created, evaluate(slice, (templates ?? []) as Template[], day), day);
+    if (freq && day === lastDay) {
+      const held = [...openFreq].filter(([, e]) => freq!.failed.has(e.account_id.replace(/^act_/, "")));
+      for (const [id] of held) openFreq.delete(id);
+      applyDay(openFreq, created, freq.verdicts, day);
+    }
   }
 
   const strip = (e: Episode) => ({
@@ -156,6 +212,14 @@ async function buildSummary(day: string, labels?: Partial<SlackLabels>): Promise
     if (error) throw new Error(error.message);
     for (const r of data ?? []) names.set(r.campaign_id as string, { hotel: r.account_name as string, campaign: r.campaign_name as string }); // newest wins
     if ((data ?? []).length < 1000) break;
+  }
+
+  // Hotel Frequency alerts have no campaign in ads_rawdata: name them after the hotel.
+  const freqIds = ids.filter((id) => id.startsWith(FREQ_PREFIX));
+  if (freqIds.length) {
+    const { data, error } = await sb.from("ads_allpage").select("account_id,account_name").in("account_id", freqIds.map((id) => "act_" + id.slice(FREQ_PREFIX.length)));
+    if (error) throw new Error(error.message);
+    for (const p of data ?? []) names.set(FREQ_PREFIX + (p.account_id as string).replace(/^act_/, ""), { hotel: p.account_name as string, campaign: "Frequency ทั้งโรงแรม" });
   }
 
   // Answered (แก้แล้ว / ไม่แก้) in the last FOLLOW_DAYS days → left out, as on the ADSCAN page.

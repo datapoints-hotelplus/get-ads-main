@@ -1,5 +1,5 @@
 import type { Sev } from "@/lib/adscan";
-import { WINDOW, money, thDate, type AdscanAlert, type AdscanPayload } from "./data";
+import { WINDOW, money, thDate, val, type AdscanAlert, type AdscanPayload } from "./data";
 
 export const SEV: Record<Sev, { label: string; cls: string; border: string }> = {
   critical: { label: "เร่งด่วน", cls: "bg-red-50 text-red-700 border-red-200", border: "border-l-4 border-l-red-600" },
@@ -36,14 +36,14 @@ export function Metric({ k, v, tone }: { k: string; v: string; tone?: Tone }) {
 }
 
 const tone = (a: AdscanAlert): Tone => (a.sev === "critical" ? "bad" : a.sev === "medium" ? "warn" : a.sev === "good" ? "good" : undefined);
-export const costText = (a: AdscanAlert) => (a.value == null ? (a.spend > 0 ? `ไม่มี ${a.resLabel}` : "—") : money(a.value, a.dec));
+export const costText = (a: AdscanAlert) => (a.value == null ? (a.spend > 0 ? `ไม่มี ${a.resLabel}` : "—") : val(a, a.value));
 
 /** The 4 numbers every alert card shows. */
 export function strip(a: AdscanAlert) {
   return [
     { k: `SPEND ${WINDOW} วัน`, v: money(a.spend, 0) },
     { k: a.metric.toUpperCase(), v: costText(a), tone: tone(a) },
-    { k: "เกณฑ์", v: `≤ ${money(a.green, a.dec)}` },
+    { k: "เกณฑ์", v: `≤ ${val(a, a.green)}` },
     { k: "ส่วนต่าง", v: a.deltaPct == null ? "—" : `${a.deltaPct > 0 ? "+" : ""}${a.deltaPct}%`, tone: tone(a) },
   ];
 }
@@ -51,6 +51,7 @@ export function strip(a: AdscanAlert) {
 /** Last WINDOW×2 days, threshold dashed. Days with no result leave a gap. */
 export function Sparkline({ a }: { a: AdscanAlert }) {
   const vals = a.trend.slice(-WINDOW * 2);
+  if (vals.length < 2) return null; // hotel Frequency alerts have no daily trend
   const max = Math.max(...vals.map((v) => v ?? 0), a.green) * 1.1;
   const X = (i: number) => (i * 120) / (vals.length - 1);
   const Y = (v: number) => 34 - (v / max) * 30;

@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { AdscanAlert, AdscanPayload } from "@/lib/adscanData";
-import { FOLLOW_DAYS, money } from "@/lib/adscan";
+import { FOLLOW_DAYS, val } from "@/lib/adscan";
 
 export type { AdscanAlert, AdscanPayload };
-export { DONE_CHOICES, SKIP_CHOICES, money, thDate, WINDOW, FOLLOW_DAYS } from "@/lib/adscan";
+export { DONE_CHOICES, SKIP_CHOICES, money, thDate, val, WINDOW, FOLLOW_DAYS } from "@/lib/adscan";
 
 /** One fetch of /api/adscan per page; `reload` after recording an action. */
 export function useAdscan() {
@@ -43,7 +43,6 @@ export function followUps(d: AdscanPayload) {
     .filter((a) => a.type === "fixed" && Date.parse(a.created_at) >= cutoff)
     .map((act) => {
       const alert = d.alerts.find((x) => x.id === act.campaign_id);
-      const dec = alert?.dec ?? 0;
       const now = alert?.value ?? null;
       const better = now != null && act.value_at != null && now < act.value_at;
       const days = Math.max(1, Math.ceil((Date.now() - Date.parse(act.created_at)) / 864e5));
@@ -51,9 +50,9 @@ export function followUps(d: AdscanPayload) {
       return {
         act, alert, days, improved,
         result: !alert ? "Campaign หยุดยิงแล้ว"
-          : improved ? `กลับมาอยู่ในเกณฑ์ · ${money(now, dec)}`
+          : improved ? `กลับมาอยู่ในเกณฑ์ · ${val(alert!, now)}`
           : act.value_at == null || now == null ? `กำลังติดตามผล (วันที่ ${days}/${FOLLOW_DAYS})`
-          : `${better ? "ลดลงแต่ยังเกินเกณฑ์" : "ยังไม่ดีขึ้น"} · ${money(act.value_at, dec)} → ${money(now, dec)} (วันที่ ${days}/${FOLLOW_DAYS})`,
+          : `${better ? "ลดลงแต่ยังเกินเกณฑ์" : "ยังไม่ดีขึ้น"} · ${val(alert!, act.value_at)} → ${val(alert!, now)} (วันที่ ${days}/${FOLLOW_DAYS})`,
         sev: !alert || act.value_at == null || now == null ? ("follow" as const) : improved ? ("ok" as const) : better ? ("medium" as const) : ("critical" as const),
       };
     });

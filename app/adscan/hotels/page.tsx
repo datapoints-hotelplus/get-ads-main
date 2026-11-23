@@ -27,10 +27,10 @@ function Hotels({ d }: { d: AdscanPayload }) {
           <div key={h.id} className={`${card} ${SEV[h.sev].border} p-4 space-y-3`}>
             <div className="flex justify-between gap-2 flex-wrap"><strong className="text-lg">{h.name}</strong><Chip sev={h.sev} /></div>
             <div className="text-sm text-gray-500">
-              {h.open[0]?.headline ?? (h.mine.length ? `ตรวจได้ ${h.mine.length} Campaign ไม่มีเรื่องค้าง` : "ไม่มี Campaign ที่ตรวจได้ (ต้องขึ้นต้นด้วยรหัสใน Portfolio Template เช่น MES, PL, ENG)")}
+              {h.open[0]?.headline ?? (h.mine.length ? `ตรวจได้ ${h.mine.filter((a) => a.unit !== "freq").length} Campaign + Frequency ทั้งโรงแรม ไม่มีเรื่องค้าง` : "ไม่มี Campaign ที่ตรวจได้ (ต้องขึ้นต้นด้วยรหัสใน Portfolio Template เช่น MES, PL, ENG)")}
             </div>
             <div className="grid grid-cols-3 gap-1.5 text-sm">
-              {[["SPEND", money(h.spend, 0)], ["CAMPAIGN", h.mine.length], ["เรื่องค้าง", h.open.length]].map(([k, v]) => (
+              {[["SPEND", money(h.spend, 0)], ["CAMPAIGN", h.mine.filter((a) => a.unit !== "freq").length], ["เรื่องค้าง", h.open.length]].map(([k, v]) => (
                 <div key={k} className="bg-gray-50 rounded-md px-2 py-1.5">
                   <div className="text-[11px] font-semibold text-gray-500">{k}</div>
                   <div className="font-mono font-semibold">{v}</div>
